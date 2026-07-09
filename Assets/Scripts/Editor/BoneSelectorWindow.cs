@@ -15,11 +15,13 @@ public class BoneSelectorWindow : EditorWindow
     private VisualElement _inspectorPanel;
 
     private SkeletonUIManager _uiManager;
+    private ObjectField _uiManagerField;
     public static void ShowWindow(SkeletonUIManager uiManager)
     {
-        BoneSelectorWindow wnd = GetWindow<BoneSelectorWindow>();
+        BoneSelectorWindow wnd = CreateWindow<BoneSelectorWindow>();
         wnd.titleContent = new GUIContent("Bone Selector");
         wnd._uiManager = uiManager;
+        wnd._uiManagerField.SetValueWithoutNotify(uiManager);
         wnd.RefreshCanvas();
         wnd.RefreshInspector();
     }
@@ -35,19 +37,21 @@ public class BoneSelectorWindow : EditorWindow
         var toolbar = new Toolbar();
         root.Add(toolbar);
 
-        var editToggle = new ToolbarToggle { text = "Edit Mode" };
-        editToggle.RegisterValueChangedCallback(evt =>
+        _uiManagerField = new ObjectField("Skeleton UI Manager")
         {
-            _isEditMode = evt.newValue;
-            _inspectorPanel.style.display = _isEditMode ? DisplayStyle.Flex : DisplayStyle.None;
+            objectType = typeof(SkeletonUIManager),
+            allowSceneObjects = true,
+            value = _uiManager
+        };
+        _uiManagerField.RegisterValueChangedCallback(evt =>
+        {
+            _uiManager = evt.newValue as SkeletonUIManager;
+            _selectedNode = null;
             RefreshCanvas();
             RefreshInspector();
         });
-        toolbar.Add(editToggle);
-
-        var addBtn = new ToolbarButton(AddBone) { text = "+ Add Bone" };
-        toolbar.Add(addBtn);
-
+        toolbar.Add(_uiManagerField);
+        
         // Main Area (Canvas + Inspector)
         var mainContainer = new VisualElement { style = { flexDirection = FlexDirection.Row, flexGrow = 1 } };
         root.Add(mainContainer);
@@ -62,6 +66,15 @@ public class BoneSelectorWindow : EditorWindow
                 position = Position.Relative
             }
         };
+        _canvas.AddManipulator(new ContextualMenuManipulator(evt =>
+        {
+            if (_uiManager == null)
+            {
+                evt.menu.AppendAction("Add Bone", null, DropdownMenuAction.Status.Disabled);
+                return;
+            }
+            evt.menu.AppendAction("Add Bone", _ => AddBone());
+        }));
         mainContainer.Add(_canvas);
 
         _inspectorPanel = new VisualElement
@@ -73,7 +86,6 @@ public class BoneSelectorWindow : EditorWindow
                 borderLeftWidth = 1,
                 borderLeftColor = Color.black,
                 paddingBottom = 10, paddingTop = 10, paddingLeft = 10, paddingRight = 10,
-                display = DisplayStyle.None
             }
         };
         mainContainer.Add(_inspectorPanel);
@@ -94,6 +106,11 @@ public class BoneSelectorWindow : EditorWindow
         _canvas.Clear();
         _boneButtons.Clear();
 
+        if (_uiManager == null)
+        {
+            _canvas.Add(new Label("Assign a Skeleton UI Manager to display bones."));
+            return;
+        }
 
         foreach (var node in _uiManager.boneNodes)
         {
@@ -110,23 +127,11 @@ public class BoneSelectorWindow : EditorWindow
                 }
             };
 
-            if (_isEditMode)
-            {
-                btn.style.backgroundColor = new Color(0.3f, 0.5f, 0.8f);
-                btn.AddManipulator(new NodeDragManipulator(btn, node, this));
-                // btn.AddManipulator(new Clickable(() => SelectNodeForEdit(node)));
-                // btn.RemoveManipulator(btn.clickable);
-                btn.clickable.clicked += () => SelectNodeForEdit(node);
-                // btn.clicked += () => SelectNodeForEdit(node);
-            }
-            else
-            {
-                btn.clicked += () =>
-                {
-                    if (node.boneTransform != null)
-                        Selection.activeGameObject = node.boneTransform.gameObject;
-                };
-            }
+            btn.style.backgroundColor = new Color(0.3f, 0.5f, 0.8f);
+            btn.AddManipulator(new NodeDragManipulator(btn, node, this));
+            // btn.AddManipulator(new Clickable(() => SelectNodeForEdit(node)));
+            // btn.RemoveManipulator(btn.clickable);
+            btn.clickable.clicked += () => SelectNodeForEdit(node);
 
             if (!string.IsNullOrEmpty(node.id))
             {
@@ -145,6 +150,12 @@ public class BoneSelectorWindow : EditorWindow
     private void RefreshInspector()
     {
         _inspectorPanel.Clear();
+
+        if (_uiManager == null)
+        {
+            _inspectorPanel.Add(new Label("Assign a Skeleton UI Manager to edit bones."));
+            return;
+        }
 
         if (_selectedNode == null)
         {
@@ -167,6 +178,17 @@ public class BoneSelectorWindow : EditorWindow
         var targetField = new ObjectField("Target Transform") { objectType = typeof(Transform), value = _selectedNode.boneTransform, allowSceneObjects = true };
         targetField.RegisterValueChangedCallback(evt => { _selectedNode.boneTransform = evt.newValue as Transform; SaveProfile(); });
         _inspectorPanel.Add(targetField);
+
+        var selectInHierarchyBtn = new Button(() =>
+            {
+                if (_selectedNode?.boneTransform != null)
+                {
+                    Selection.activeGameObject = _selectedNode.boneTransform.gameObject;
+                }
+            })
+            { text = "Select In Hierarchy" };
+        selectInHierarchyBtn.SetEnabled(_selectedNode.boneTransform != null);
+        _inspectorPanel.Add(selectInHierarchyBtn);
 
         var widthField = new FloatField("Width") { value = _selectedNode.rect.width };
         widthField.RegisterValueChangedCallback(evt =>
@@ -198,7 +220,7 @@ public class BoneSelectorWindow : EditorWindow
                 _selectedNode = null;
                 SaveAndRefresh();
             })
-            { text = "Delete Button", style = { marginTop = 20, backgroundColor = new Color(0.6f, 0.2f, 0.2f) } };
+            { text = "Delete Node", style = { marginTop = 20, backgroundColor = new Color(0.6f, 0.2f, 0.2f) } };
         _inspectorPanel.Add(deleteBtn);
     }
 
