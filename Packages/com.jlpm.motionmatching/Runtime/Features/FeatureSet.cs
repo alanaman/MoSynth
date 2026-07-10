@@ -840,5 +840,53 @@ namespace MotionMatching
             if (SmallBoundingBoxMax != null && SmallBoundingBoxMax.IsCreated) SmallBoundingBoxMax.Dispose();
             if (AdaptativeFeaturesIndices != null && AdaptativeFeaturesIndices.IsCreated) AdaptativeFeaturesIndices.Dispose();
         }
+        
+        public float3 Get3DValuePositionOrDirectionFeature(TrajectoryFeature trajectoryFeature, int currentFrame, int trajectoryFeatureIndex, int predictionIndex, bool isEnvironment)
+        {
+            int t = trajectoryFeatureIndex;
+            int p = predictionIndex;
+
+            float3 value;
+            if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
+            {
+                value = isEnvironment ? Get3DEnvironmentFeature(currentFrame, t, p) : Get3DTrajectoryFeature(currentFrame, t, p, true);
+            }
+            else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY)
+            {
+                float2 value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(value2D.x, value2D.y, 0);
+            }
+            else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroZ)
+            {
+                float2 value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(value2D.x, 0.0f, value2D.y);
+            }
+            else if (!trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
+            {
+                float2 value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(0.0f, value2D.x, value2D.y);
+            }
+            else if (!trajectoryFeature.ZeroX)
+            {
+                float value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(value1D, 0.0f, 0.0f);
+            }
+            else if (!trajectoryFeature.ZeroY)
+            {
+                float value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(0.0f, value1D, 0.0f);
+            }
+            else if (!trajectoryFeature.ZeroZ)
+            {
+                float value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
+                value = new float3(0.0f, 0.0f, value1D);
+            }
+            else
+            {
+                Debug.Assert(false, "Invalid trajectory feature");
+                value = float3.zero;
+            }
+            return value;
+        }
     }
 }

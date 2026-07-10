@@ -1271,7 +1271,7 @@ namespace MotionMatching
         private void ImportBVH()
         {
             RemoveSkeleton();
-            BVHAnimation animation = AnimationData.GetAnimation();
+            BvhAnimation animation = AnimationData.GetAnimation();
             UpdateTargetFramerate(Mathf.RoundToInt(1.0f / animation.FrameTime));
             // Create skeleton
             Skeleton = new Transform[animation.Skeleton.Joints.Count];
@@ -1349,11 +1349,11 @@ namespace MotionMatching
 
         private void UpdatePose(bool forward = true, int tagIndex = -1, bool queryTag = false)
         {
-            BVHAnimation animation = AnimationData.GetAnimation();
+            BvhAnimation animation = AnimationData.GetAnimation();
             if (animation != null && LastUpdateTime + (1.0 / TargetFramerate) < EditorApplication.timeSinceStartup)
             {
                 // Update skeleton
-                BVHAnimation.Frame frame = animation.Frames[CurrentFrame];
+                BvhAnimation.Frame frame = animation.Frames[CurrentFrame];
                 Skeleton[0].position = frame.RootMotion;
                 for (int i = 0; i < Skeleton.Length; i++)
                 {

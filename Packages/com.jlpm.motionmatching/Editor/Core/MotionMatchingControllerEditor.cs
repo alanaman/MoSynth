@@ -6,7 +6,7 @@ using UnityEditor;
 namespace MotionMatching
 {
     [CustomEditor(typeof(MotionMatchingController))]
-    public class MotionMatchingControllerEditor : Editor
+    public class MotionMatchingControllerEditor : UnityEditor.Editor
     {
         private bool ToggleFeatureWeights;
         private bool ToggleProfiling;

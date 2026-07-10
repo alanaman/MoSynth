@@ -85,20 +85,23 @@ namespace MotionMatching
         /// Add the animation clip to the current pose set
         /// Returns true if the clip was added, false if the skeleton is not compatible and the clip was not added
         /// </summary>
-        public bool AddClip(PoseVector[] poses, float frameTime, out int animationClip)
+        public bool AddClip(PoseVector[] poses, float frameTime, List<AnimationData.Tag> tags)
         {
             // Check if the skeleton and frameTime are compatible
             Debug.Assert(Skeleton != null, "Skeleton shold be set first. Use SetSkeleton(...)");
             if (FrameTime == -1.0f) FrameTime = frameTime;
             Debug.Assert(math.abs(FrameTime - frameTime) < 0.001f, "Frame time should be the same for all clips");
-
+            
             // Add poses
             int start = Poses.Count;
             int nPoses = poses.Length;
 
-            animationClip = Clips.Count;
             Clips.Add(new AnimationClip(start, start + nPoses, frameTime));
             Poses.AddRange(poses);
+            foreach (var tag in tags)
+            {
+                AddTag(Clips.Count - 1, tag);
+            }
 
             return true;
         }
@@ -119,7 +122,7 @@ namespace MotionMatching
         /// Add a tag to the current pose set
         /// The corresponding animation clip should be added before using AddTag(...)
         /// </summary>
-        public void AddTag(int animationClip, AnimationData.Tag dataTag)
+        private void AddTag(int animationClip, AnimationData.Tag dataTag)
         {
             // Tag Index
             if (!TagNameToIndex.TryGetValue(dataTag.Name, out int tagIndex))
@@ -252,8 +255,9 @@ namespace MotionMatching
         /// Returns the position of each joint in world space after applying FK using the pose.
         /// worldJoints has size Skeleton.Joints.Count
         /// </summary>
-        public void GetWorldPositions(PoseVector pose, NativeArray<float3> worldJoints, quaternion inverseRotAnimationSpace, float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
+        public NativeArray<float3> GetWorldPositions(PoseVector pose, quaternion inverseRotAnimationSpace, float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
         {
+            
             // animation space to local space
             float3 localSpacePos = math.mul(inverseRotAnimationSpace, pose.JointLocalPositions[0] - posAnimationSpace);
             quaternion localSpaceRot = math.mul(inverseRotAnimationSpace, pose.JointLocalRotations[0]);
@@ -261,8 +265,14 @@ namespace MotionMatching
             float3 simulationBonePos = math.mul(rotWorld, localSpacePos) + posWorld;
             quaternion simulationBoneRot = math.mul(rotWorld, localSpaceRot);
 
+            var simulationBoneTransform = Matrix4x4.TRS(simulationBonePos, simulationBoneRot, Vector3.one);
+            return GetWorldPositions(pose, simulationBoneTransform);
+        }
+
+        public NativeArray<float3> GetWorldPositions(PoseVector pose, Matrix4x4 simulationBoneTransform)
+        {
             Span<Matrix4x4> localToWorldRes = stackalloc Matrix4x4[Skeleton.Joints.Count];
-            localToWorldRes[0] = Matrix4x4.TRS(simulationBonePos, simulationBoneRot, Vector3.one);
+            localToWorldRes[0] = simulationBoneTransform;
             for (int i = 1; i < Skeleton.Joints.Count; i++)
             {
                 localToWorldRes[i] = Matrix4x4.identity;
@@ -273,10 +283,13 @@ namespace MotionMatching
                 Matrix4x4 current = Matrix4x4.TRS(pose.JointLocalPositions[joint.Index], pose.JointLocalRotations[joint.Index], Vector3.one);
                 localToWorldRes[joint.Index] = localToWorldRes[joint.ParentIndex] * current;
             }
+            
+            var worldJoints = new NativeArray<float3>(Skeleton.Joints.Count, Allocator.Temp);
             for (int i = 0; i < worldJoints.Length; i++)
             {
                 worldJoints[i] = localToWorldRes[i].MultiplyPoint3x4(Vector3.zero);
             }
+            return worldJoints;
         }
 
         /// <summary>

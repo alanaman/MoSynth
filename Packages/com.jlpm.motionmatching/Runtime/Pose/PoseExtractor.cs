@@ -22,8 +22,9 @@ namespace MotionMatching
         /// poseSet is not cleared, it will add bvhAnimation the the existing poses
         /// Returns true if the bvhAnimation was added to the poseSet, false otherwise
         /// </summary>
-        public bool Extract(BVHAnimation bvhAnimation, PoseSet poseSet, MotionMatchingData mmData, out int animationClip)
+        public bool Extract(AnimationData animation, PoseSet poseSet, MotionMatchingData mmData)
         {
+            var bvhAnimation = animation.GetAnimation();
             // Set Poses
             int nFrames = bvhAnimation.Frames.Length;
             PoseVector[] poses = new PoseVector[nFrames];
@@ -32,11 +33,12 @@ namespace MotionMatching
                 poses[i] = ExtractPose(bvhAnimation, i, mmData, poseSet, poses);
             }
             SmoothContacts(poses);
-            //if (mmData.SmoothSimulationBone)
-            //{
-                //SmoothSimulationBone(poses, poseSet);
-            //}
-            return poseSet.AddClip(poses, bvhAnimation.FrameTime, out animationClip);
+
+            if (poseSet.AddClip(poses, bvhAnimation.FrameTime, animation.Tags))
+            {
+                return true;
+            }
+            return false;       
         }
 
         private void SmoothContacts(PoseVector[] poses)
@@ -169,9 +171,9 @@ namespace MotionMatching
             throw new System.NotImplementedException();
         }
 
-        private PoseVector ExtractPose(BVHAnimation bvhAnimation, int frameIndex, MotionMatchingData mmData, PoseSet poseSet, PoseVector[] poses)
+        private PoseVector ExtractPose(BvhAnimation bvhAnimation, int frameIndex, MotionMatchingData mmData, PoseSet poseSet, PoseVector[] poses)
         {
-            BVHAnimation.Frame frame = bvhAnimation.Frames[frameIndex];
+            BvhAnimation.Frame frame = bvhAnimation.Frames[frameIndex];
 
             int nJoints = bvhAnimation.Skeleton.Joints.Count;
             int outNJoint = nJoints + 1; // +1 for SimulationBone

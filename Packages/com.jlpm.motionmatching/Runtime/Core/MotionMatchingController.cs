@@ -3,9 +3,6 @@ using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Jobs;
-using UnityEditor;
-using System.Diagnostics;
-using System.Collections.Generic;
 
 namespace MotionMatching
 {
@@ -31,17 +28,7 @@ namespace MotionMatching
         [Tooltip("How important is the trajectory (future positions + future directions)")][Range(0.0f, 1.0f)] public float Responsiveness = 1.0f;
         [Tooltip("How important is the current pose")][Range(0.0f, 1.0f)] public float Quality = 1.0f;
         [HideInInspector] public float[] FeatureWeights;
-        [Header("Debug")]
-        public float SpheresRadius = 0.1f;
-        public bool DebugSkeleton = true;
-        public bool DebugFutureSkeleton = true;
-        public bool DebugCurrent = true;
-        public bool DebugPose = true;
-        public bool DebugTrajectory = true;
-        public bool DebugEnvironment = true;
-        public bool DebugSearch = true;
-        public bool DebugContacts = true;
-        public bool DebugGUI = true;
+        
 
         public float3 Velocity { get; private set; }
         public float3 AngularVelocity { get; private set; }
@@ -64,13 +51,24 @@ namespace MotionMatching
         private float CurrentFrameTime; // Current frame index as float to keep track of variable frame rate
         private Inertialization Inertialization;
         // Foot Lock
-        private bool IsLeftFootContact, IsRightFootContact;
-        private float3 LeftToesContactTarget, RightToesContactTarget; // Target position of the toes
+        public bool IsLeftFootContact { get; private set; }
+        public bool IsRightFootContact { get; private set; }
+        // Target position of the toes
+        public float3 LeftToesContactTarget { get; private set;}
+        public float3 RightToesContactTarget { get; private set;}
         private float3 LeftFootContact, RightFootContact; // Position of the foot
         private float3 LeftFootPoleContact, RightFootPoleContact; // Forward vector of the knee
         private float3 LeftLowerLegLocalForward, RightLowerLegLocalForward;
-        private int LeftToesIndex, LeftFootIndex, LeftLowerLegIndex, LeftUpperLegIndex;
-        private int RightToesIndex, RightFootIndex, RightLowerLegIndex, RightUpperLegIndex;
+        public int LeftToesIndex { get; private set; }
+        private int LeftFootIndex;
+        private int LeftLowerLegIndex;
+        private int LeftUpperLegIndex;
+
+        public int RightToesIndex { get; private set; }
+        private int RightFootIndex;
+        private int RightLowerLegIndex;
+        private int RightUpperLegIndex;
+
         // Other
         private bool IsDestroyed = false;
         private MotionMatchingSearch SearchInstance;
@@ -600,7 +598,7 @@ namespace MotionMatching
                 Debug.LogError("[Motion Matching] No Main Position Trajectory Feature found.");
                 return characterOrigin;
             }
-            float3 value = FeatureDebug.Get3DValuePositionOrDirectionFeature(MMData.TrajectoryFeatures[t], FeatureSet, CurrentFrame, t, trajectoryIndex, isEnvironment: false);
+            float3 value = FeatureSet.Get3DValuePositionOrDirectionFeature(MMData.TrajectoryFeatures[t], CurrentFrame, t, trajectoryIndex, isEnvironment: false);
             value = characterOrigin + math.mul(characterRot, value);
             return value;
         }
@@ -650,89 +648,18 @@ namespace MotionMatching
         }
 
 #if UNITY_EDITOR
-        private void OnDrawGizmos()
+
+        public Matrix4x4 GetSimulationBoneWorldSpaceTransform(PoseVector futurePose)
         {
-            // Skeleton
-            if (SkeletonTransforms == null || PoseSet == null) return;
+            // animation space to local space
+            float3 localSpacePos = math.mul(InverseAnimationSpaceOriginRot, futurePose.JointLocalPositions[0] - AnimationSpaceOriginPos);
+            quaternion localSpaceRot = math.mul(InverseAnimationSpaceOriginRot, futurePose.JointLocalRotations[0]);
+            // local space to world space
+            float3 simulationBonePos = math.mul(MMTransformOriginRot, localSpacePos) + MMTransformOriginPose;
+            quaternion simulationBoneRot = math.mul(MMTransformOriginRot, localSpaceRot);
 
-            if (DebugSkeleton)
-            {
-                Gizmos.color = Color.red;
-                for (int i = 2; i < SkeletonTransforms.Length; i++) // skip Simulation Bone
-                {
-                    Transform t = SkeletonTransforms[i];
-                    GizmosExtensions.DrawLine(t.parent.position, t.position, 6.0f);
-                }
-            }
-
-            // Character
-            if (PoseSet == null) return;
-
-            int currentFrame = CurrentFrame;
-            float3 characterOrigin = SkeletonTransforms[0].position;
-            float3 characterForward = SkeletonTransforms[0].forward;
-
-            if (DebugFutureSkeleton)
-            {
-                // Find Main Position Trajectory
-                TrajectoryFeature feature = null;
-                for (int i = 0; i < MMData.TrajectoryFeatures.Count; i++)
-                {
-                    if (MMData.TrajectoryFeatures[i].IsMainPositionFeature)
-                    {
-                        feature = MMData.TrajectoryFeatures[i];
-                    }
-                }
-                if (feature != null)
-                {
-                    NativeArray<float3> worldPos = new(PoseSet.Skeleton.Joints.Count, Allocator.Temp);
-                    for (int p = 0; p < feature.FramesPrediction.Length; p++)
-                    {
-                        Gizmos.color = Color.red + Color.cyan * ((float)p / feature.FramesPrediction.Length);
-                        int frame = currentFrame + feature.FramesPrediction[p];
-                        PoseSet.GetPose(frame, out PoseVector futurePose);
-                        PoseSet.GetWorldPositions(futurePose, worldPos, InverseAnimationSpaceOriginRot, AnimationSpaceOriginPos, MMTransformOriginRot, MMTransformOriginPose);
-                        for (int i = 2; i < PoseSet.Skeleton.Joints.Count; i++)
-                        {
-                            float3 child = worldPos[i];
-                            float3 parent = worldPos[PoseSet.Skeleton.Joints[i].ParentIndex];
-                            GizmosExtensions.DrawLine(parent, child, 3);
-                        }
-                    }
-                    worldPos.Dispose();
-                }
-            }
-
-            if (DebugCurrent)
-            {
-                Gizmos.color = new Color(1.0f, 0.0f, 0.5f, 1.0f);
-                Gizmos.DrawSphere(characterOrigin, SpheresRadius);
-                GizmosExtensions.DrawArrow(characterOrigin, characterOrigin + characterForward * 1.5f, thickness: 4);
-            }
-
-            if (DebugContacts)
-            {
-                Gizmos.color = Color.green;
-                if (IsLeftFootContact)
-                {
-                    Gizmos.DrawSphere(SkeletonTransforms[LeftToesIndex].position, SpheresRadius);
-                }
-                if (IsRightFootContact)
-                {
-                    Gizmos.DrawSphere(SkeletonTransforms[RightToesIndex].position, SpheresRadius);
-                }
-            }
-
-            // Feature Set
-            if (FeatureSet == null) return;
-
-            FeatureDebug.DrawFeatureGizmos(FeatureSet, MMData, SpheresRadius, currentFrame, characterOrigin, characterForward,
-                                           SkeletonTransforms, PoseSet.Skeleton, Color.blue, DebugPose, DebugTrajectory, DebugEnvironment);
-
-            if (DebugSearch)
-            {
-                SearchInstance.DrawGizmos(this, SpheresRadius);
-            }
+            var simulationBoneTransform = Matrix4x4.TRS(simulationBonePos, simulationBoneRot, Vector3.one);
+            return simulationBoneTransform;
         }
 #endif
     }

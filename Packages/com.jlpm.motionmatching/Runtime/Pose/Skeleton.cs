@@ -7,12 +7,7 @@ namespace MotionMatching
 {
     public class Skeleton
     {
-        public List<Joint> Joints { get; private set; }
-
-        public Skeleton()
-        {
-            Joints = new List<Joint>();
-        }
+        public List<Joint> Joints { get; private set; } = new();
 
         public void AddJoint(Joint joint)
         {

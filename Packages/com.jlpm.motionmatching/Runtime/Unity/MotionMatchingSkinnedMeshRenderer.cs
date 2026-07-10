@@ -99,7 +99,7 @@ namespace MotionMatching
             SourceBones = new Transform[BodyJoints.Length];
             TargetBones = new Transform[BodyJoints.Length];
             // Animation containing in the first frame a T-Pose
-            BVHAnimation tposeAnimation = mmData.AnimationDataTPose.GetAnimation();
+            BvhAnimation tposeAnimation = mmData.AnimationDataTPose.GetAnimation();
             // Store Rotations
             // Source
             Skeleton skeleton = tposeAnimation.Skeleton;

@@ -57,7 +57,7 @@ namespace MotionMatching
 
 #if UNITY_EDITOR
     [CustomEditor(typeof(AvatarMaskData))]
-    public class AvatarMaskDataEditor : Editor
+    public class AvatarMaskDataEditor : UnityEditor.Editor
     {
         public override void OnInspectorGUI()
         {

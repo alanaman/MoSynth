@@ -50,7 +50,7 @@ namespace MotionMatching
         private void ImportBVH()
         {
             RemoveSkeleton();
-            BVHAnimation animation = AnimationData.GetAnimation();
+            BvhAnimation animation = AnimationData.GetAnimation();
             // Create skeleton
             Skeleton = new Transform[animation.Skeleton.Joints.Count];
             for (int j = 0; j < Skeleton.Length; j++)

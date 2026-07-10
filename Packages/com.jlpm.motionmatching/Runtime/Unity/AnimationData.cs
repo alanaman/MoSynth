@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using BVH;
 using UnityEngine;
 using static UnityEngine.GraphicsBuffer;
 #if UNITY_EDITOR
@@ -21,15 +22,14 @@ namespace MotionMatching
         public float UnitScale = 1.0f;
         public List<Tag> Tags = new();
 
-        private BVHAnimation Animation;
+        private BvhAnimation Animation;
 
         public void Import()
         {
-            BVHImporter importer = new BVHImporter();
-            Animation = importer.Import(BVH, UnitScale);
+            Animation = BvhImporter.Import(BVH, UnitScale);
         }
 
-        public BVHAnimation GetAnimation()
+        public BvhAnimation GetAnimation()
         {
             if (Animation == null)
             {
@@ -38,7 +38,7 @@ namespace MotionMatching
             return Animation;
         }
 
-        public void SetAnimation(BVHAnimation animation)
+        public void SetAnimation(BvhAnimation animation)
         {
             Animation = animation;
         }
@@ -95,7 +95,7 @@ namespace MotionMatching
 
 #if UNITY_EDITOR
     [CustomEditor(typeof(AnimationData))]
-    public class AnimationDataEditor : Editor
+    public class AnimationDataEditor : UnityEditor.Editor
     {
         private bool TagsFoldout;
 

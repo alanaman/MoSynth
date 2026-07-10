@@ -17,6 +17,5 @@ namespace MotionMatching
             return defaultWeight;
         }
         public virtual void Dispose() { }
-        public virtual void DrawGizmos(MotionMatchingController controller, float radius) { }
     }
 }

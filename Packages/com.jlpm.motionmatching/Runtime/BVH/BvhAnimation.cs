@@ -11,20 +11,20 @@ namespace MotionMatching
     /// <summary>
     /// Stores the BVH animation data in Unity format.
     /// </summary>
-    public class BVHAnimation
+    public class BvhAnimation
     {
         public float FrameTime { get; private set; }
         public Skeleton Skeleton { get; private set; }
         public List<EndSite> EndSites { get; private set; }
         public Frame[] Frames { get; private set; }
 
-        public BVHAnimation()
+        public BvhAnimation()
         {
             Skeleton = new Skeleton();
             EndSites = new List<EndSite>();
         }
 
-        public BVHAnimation(Skeleton skeleton, List<EndSite> endSites, Frame[] frames, float frameTime)
+        public BvhAnimation(Skeleton skeleton, List<EndSite> endSites, Frame[] frames, float frameTime)
         {
             Skeleton = skeleton;
             EndSites = endSites;
@@ -52,7 +52,7 @@ namespace MotionMatching
             Skeleton.AddJoint(joint);
         }
 
-        public void AddEndSite(EndSite endSite)
+        internal void AddEndSite(EndSite endSite)
         {
             EndSites.Add(endSite);
         }

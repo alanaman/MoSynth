@@ -1,0 +1,179 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d0bb4b3a7b78d847be4e6490640196f, type: 3}
+  m_Name: MotionMatchingData
+  m_EditorClassIdentifier: JLPM.MotionMatching::MotionMatching.MotionMatchingData
+  AnimationDatas:
+  - {fileID: 11400000, guid: 3242dfa08bb3cf248987ae6021c3666a, type: 2}
+  AnimationDataTPose: {fileID: 11400000, guid: 3242dfa08bb3cf248987ae6021c3666a, type: 2}
+  HipsForwardLocalVector:
+    x: 0
+    y: 1
+    z: 0
+  HipsUpLocalVector:
+    x: 1
+    y: 0
+    z: 0
+  ContactVelocityThreshold: 0.15
+  SkeletonToMecanim:
+  - Name: Hips
+    MecanimBone: 0
+  - Name: LeftUpLeg
+    MecanimBone: 1
+  - Name: LeftLeg
+    MecanimBone: 3
+  - Name: LeftFoot
+    MecanimBone: 5
+  - Name: LeftToe
+    MecanimBone: 19
+  - Name: RightUpLeg
+    MecanimBone: 2
+  - Name: RightLeg
+    MecanimBone: 4
+  - Name: RightFoot
+    MecanimBone: 6
+  - Name: RightToe
+    MecanimBone: 20
+  - Name: Spine
+    MecanimBone: 7
+  - Name: Spine1
+    MecanimBone: 8
+  - Name: Spine2
+    MecanimBone: 54
+  - Name: Neck
+    MecanimBone: 9
+  - Name: Head
+    MecanimBone: 10
+  - Name: LeftShoulder
+    MecanimBone: 11
+  - Name: LeftArm
+    MecanimBone: 13
+  - Name: LeftForeArm
+    MecanimBone: 15
+  - Name: LeftHand
+    MecanimBone: 17
+  - Name: RightShoulder
+    MecanimBone: 12
+  - Name: RightArm
+    MecanimBone: 14
+  - Name: RightForeArm
+    MecanimBone: 16
+  - Name: RightHand
+    MecanimBone: 18
+  TrajectoryFeatures:
+  - Name: FuturePosition
+    FeatureType: 0
+    FramesPrediction: 14000000280000003c000000
+    SimulationBone: 1
+    Bone: 0
+    ZeroX: 0
+    ZeroY: 1
+    ZeroZ: 0
+    FeatureExtractor: {fileID: 0}
+    IsMainPositionFeature: 1
+  - Name: FutureDirection
+    FeatureType: 1
+    FramesPrediction: 14000000280000003c000000
+    SimulationBone: 1
+    Bone: 0
+    ZeroX: 0
+    ZeroY: 1
+    ZeroZ: 0
+    FeatureExtractor: {fileID: 0}
+    IsMainPositionFeature: 0
+  PoseFeatures:
+  - Name: LeftFootPosition
+    FeatureType: 0
+    Bone: 5
+  - Name: LeftFootVelocity
+    FeatureType: 1
+    Bone: 5
+  - Name: RightFootPosition
+    FeatureType: 0
+    Bone: 6
+  - Name: RightFootVelocity
+    FeatureType: 1
+    Bone: 6
+  - Name: HipsVelocity
+    FeatureType: 1
+    Bone: 0
+  EnvironmentFeatures: []
+  JointsLocalForward:
+  - x: 0
+    y: 0
+    z: 1
+  - x: -0.011115909
+    y: 0.99993825
+    z: -0.00007843971
+  - x: 0.088833064
+    y: 0.9879527
+    z: -0.12672204
+  - x: -0.18937957
+    y: 0.97826225
+    z: -0.08448923
+  - x: 0.9069278
+    y: 0.41620642
+    z: -0.06522322
+  - x: 0.99631435
+    y: 0.05564564
+    z: -0.06527716
+  - x: 0.049429595
+    y: 0.9970871
+    z: 0.05808264
+  - x: -0.19823515
+    y: 0.963742
+    z: 0.17861634
+  - x: 0.88689005
+    y: 0.38362616
+    z: 0.25740492
+  - x: 0.96573794
+    y: 0.0326521
+    z: 0.25745684
+  - x: 0.08437899
+    y: 0.99641293
+    z: 0.0064644814
+  - x: 0.1008223
+    y: 0.99471486
+    z: 0.019438744
+  - x: 0.111830294
+    y: 0.99320436
+    z: 0.032239676
+  - x: 0.13133293
+    y: 0.9910451
+    z: -0.024119616
+  - x: 0.37618104
+    y: 0.9243297
+    z: 0.06405604
+  - x: -0.11737046
+    y: -0.99023056
+    z: -0.075285435
+  - x: 0.99730724
+    y: 0.07252511
+    z: -0.010882616
+  - x: 0.9627705
+    y: 0.21140319
+    z: 0.16846867
+  - x: 0.98987746
+    y: -0.05238553
+    z: 0.13190258
+  - x: -0.13463005
+    y: -0.9885756
+    z: 0.06777203
+  - x: 0.98948395
+    y: -0.10358009
+    z: 0.10095971
+  - x: 0.97349644
+    y: 0.1579493
+    z: -0.16539623
+  - x: 0.9390394
+    y: -0.09676471
+    z: -0.32991123

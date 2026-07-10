@@ -1,24 +1,23 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Text.RegularExpressions;
+using MotionMatching;
 using UnityEngine;
 
-namespace MotionMatching
+namespace BVH
 {
     using Joint = Skeleton.Joint;
-    using EndSite = BVHAnimation.EndSite;
-    using Frame = BVHAnimation.Frame;
+    using EndSite = BvhAnimation.EndSite;
+    using Frame = BvhAnimation.Frame;
 
     /// <summary>
     /// Imports a BVH file and stores the animation data in Unity format (BVHAnimation).
     /// </summary>
-    public class BVHImporter
+    public static class BvhImporter
     {
-        public BVHAnimation Import(TextAsset bvh, float scale = 1.0f, bool onlyFirstFrame = false)
+        public static BvhAnimation Import(TextAsset bvh, float scale = 1.0f, bool onlyFirstFrame = false)
         {
             List<AxisOrder> channels = new List<AxisOrder>();
-            BVHAnimation animation = new BVHAnimation();
+            BvhAnimation animation = new BvhAnimation();
 
             Stack<int> parentIndexStack = new Stack<int>();
             char[] whitespace = new char[] { ' ', '\t', '\r', '\n' };
@@ -118,11 +117,11 @@ namespace MotionMatching
                     AxisOrder axisOrder = channels[j];
                     if (j == 0)
                     {
-                        rootMotion = BVHToUnityTranslation(v1, v2, v3, axisOrder) * scale;
+                        rootMotion = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
                     }
                     else
                     {
-                        localRotations[j - 1] = BVHToUnityRotation(v1, v2, v3, axisOrder);
+                        localRotations[j - 1] = BvhToUnityRotation(v1, v2, v3, axisOrder);
                     }
                 }
                 Frame frame = new Frame(rootMotion, localRotations);
@@ -131,12 +130,12 @@ namespace MotionMatching
             return animation;
         }
 
-        private void ReadLeftBracket(string[] words, ref int w)
+        private static void ReadLeftBracket(string[] words, ref int w)
         {
             if (words[w++] != "{") Debug.LogError("[BVHImporter] { not found");
         }
 
-        private bool ReadRightBracket(string[] words, ref int w)
+        private static bool ReadRightBracket(string[] words, ref int w)
         {
             bool isRightBracket = words[w] == "}";
             if (isRightBracket)
@@ -146,7 +145,7 @@ namespace MotionMatching
             return isRightBracket;
         }
 
-        private Vector3 ReadOffset(string[] words, ref int w)
+        private static Vector3 ReadOffset(string[] words, ref int w)
         {
             Vector3 offset = Vector3.zero;
             if (words[w++] != "OFFSET") Debug.LogError("[BVHImporter] OFFSET not found");
@@ -156,7 +155,7 @@ namespace MotionMatching
             return offset;
         }
 
-        private void ReadChannels(List<AxisOrder> channels, string[] words, ref int w, bool root = false)
+        private static void ReadChannels(List<AxisOrder> channels, string[] words, ref int w, bool root = false)
         {
             if (words[w++] != "CHANNELS")
             {
@@ -196,7 +195,7 @@ namespace MotionMatching
             channels.Add(ReadChannelRotation(words, ref w));
         }
 
-        private AxisOrder ReadChannelPosition(string[] words, ref int w)
+        private static AxisOrder ReadChannelPosition(string[] words, ref int w)
         {
             string order1 = words[w++];
             string order2 = words[w++];
@@ -246,7 +245,7 @@ namespace MotionMatching
             return AxisOrder.None;
         }
 
-        private AxisOrder ReadChannelRotation(string[] words, ref int w)
+        private static AxisOrder ReadChannelRotation(string[] words, ref int w)
         {
             string order1 = words[w++];
             string order2 = words[w++];
@@ -296,7 +295,7 @@ namespace MotionMatching
             return AxisOrder.None;
         }
 
-        private Quaternion BVHToUnityRotation(float v1, float v2, float v3, AxisOrder rotationOrder)
+        private static Quaternion BvhToUnityRotation(float v1, float v2, float v3, AxisOrder rotationOrder)
         {
             if (rotationOrder == AxisOrder.None) Debug.LogError("[BVHImporter] rotationOrder is None. There was an error while reading the channels");
 
@@ -314,7 +313,7 @@ namespace MotionMatching
             return Quaternion.identity;
         }
 
-        private Vector3 BVHToUnityTranslation(float v1, float v2, float v3, AxisOrder translationOrder)
+        private static Vector3 BvhToUnityTranslation(float v1, float v2, float v3, AxisOrder translationOrder)
         {
             if (translationOrder == AxisOrder.None) Debug.LogError("[BVHImporter] translationOrder is None. There was an error while reading the channels");
 

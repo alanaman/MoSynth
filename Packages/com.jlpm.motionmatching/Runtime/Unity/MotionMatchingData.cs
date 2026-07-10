@@ -83,20 +83,15 @@ namespace MotionMatching
             for (int i = 0; i < AnimationDatas.Count; i++)
             {
                 // Extract poses
-                BVHAnimation animation = AnimationDatas[i].GetAnimation();
+                BvhAnimation animation = AnimationDatas[i].GetAnimation();
                 PoseExtractor poseExtractor = new PoseExtractor();
-                if (!poseExtractor.Extract(animation, PoseSet, this, out int animationClip))
+                if (!poseExtractor.Extract(AnimationDatas[i], PoseSet, this))
                 {
-                    Debug.LogWarning("[FeatureDebug] Failed to extract pose from BVHAnimation. BVH Index: " + i);
-                }
-                // Add tags
-                foreach (AnimationData.Tag tag in AnimationDatas[i].Tags)
-                {
-                    PoseSet.AddTag(animationClip, tag);
+                    Debug.LogWarning("[FeatureDebug] Failed to extract poseSet from AnimationDat. Animation Index: " + i);
                 }
             }
             PoseSet.ConvertTagsToNativeArrays();
-            Debug.Log("Numer of poses: " + PoseSet.NumberPoses);
+            Debug.Log("Number of poses: " + PoseSet.NumberPoses);
         }
 
         public FeatureSet GetOrImportFeatureSet()
@@ -136,7 +131,7 @@ namespace MotionMatching
         public void ComputeJointsLocalForward()
         {
             // Import T-Pose
-            BVHAnimation tposeAnimation = AnimationDataTPose.GetAnimation();
+            BvhAnimation tposeAnimation = AnimationDataTPose.GetAnimation();
             JointsLocalForward = new float3[tposeAnimation.Skeleton.Joints.Count + 1]; // +1 for the simulation bone
             // Find forward character vector by projecting hips forward vector onto the ground
             Quaternion[] localRotations = tposeAnimation.Frames[0].LocalRotations;

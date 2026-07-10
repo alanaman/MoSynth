@@ -10,7 +10,7 @@ namespace MotionMatching
     using Joint = Skeleton.Joint;
 
     [CustomEditor(typeof(MotionMatchingData))]
-    public class MotionMatchingDataEditor : Editor
+    public class MotionMatchingDataEditor : UnityEditor.Editor
     {
         private bool SkeletonToMecanimFoldout;
         private bool TrajectoryFeaturesSelectorFoldout;
@@ -128,7 +128,7 @@ namespace MotionMatching
             }
             if (GUILayout.Button("Read Skeleton from BVH"))
             {
-                BVHAnimation animation = data.AnimationDataTPose.GetAnimation();
+                BvhAnimation animation = data.AnimationDataTPose.GetAnimation();
                 // Check if SkeletonToMecanim should be reset
                 bool shouldResetSkeletonToMecanim = true || data.SkeletonToMecanim.Count != animation.Skeleton.Joints.Count;
                 if (!shouldResetSkeletonToMecanim)

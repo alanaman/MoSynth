@@ -1,56 +1,56 @@
-using System;
-using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 using MotionMatching;
 using Unity.Mathematics;
+using UnityEngine;
 using static MotionMatching.MotionMatchingData;
 
+namespace MotionMatching.Editor
+{
 /// <summary>
 /// Import a BVH, create PoseSet and FeatureSet and visualize it using Gizmos.
 /// </summary>
-public class FeatureDebug : MonoBehaviour
+public class MotionMatchingDataVisualiser : MonoBehaviour
 {
-    public MotionMatchingData MMData;
-    public bool Play;
-    public float SpheresRadius = 0.1f;
-    public bool LockFPS = true;
-    public bool DebugTrajectory = true;
-    public bool DebugPose = true;
-    public bool DebugEnvironment = true;
-    public bool DebugContacts = true;
+    public MotionMatchingData motionMatchingData;
+    public bool play;
+    public float spheresRadius = 0.05f;
+    public bool lockFPS = true;
+    public bool debugTrajectory = true;
+    public bool debugPose = true;
+    public bool debugEnvironment = true;
+    public bool debugContacts = true;
 
-    private PoseSet PoseSet;
-    private FeatureSet FeatureSet;
-    private Transform[] SkeletonTransforms;
-    [SerializeField] private int CurrentFrame;
+    private PoseSet _poseSet;
+    private FeatureSet _featureSet;
+    private Transform[] _skeletonTransforms;
+    [SerializeField] private int currentFrame;
 
     private void Awake()
     {
         // PoseSet
-        PoseSet = MMData.GetOrImportPoseSet();
+        _poseSet = motionMatchingData.GetOrImportPoseSet();
 
         // FeatureSet
-        FeatureSet = MMData.GetOrImportFeatureSet();
+        _featureSet = motionMatchingData.GetOrImportFeatureSet();
 
         // Skeleton
-        SkeletonTransforms = new Transform[PoseSet.Skeleton.Joints.Count];
-        SkeletonTransforms[0] = transform; // Simulation Bone
-        for (int j = 1; j < PoseSet.Skeleton.Joints.Count; j++)
+        _skeletonTransforms = new Transform[_poseSet.Skeleton.Joints.Count];
+        _skeletonTransforms[0] = transform; // Simulation Bone
+        for (int j = 1; j < _poseSet.Skeleton.Joints.Count; j++)
         {
             // Joints
-            Skeleton.Joint joint = PoseSet.Skeleton.Joints[j];
+            Skeleton.Joint joint = _poseSet.Skeleton.Joints[j];
             Transform t = (new GameObject()).transform;
             t.name = joint.Name;
-            t.SetParent(SkeletonTransforms[joint.ParentIndex], false);
+            t.SetParent(_skeletonTransforms[joint.ParentIndex], false);
             t.localPosition = joint.LocalOffset;
-            SkeletonTransforms[j] = t;
+            _skeletonTransforms[j] = t;
         }
 
         // FPS
-        if (LockFPS)
+        if (lockFPS)
         {
-            Application.targetFrameRate = Mathf.RoundToInt(1.0f / PoseSet.FrameTime);
+            Application.targetFrameRate = Mathf.RoundToInt(1.0f / _poseSet.FrameTime);
             Debug.Log("[BVHDebug] Updated Target FPS: " + Application.targetFrameRate);
         }
         else
@@ -61,40 +61,40 @@ public class FeatureDebug : MonoBehaviour
 
     private void Update()
     {
-        if (Play)
+        if (play)
         {
-            PoseSet.GetPose(CurrentFrame, out PoseVector pose);
-            SkeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
-            SkeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
+            _poseSet.GetPose(currentFrame, out PoseVector pose);
+            _skeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
+            _skeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
             for (int i = 0; i < pose.JointLocalRotations.Length; i++)
             {
-                SkeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+                _skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
             }
-            CurrentFrame = (CurrentFrame + 1) % PoseSet.NumberPoses;
+            currentFrame = (currentFrame + 1) % _poseSet.NumberPoses;
         }
         else
         {
-            CurrentFrame = 0;
-            SkeletonTransforms[0].localPosition = float3.zero;
-            for (int i = 0; i < SkeletonTransforms.Length; i++)
+            currentFrame = 0;
+            _skeletonTransforms[0].localPosition = float3.zero;
+            for (int i = 0; i < _skeletonTransforms.Length; i++)
             {
-                SkeletonTransforms[i].localRotation = quaternion.identity;
+                _skeletonTransforms[i].localRotation = quaternion.identity;
             }
         }
     }
 
     private void OnDestroy()
     {
-        MMData.Dispose();
-        PoseSet.Dispose();
-        FeatureSet.Dispose();
+        motionMatchingData.Dispose();
+        _poseSet.Dispose();
+        _featureSet.Dispose();
     }
 
     private void OnApplicationQuit()
     {
-        MMData.Dispose();
-        PoseSet.Dispose();
-        FeatureSet.Dispose();
+        motionMatchingData.Dispose();
+        _poseSet.Dispose();
+        _featureSet.Dispose();
     }
 
 
@@ -102,75 +102,75 @@ public class FeatureDebug : MonoBehaviour
     private void OnDrawGizmos()
     {
         // Skeleton
-        if (SkeletonTransforms == null || PoseSet == null) return;
+        if (_skeletonTransforms == null || _poseSet == null) return;
 
         Gizmos.color = Color.red;
-        for (int i = 2; i < SkeletonTransforms.Length; i++) // skip Simulation Bone
+        for (int i = 2; i < _skeletonTransforms.Length; i++) // skip Simulation Bone
         {
-            Transform t = SkeletonTransforms[i];
+            Transform t = _skeletonTransforms[i];
             GizmosExtensions.DrawLine(t.parent.position, t.position, 3);
         }
 
-        if (!Play) return;
+        if (!play) return;
         // Character
-        int currentFrame = math.max(0, CurrentFrame - 1); // FeatureDebug increments CurrentFrame after update... OnDrawGizmos is called after update
-        PoseSet.GetPose(currentFrame, out PoseVector pose);
+        int currentFrame = math.max(0, this.currentFrame - 1); // FeatureDebug increments CurrentFrame after update... OnDrawGizmos is called after update
+        _poseSet.GetPose(currentFrame, out PoseVector pose);
         FeatureSet.GetWorldOriginCharacter(pose, out float3 characterOrigin, out float3 characterForward);
         Gizmos.color = new Color(1.0f, 0.0f, 0.5f, 1.0f);
-        Gizmos.DrawSphere(characterOrigin, SpheresRadius);
+        Gizmos.DrawSphere(characterOrigin, spheresRadius);
         GizmosExtensions.DrawArrow(characterOrigin, characterOrigin + characterForward, thickness: 3);
 
         // Forward Trajectory Direction Features
         Gizmos.color = Color.gray;
-        for (int t = 0; t < MMData.TrajectoryFeatures.Count; t++)
+        for (int t = 0; t < motionMatchingData.TrajectoryFeatures.Count; t++)
         {
-            var trajectoryFeature = MMData.TrajectoryFeatures[t];
+            var trajectoryFeature = motionMatchingData.TrajectoryFeatures[t];
             if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Direction &&
                 !trajectoryFeature.SimulationBone)
             {
-                if (!PoseSet.Skeleton.Find(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
-                float3 dir = SkeletonTransforms[joint.Index].TransformDirection(MMData.GetLocalForward(joint.Index));
-                float3 jointPos = SkeletonTransforms[joint.Index].position;
+                if (!_poseSet.Skeleton.Find(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
+                float3 dir = _skeletonTransforms[joint.Index].TransformDirection(motionMatchingData.GetLocalForward(joint.Index));
+                float3 jointPos = _skeletonTransforms[joint.Index].position;
                 GizmosExtensions.DrawArrow(jointPos, jointPos + dir * 0.5f, 0.1f, thickness: 3);
             }
         }
 
         // Contacts
-        if (DebugContacts)
+        if (debugContacts)
         {
-            if (!PoseSet.Skeleton.Find(HumanBodyBones.LeftToes, out Skeleton.Joint leftToesJoint)) Debug.Assert(false, "Bone not found");
-            if (!PoseSet.Skeleton.Find(HumanBodyBones.RightToes, out Skeleton.Joint rightToesJoint)) Debug.Assert(false, "Bone not found");
+            if (!_poseSet.Skeleton.Find(HumanBodyBones.LeftToes, out Skeleton.Joint leftToesJoint)) Debug.Assert(false, "Bone not found");
+            if (!_poseSet.Skeleton.Find(HumanBodyBones.RightToes, out Skeleton.Joint rightToesJoint)) Debug.Assert(false, "Bone not found");
             int leftToesIndex = leftToesJoint.Index;
             int rightToesIndex = rightToesJoint.Index;
             Gizmos.color = Color.green;
             if (pose.LeftFootContact)
             {
-                Gizmos.DrawSphere(SkeletonTransforms[leftToesIndex].position, SpheresRadius);
+                Gizmos.DrawSphere(_skeletonTransforms[leftToesIndex].position, spheresRadius);
             }
             if (pose.RightFootContact)
             {
-                Gizmos.DrawSphere(SkeletonTransforms[rightToesIndex].position, SpheresRadius);
+                Gizmos.DrawSphere(_skeletonTransforms[rightToesIndex].position, spheresRadius);
             }
         }
 
         // Feature Set
-        if (FeatureSet == null) return;
+        if (_featureSet == null) return;
 
-        DrawFeatureGizmos(FeatureSet, MMData, SpheresRadius, currentFrame, characterOrigin, characterForward,
-                          SkeletonTransforms, PoseSet.Skeleton, Color.blue, debugPose: DebugPose, debugTrajectory: DebugTrajectory, debugEnvironment: DebugEnvironment);
+        DrawFeatureGizmos(_featureSet, motionMatchingData, spheresRadius, currentFrame, characterOrigin, characterForward,
+            _skeletonTransforms, _poseSet.Skeleton, Color.blue, debugPose: debugPose, debugTrajectory: debugTrajectory, debugEnvironment: debugEnvironment);
     }
 
-    private static List<float3> PositionFeatures = new();
+    private static List<float3> _positionFeatures = new();
     public static void DrawFeatureGizmos(FeatureSet set, MotionMatchingData mmData, float spheresRadius, int currentFrame,
-                                         float3 characterOrigin, float3 characterForward, Transform[] joints, Skeleton skeleton,
-                                         Color trajectoryColor, bool debugPose = true, bool debugTrajectory = true, bool debugEnvironment = true)
+        float3 characterOrigin, float3 characterForward, Transform[] joints, Skeleton skeleton,
+        Color trajectoryColor, bool debugPose = true, bool debugTrajectory = true, bool debugEnvironment = true)
     {
         if (!set.IsValidFeature(currentFrame)) return;
 
         quaternion characterRot = quaternion.LookRotation(characterForward, math.up());
 
         // TODO: find a better way to store this information
-        PositionFeatures.Clear();
+        _positionFeatures.Clear();
 
         // Trajectory Features ---------------------------------------------------------------------------
         // Find the Main Position Feature (if exists)
@@ -182,9 +182,9 @@ public class FeatureDebug : MonoBehaviour
                 Debug.Assert(trajectoryFeature.FeatureType == TrajectoryFeature.Type.Position, "The main position feature should be of type Position");
                 for (int p = 0; p < trajectoryFeature.FramesPrediction.Length; p++)
                 {
-                    float3 value = Get3DValuePositionOrDirectionFeature(trajectoryFeature, set, currentFrame, t, p, isEnvironment: false);
+                    float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p, isEnvironment: false);
                     value = characterOrigin + math.mul(characterRot, value);
-                    PositionFeatures.Add(value);
+                    _positionFeatures.Add(value);
                 }
             }
         }
@@ -197,7 +197,7 @@ public class FeatureDebug : MonoBehaviour
                 for (int p = 0; p < trajectoryFeature.FramesPrediction.Length; p++)
                 {
                     DrawTrajectoryPoint(trajectoryFeature, set, currentFrame, t, p, trajectoryColor, characterOrigin, characterForward,
-                                        characterRot, spheresRadius, joints, skeleton, isEnvironment: false);
+                        characterRot, spheresRadius, joints, skeleton, isEnvironment: false);
                 }
             }
         }
@@ -237,63 +237,15 @@ public class FeatureDebug : MonoBehaviour
                 for (int p = 0; p < environmentFeature.FramesPrediction.Length; p++)
                 {
                     DrawTrajectoryPoint(environmentFeature, set, currentFrame, t, p, trajectoryColor, characterOrigin, characterForward,
-                                        characterRot, spheresRadius, joints, skeleton, isEnvironment: true);
+                        characterRot, spheresRadius, joints, skeleton, isEnvironment: true);
                 }
             }
         }
     }
 
-    public static float3 Get3DValuePositionOrDirectionFeature(TrajectoryFeature trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex, int predictionIndex, bool isEnvironment)
-    {
-        int t = trajectoryFeatureIndex;
-        int p = predictionIndex;
-
-        float3 value;
-        if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
-        {
-            value = isEnvironment ? set.Get3DEnvironmentFeature(currentFrame, t, p) : set.Get3DTrajectoryFeature(currentFrame, t, p, true);
-        }
-        else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY)
-        {
-            float2 value2D = isEnvironment ? set.Get2DEnvironmentFeature(currentFrame, t, p) : set.Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value2D.x, value2D.y, 0);
-        }
-        else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroZ)
-        {
-            float2 value2D = isEnvironment ? set.Get2DEnvironmentFeature(currentFrame, t, p) : set.Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value2D.x, 0.0f, value2D.y);
-        }
-        else if (!trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
-        {
-            float2 value2D = isEnvironment ? set.Get2DEnvironmentFeature(currentFrame, t, p) : set.Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, value2D.x, value2D.y);
-        }
-        else if (!trajectoryFeature.ZeroX)
-        {
-            float value1D = isEnvironment ? set.Get1DEnvironmentFeature(currentFrame, t, p) : set.Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value1D, 0.0f, 0.0f);
-        }
-        else if (!trajectoryFeature.ZeroY)
-        {
-            float value1D = isEnvironment ? set.Get1DEnvironmentFeature(currentFrame, t, p) : set.Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, value1D, 0.0f);
-        }
-        else if (!trajectoryFeature.ZeroZ)
-        {
-            float value1D = isEnvironment ? set.Get1DEnvironmentFeature(currentFrame, t, p) : set.Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, 0.0f, value1D);
-        }
-        else
-        {
-            Debug.Assert(false, "Invalid trajectory feature");
-            value = float3.zero;
-        }
-        return value;
-    }
-
     private static void DrawTrajectoryPoint(TrajectoryFeature trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex,
-                                            int predictionIndex, Color trajectoryColor, float3 characterOrigin, float3 characterForward,
-                                            quaternion characterRot, float spheresRadius, Transform[] joints, Skeleton skeleton, bool isEnvironment)
+        int predictionIndex, Color trajectoryColor, float3 characterOrigin, float3 characterForward,
+        quaternion characterRot, float spheresRadius, Transform[] joints, Skeleton skeleton, bool isEnvironment)
     {
         int t = trajectoryFeatureIndex;
         int p = predictionIndex;
@@ -302,7 +254,7 @@ public class FeatureDebug : MonoBehaviour
         if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Position ||
             trajectoryFeature.FeatureType == TrajectoryFeature.Type.Direction)
         {
-            float3 value = Get3DValuePositionOrDirectionFeature(trajectoryFeature, set, currentFrame, t, p, isEnvironment);
+            float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p, isEnvironment);
             switch (trajectoryFeature.FeatureType)
             {
                 case TrajectoryFeature.Type.Position:
@@ -313,7 +265,7 @@ public class FeatureDebug : MonoBehaviour
                     float3 jointPos;
                     if (trajectoryFeature.SimulationBone)
                     {
-                        jointPos = PositionFeatures.Count > 0 ? PositionFeatures[p] : float3.zero;
+                        jointPos = _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero;
                     }
                     else
                     {
@@ -330,26 +282,27 @@ public class FeatureDebug : MonoBehaviour
         {
             Feature1DExtractor featureExtractor = trajectoryFeature.FeatureExtractor as Feature1DExtractor;
             float value = isEnvironment ? set.Get1DEnvironmentFeature(currentFrame, t, p) : set.Get1DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, PositionFeatures.Count > 0 ? PositionFeatures[p] : float3.zero);
+            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
         }
         else if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Custom2D)
         {
             Feature2DExtractor featureExtractor = trajectoryFeature.FeatureExtractor as Feature2DExtractor;
             float2 value = isEnvironment ? set.Get2DEnvironmentFeature(currentFrame, t, p) : set.Get2DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, PositionFeatures.Count > 0 ? PositionFeatures[p] : float3.zero);
+            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
         }
         else if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Custom3D)
         {
             Feature3DExtractor featureExtractor = trajectoryFeature.FeatureExtractor as Feature3DExtractor;
             float3 value = isEnvironment ? set.Get3DEnvironmentFeature(currentFrame, t, p) : set.Get3DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, PositionFeatures.Count > 0 ? PositionFeatures[p] : float3.zero);
+            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
         }
         else if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Custom4D)
         {
             Feature4DExtractor featureExtractor = trajectoryFeature.FeatureExtractor as Feature4DExtractor;
             float4 value = isEnvironment ? set.Get4DEnvironmentFeature(currentFrame, t, p) : set.Get4DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, PositionFeatures.Count > 0 ? PositionFeatures[p] : float3.zero);
+            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
         }
     }
 #endif
+}
 }
