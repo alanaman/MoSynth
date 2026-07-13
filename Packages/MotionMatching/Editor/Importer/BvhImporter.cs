@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using System.Globalization;
-using MotionMatching;
+using System.IO;
+using UnityEditor.AssetImporters;
 using UnityEngine;
 
-namespace BVH
+namespace MotionMatching.Editor
 {
     using Joint = Skeleton.Joint;
     using EndSite = BvhAnimation.EndSite;
@@ -12,16 +13,29 @@ namespace BVH
     /// <summary>
     /// Imports a BVH file and stores the animation data in Unity format (BVHAnimation).
     /// </summary>
-    public static class BvhImporter
+    [ScriptedImporter(1, "bvh")]
+    public class BvhImporter : ScriptedImporter
     {
-        public static BvhAnimation Import(TextAsset bvh, float scale = 1.0f, bool onlyFirstFrame = false)
+        public float unitScale = 0.01f;
+        public bool onlyFirstFrame;
+        public override void OnImportAsset(AssetImportContext ctx)
+        {
+            // Create a new instance of your custom ScriptableObject
+            BvhAnimation bvhAsset = Import(ctx, unitScale, onlyFirstFrame);
+            // Register the ScriptableObject as the main imported asset
+            ctx.AddObjectToAsset("main obj", bvhAsset);
+            ctx.SetMainObject(bvhAsset);
+        }
+
+        private static BvhAnimation Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
         {
             List<AxisOrder> channels = new List<AxisOrder>();
-            BvhAnimation animation = new BvhAnimation();
+            BvhAnimation bvhSo = ScriptableObject.CreateInstance<BvhAnimation>();
 
             Stack<int> parentIndexStack = new Stack<int>();
             char[] whitespace = new char[] { ' ', '\t', '\r', '\n' };
-            string[] words = bvh.text.Split(whitespace, System.StringSplitOptions.RemoveEmptyEntries);
+            
+            string[] words = File.ReadAllText(ctx.assetPath).Split(whitespace, System.StringSplitOptions.RemoveEmptyEntries);
             // string[] words = Regex.Split(bvh.text, "[\\s+|\\r*\\n+]+");
             int w = 0;
             // ROOT
@@ -32,7 +46,7 @@ namespace BVH
             root.LocalOffset = ReadOffset(words, ref w) * scale;
             root.LocalOffset = Vector3.zero; // even if we read the offset, it is not used... it should always be 0...
             ReadChannels(channels, words, ref w, true);
-            animation.AddJoint(root);
+            bvhSo.AddJoint(root);
             // JOINTS
             int brackets = 1;
             int parent = 0;
@@ -49,7 +63,7 @@ namespace BVH
                 brackets += 1;
                 joint.LocalOffset = ReadOffset(words, ref w) * scale;
                 ReadChannels(channels, words, ref w);
-                animation.AddJoint(joint);
+                bvhSo.AddJoint(joint);
                 if (words[w] == "End")
                 {
                     w += 1;
@@ -57,7 +71,7 @@ namespace BVH
                     ReadLeftBracket(words, ref w);
                     Vector3 offset = ReadOffset(words, ref w) * scale;
                     EndSite endSite = new EndSite(parent, offset);
-                    animation.AddEndSite(endSite);
+                    bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (words[w] == "End")
@@ -67,7 +81,7 @@ namespace BVH
                     ReadLeftBracket(words, ref w);
                     Vector3 offset = ReadOffset(words, ref w) * scale;
                     EndSite endSite = new EndSite(parent, offset);
-                    animation.AddEndSite(endSite);
+                    bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (ReadRightBracket(words, ref w))
@@ -82,7 +96,7 @@ namespace BVH
                     ReadLeftBracket(words, ref w);
                     Vector3 offset = ReadOffset(words, ref w) * scale;
                     EndSite endSite = new EndSite(parent, offset);
-                    animation.AddEndSite(endSite);
+                    bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (ReadRightBracket(words, ref w))
@@ -97,11 +111,11 @@ namespace BVH
             if (words[w++] != "MOTION") Debug.LogError("[BVHImporter] MOTION not found");
             if (words[w++] != "Frames:") Debug.LogError("[BVHImporter] Frames: not found");
             int numberFrames = int.Parse(words[w++]);
-            animation.InitFrames(numberFrames);
+            bvhSo.InitFrames(numberFrames);
             if (words[w++] != "Frame") Debug.LogError("[BVHImporter] Frame not found");
             if (words[w++] != "Time:") Debug.LogError("[BVHImporter] Time: not found");
             float frameTime = float.Parse(words[w++], CultureInfo.InvariantCulture);
-            animation.SetFrameTime(frameTime);
+            bvhSo.SetFrameTime(frameTime);
             // Frames
             int numberChannels = channels.Count;
             numberFrames = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
@@ -125,9 +139,9 @@ namespace BVH
                     }
                 }
                 Frame frame = new Frame(rootMotion, localRotations);
-                animation.AddFrame(i, frame);
+                bvhSo.AddFrame(i, frame);
             }
-            return animation;
+            return bvhSo;
         }
 
         private static void ReadLeftBracket(string[] words, ref int w)

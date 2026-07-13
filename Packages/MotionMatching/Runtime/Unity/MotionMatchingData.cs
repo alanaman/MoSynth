@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
@@ -134,7 +135,7 @@ namespace MotionMatching
             BvhAnimation tposeAnimation = AnimationDataTPose.GetAnimation();
             JointsLocalForward = new float3[tposeAnimation.Skeleton.Joints.Count + 1]; // +1 for the simulation bone
             // Find forward character vector by projecting hips forward vector onto the ground
-            Quaternion[] localRotations = tposeAnimation.Frames[0].LocalRotations;
+            Quaternion[] localRotations = tposeAnimation.Frames[0].localRotations;
             float3 hipsWorldForwardProjected = math.mul(localRotations[0], HipsForwardLocalVector);
             hipsWorldForwardProjected.y = 0;
             hipsWorldForwardProjected = math.normalize(hipsWorldForwardProjected);
@@ -221,7 +222,7 @@ namespace MotionMatching
             return path;
         }
 
-        [System.Serializable]
+        [Serializable]
         public struct JointToMecanim
         {
             public string Name;

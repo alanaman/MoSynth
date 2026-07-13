@@ -198,7 +198,7 @@ namespace MotionMatching
             NativeArray<float3> jointOffsets = new NativeArray<float3>(nJoints, Allocator.TempJob);
             for (int i = 0; i < nJoints; i++) jointOffsets[i] = bvhAnimation.Skeleton.Joints[i].LocalOffset;
             NativeArray<quaternion> frameLocalRotations = new NativeArray<quaternion>(nJoints, Allocator.TempJob);
-            for (int i = 0; i < nJoints; i++) frameLocalRotations[i] = frame.LocalRotations[i];
+            for (int i = 0; i < nJoints; i++) frameLocalRotations[i] = frame.localRotations[i];
 
             // Use Burst (way faster than doing it in regular C#)
             var jobSB = new AddSimulationBoneBurst
@@ -207,7 +207,7 @@ namespace MotionMatching
                 Njoints = nJoints,
                 JointOffsets = jointOffsets,
                 FrameLocalRotations = frameLocalRotations,
-                FrameRootMotion = frame.RootMotion,
+                FrameRootMotion = frame.rootMotion,
                 HipsForwardLocalVector = mmData.HipsForwardLocalVector,
                 // Output
                 OutJointLocalPositions = jointLocalPositions,

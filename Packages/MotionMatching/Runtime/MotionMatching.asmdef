@@ -1,5 +1,5 @@
 {
-    "name": "JLPM.MotionMatching",
+    "name": "MotionMatching",
     "rootNamespace": "",
     "references": [
         "Unity.Burst",

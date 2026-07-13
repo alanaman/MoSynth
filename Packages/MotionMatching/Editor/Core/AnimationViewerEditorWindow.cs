@@ -1354,10 +1354,10 @@ namespace MotionMatching
             {
                 // Update skeleton
                 BvhAnimation.Frame frame = animation.Frames[CurrentFrame];
-                Skeleton[0].position = frame.RootMotion;
+                Skeleton[0].position = frame.rootMotion;
                 for (int i = 0; i < Skeleton.Length; i++)
                 {
-                    Skeleton[i].localRotation = frame.LocalRotations[i];
+                    Skeleton[i].localRotation = frame.localRotations[i];
                 }
                 // Update frame index
                 if (forward)

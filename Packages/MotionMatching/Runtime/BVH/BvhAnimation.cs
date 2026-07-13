@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using System;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
@@ -11,35 +12,29 @@ namespace MotionMatching
     /// <summary>
     /// Stores the BVH animation data in Unity format.
     /// </summary>
-    public class BvhAnimation
+    public class BvhAnimation : ScriptableObject
     {
-        public float FrameTime { get; private set; }
-        public Skeleton Skeleton { get; private set; }
-        public List<EndSite> EndSites { get; private set; }
-        public Frame[] Frames { get; private set; }
+        [SerializeField] private float frameTime;
+        public float FrameTime => frameTime;
 
-        public BvhAnimation()
-        {
-            Skeleton = new Skeleton();
-            EndSites = new List<EndSite>();
-        }
+        [SerializeField] private Skeleton skeleton = new();
+        public Skeleton Skeleton => skeleton;
+        
+        public List<EndSite> EndSites { get; private set; } = new();
+        
+        [SerializeField]
+        private Frame[] frames;
+        public Frame[] Frames => frames;
+        
 
-        public BvhAnimation(Skeleton skeleton, List<EndSite> endSites, Frame[] frames, float frameTime)
+        public void SetFrameTime(float inFrameTime)
         {
-            Skeleton = skeleton;
-            EndSites = endSites;
-            Frames = frames;
-            FrameTime = frameTime;
-        }
-
-        public void SetFrameTime(float frameTime)
-        {
-            FrameTime = frameTime;
+            this.frameTime = inFrameTime;
         }
 
         public void InitFrames(int numberFrames)
         {
-            Frames = new Frame[numberFrames];
+            frames = new Frame[numberFrames];
         }
 
         public void AddFrame(int index, Frame frame)
@@ -81,10 +76,10 @@ namespace MotionMatching
 
             while (joint.Index != 0) // while not root
             {
-                worldRot = frame.LocalRotations[joint.Index] * worldRot;
+                worldRot = frame.localRotations[joint.Index] * worldRot;
                 joint = Skeleton.GetParent(joint);
             }
-            worldRot = frame.LocalRotations[0] * worldRot; // root
+            worldRot = frame.localRotations[0] * worldRot; // root
 
             return worldRot;
         }
@@ -101,15 +96,16 @@ namespace MotionMatching
             }
         }
 
+        [Serializable]
         public struct Frame
         {
-            public Vector3 RootMotion;
-            public Quaternion[] LocalRotations;
+            [FormerlySerializedAs("RootMotion")] public Vector3 rootMotion;
+            [FormerlySerializedAs("LocalRotations")] public Quaternion[] localRotations;
 
             public Frame(Vector3 rootMotion, Quaternion[] localRotations)
             {
-                RootMotion = rootMotion;
-                LocalRotations = localRotations;
+                this.rootMotion = rootMotion;
+                this.localRotations = localRotations;
             }
         }
     }

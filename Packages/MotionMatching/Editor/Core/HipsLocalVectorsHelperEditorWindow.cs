@@ -63,7 +63,7 @@ namespace MotionMatching
                 {
                     t.SetParent(Skeleton[joint.ParentIndex], false);
                 }
-                t.SetLocalPositionAndRotation(joint.LocalOffset, animation.Frames[0].LocalRotations[j]);
+                t.SetLocalPositionAndRotation(joint.LocalOffset, animation.Frames[0].localRotations[j]);
                 Skeleton[j] = t;
                 // Visual
                 Transform visual = (new GameObject()).transform;

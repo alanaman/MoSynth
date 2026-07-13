@@ -1,35 +1,31 @@
 using System;
-using MotionMatching;
 using UnityEngine;
+using UnityEngine.Serialization;
 
-namespace BVH
+namespace MotionMatching
 {
 /// <summary>
 /// Import a BVH and visualize it using Gizmos.
 /// </summary>
-[ExecuteInEditMode]
 public class BvhVisualiser : MonoBehaviour
 {
-    public TextAsset bvh;
-    public float unitScale = 1;
+    [FormerlySerializedAs("_animation")] public BvhAnimation bvhAnimation;
     public bool play;
     public float spheresRadius = 0.1f;
     public bool lockFPS = true;
 
-    private BvhAnimation _animation;
     private Transform[] _skeletonBoneTransforms;
     private Transform _skeletonRoot;
     private int _currentFrame;
 
     private void Awake()
     {
-        if (!bvh) return;
-        _animation = BvhImporter.Import(bvh, unitScale);
+        if (!bvhAnimation) return;
         SetupSkeleton();
 
         if (lockFPS)
         {
-            Application.targetFrameRate = (int)(1.0f / _animation.FrameTime);
+            Application.targetFrameRate = (int)(1.0f / bvhAnimation.FrameTime);
             Debug.Log("[BVHDebug] Updated Target FPS: " + Application.targetFrameRate);
         }
         else
@@ -40,25 +36,25 @@ public class BvhVisualiser : MonoBehaviour
 
     private void SetupSkeleton()
     {
-        _skeletonBoneTransforms = EnsureSkeletonHierarchy(_animation.Skeleton);
+        _skeletonBoneTransforms = EnsureSkeletonHierarchy(bvhAnimation.Skeleton);
         for (int i = 0; i < _skeletonBoneTransforms.Length; i++)
         {
-            _skeletonBoneTransforms[i].localPosition = _animation.Skeleton.Joints[i].LocalOffset;
+            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.Joints[i].LocalOffset;
         }
     }
 
     private void Update()
     {
-        if (_animation == null) return;
+        if (bvhAnimation == null) return;
         if (play)
         {
-            BvhAnimation.Frame frame = _animation.Frames[_currentFrame];
-            _skeletonBoneTransforms[0].localPosition = frame.RootMotion;
-            for (int i = 0; i < frame.LocalRotations.Length; i++)
+            BvhAnimation.Frame frame = bvhAnimation.Frames[_currentFrame];
+            _skeletonBoneTransforms[0].localPosition = frame.rootMotion;
+            for (int i = 0; i < frame.localRotations.Length; i++)
             {
-                _skeletonBoneTransforms[i].localRotation = frame.LocalRotations[i];
+                _skeletonBoneTransforms[i].localRotation = frame.localRotations[i];
             }
-            _currentFrame = (_currentFrame + 1) % _animation.Frames.Length;
+            _currentFrame = (_currentFrame + 1) % bvhAnimation.Frames.Length;
         }
         else
         {
@@ -73,13 +69,12 @@ public class BvhVisualiser : MonoBehaviour
 
     private void OnValidate()
     {
-        if(bvh == null) return;
-        _animation = BvhImporter.Import(bvh, unitScale);
+        if(bvhAnimation == null) return;
         SetupSkeleton();
         
         if (lockFPS)
         {
-            Application.targetFrameRate = (int)(1.0f / _animation.FrameTime);
+            Application.targetFrameRate = (int)(1.0f / bvhAnimation.FrameTime);
             Debug.Log("[BVHDebug] Updated Target FPS: " + Application.targetFrameRate);
         }
         else
@@ -160,7 +155,7 @@ public class BvhVisualiser : MonoBehaviour
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (_skeletonBoneTransforms == null || _animation == null || _animation.EndSites == null) return;
+        if (_skeletonBoneTransforms == null || bvhAnimation == null || bvhAnimation.EndSites == null) return;
 
         Gizmos.color = Color.red;
         for (int i = 1; i < _skeletonBoneTransforms.Length; i++)
