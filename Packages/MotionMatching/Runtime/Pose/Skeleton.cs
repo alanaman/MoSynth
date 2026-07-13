@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -16,11 +15,25 @@ public class Skeleton
         Joints.Add(joint);
     }
 
-    public bool Find(HumanBodyBones type, out Joint joint)
+    public int GetJointIndex(HumanBodyBones type)
+    {
+        return Find(type).index;
+    }
+    
+    public Joint Find(HumanBodyBones type)
+    {
+        if(!TryFind(type, out Joint joint))
+        {
+            throw new Exception($"Joint of type {type} not found in skeleton.");
+        }
+        return joint;
+    }
+    
+    public bool TryFind(HumanBodyBones type, out Joint joint)
     {
         for (int i = 0; i < Joints.Count; i++)
         {
-            if (Joints[i].Type == type)
+            if (Joints[i].type == type)
             {
                 joint = Joints[i];
                 return true;
@@ -31,11 +44,11 @@ public class Skeleton
         return false;
     }
 
-    public bool Find(string jointName, out Joint joint)
+    public bool TryFind(string jointName, out Joint joint)
     {
         for (int i = 0; i < Joints.Count; i++)
         {
-            if (Joints[i].Name == jointName)
+            if (Joints[i].name == jointName)
             {
                 joint = Joints[i];
                 return true;
@@ -43,45 +56,45 @@ public class Skeleton
         }
 
         joint = new Joint();
-        return true;
+        return false;
     }
 
     public Joint GetParent(Joint joint)
     {
-        return Joints[joint.ParentIndex];
+        return Joints[joint.parentIndex];
     }
 
     [Serializable]
     public struct Joint : IEquatable<Joint>
     {
-        public string Name;
-        public int Index;
-        public int ParentIndex; // The Root has ParentIndex = -1
-        public Vector3 LocalOffset;
-        public HumanBodyBones Type;
+        public string name;
+        public int index;
+        public int parentIndex; // The Root has ParentIndex = -1
+        public Vector3 localOffset;
+        public HumanBodyBones type;
 
         public Joint(string name, int index, int parentIndex, Vector3 localOffset)
         {
-            Name = name;
-            Index = index;
-            ParentIndex = parentIndex;
-            LocalOffset = localOffset;
-            Type = HumanBodyBones.LastBone;
+            this.name = name;
+            this.index = index;
+            this.parentIndex = parentIndex;
+            this.localOffset = localOffset;
+            type = HumanBodyBones.LastBone;
         }
 
         public Joint(string name, int index, int parentIndex, Vector3 localOffset, HumanBodyBones type)
         {
-            Name = name;
-            Index = index;
-            ParentIndex = parentIndex;
-            LocalOffset = localOffset;
-            Type = type;
+            this.name = name;
+            this.index = index;
+            this.parentIndex = parentIndex;
+            this.localOffset = localOffset;
+            this.type = type;
         }
 
         public bool Equals(Joint other)
         {
-            return Name == other.Name && Index == other.Index && ParentIndex == other.ParentIndex &&
-                   LocalOffset == other.LocalOffset && Type == other.Type;
+            return name == other.name && index == other.index && parentIndex == other.parentIndex &&
+                   localOffset == other.localOffset && type == other.type;
         }
     }
 }

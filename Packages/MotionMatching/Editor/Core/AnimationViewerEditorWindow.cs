@@ -1280,12 +1280,12 @@ namespace MotionMatching
                 // Joints
                 Skeleton.Joint joint = animation.Skeleton.Joints[j];
                 Transform t = (new GameObject()).transform;
-                t.name = joint.Name;
+                t.name = joint.name;
                 if (j > 0)
                 {
-                    t.SetParent(Skeleton[joint.ParentIndex], false);
+                    t.SetParent(Skeleton[joint.parentIndex], false);
                 }
-                t.localPosition = joint.LocalOffset;
+                t.localPosition = joint.localOffset;
                 Skeleton[j] = t;
                 // Visual
                 Transform visual = (new GameObject()).transform;
@@ -1306,7 +1306,7 @@ namespace MotionMatching
                     // Capsule
                     Transform capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule).transform;
                     capsule.name = "Capsule";
-                    capsule.SetParent(Skeleton[joint.ParentIndex].Find("Visual"), false);
+                    capsule.SetParent(Skeleton[joint.parentIndex].Find("Visual"), false);
                     float distance = Vector3.Distance(t.position, t.parent.position) * (1.0f / visual.localScale.y) * 0.5f;
                     capsule.localScale = new Vector3(0.5f, distance, 0.5f);
                     Vector3 up = (t.position - t.parent.position).normalized;

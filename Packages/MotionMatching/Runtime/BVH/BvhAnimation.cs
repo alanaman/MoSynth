@@ -57,9 +57,9 @@ namespace MotionMatching
             for (int i = 0; i < Skeleton.Joints.Count; i++)
             {
                 Joint joint = Skeleton.Joints[i];
-                if (motionMatchingData.GetMecanimBone(joint.Name, out HumanBodyBones bone))
+                if (motionMatchingData.GetMecanimBone(joint.name, out HumanBodyBones bone))
                 {
-                    joint.Type = bone;
+                    joint.type = bone;
                     Skeleton.Joints[i] = joint;
                 }
             }
@@ -74,9 +74,9 @@ namespace MotionMatching
             Frame frame = Frames[frameIndex];
             quaternion worldRot = quaternion.identity;
 
-            while (joint.Index != 0) // while not root
+            while (joint.index != 0) // while not root
             {
-                worldRot = frame.localRotations[joint.Index] * worldRot;
+                worldRot = frame.localRotations[joint.index] * worldRot;
                 joint = Skeleton.GetParent(joint);
             }
             worldRot = frame.localRotations[0] * worldRot; // root

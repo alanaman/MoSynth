@@ -80,7 +80,7 @@ namespace MotionMatching
         {
             ImportAnimations();
             PoseSet = new PoseSet(this);
-            PoseSet.SetSkeletonFromBVH(AnimationDatas[0].GetAnimation().Skeleton);
+            PoseSet.SetSkeletonFromBvh(AnimationDatas[0].GetAnimation().Skeleton);
             for (int i = 0; i < AnimationDatas.Count; i++)
             {
                 // Extract poses
@@ -150,14 +150,14 @@ namespace MotionMatching
                 while (joint != 0) // while not root
                 {
                     worldRot = math.mul(localRotations[joint], worldRot);
-                    joint = tposeAnimation.Skeleton.Joints[joint].ParentIndex;
+                    joint = tposeAnimation.Skeleton.Joints[joint].parentIndex;
                 }
                 worldRot = math.mul(localRotations[0], worldRot); // root
                 joint = i - 1;
                 // Change to Local
-                if (!GetMecanimBone(tposeAnimation.Skeleton.Joints[joint].Name, out HumanBodyBones bone))
+                if (!GetMecanimBone(tposeAnimation.Skeleton.Joints[joint].name, out HumanBodyBones bone))
                 {
-                    Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " + tposeAnimation.Skeleton.Joints[joint].Name);
+                    Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " + tposeAnimation.Skeleton.Joints[joint].name);
                 }
                 float3 worldForward = hipsWorldForwardProjected;
                 if (HumanBodyBonesExtensions.IsLeftArmBone(bone))

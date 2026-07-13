@@ -19,42 +19,42 @@ namespace MotionMatching
             MotionMatchingController controller = (MotionMatchingController)target;
 
             if (controller == null) { return; }
-            if (controller.MMData == null) { return; }
+            if (controller.mmData == null) { return; }
 
             // Feature Weights
-            int featuresCount = controller.MMData.TrajectoryFeatures.Count + controller.MMData.PoseFeatures.Count + controller.MMData.EnvironmentFeatures.Count;
-            if (controller.FeatureWeights.Length != featuresCount)
+            int featuresCount = controller.mmData.TrajectoryFeatures.Count + controller.mmData.PoseFeatures.Count + controller.mmData.EnvironmentFeatures.Count;
+            if (controller.featureWeights.Length != featuresCount)
             {
                 float[] newWeights = new float[featuresCount];
                 for (int i = 0; i < newWeights.Length; ++i) newWeights[i] = 1.0f;
-                for (int i = 0; i < Mathf.Min(controller.FeatureWeights.Length, newWeights.Length); i++) newWeights[i] = controller.FeatureWeights[i];
-                controller.FeatureWeights = newWeights;
+                for (int i = 0; i < Mathf.Min(controller.featureWeights.Length, newWeights.Length); i++) newWeights[i] = controller.featureWeights[i];
+                controller.featureWeights = newWeights;
             }
             ToggleFeatureWeights = EditorGUILayout.BeginFoldoutHeaderGroup(ToggleFeatureWeights, "Feature Weights");
             if (ToggleFeatureWeights)
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.MMData.TrajectoryFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.TrajectoryFeatures.Count; ++i)
                 {
-                    string name = controller.MMData.TrajectoryFeatures[i].Name;
-                    controller.FeatureWeights[i] = EditorGUILayout.FloatField(name, controller.FeatureWeights[i]);
+                    string name = controller.mmData.TrajectoryFeatures[i].Name;
+                    controller.featureWeights[i] = EditorGUILayout.FloatField(name, controller.featureWeights[i]);
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.MMData.PoseFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.PoseFeatures.Count; ++i)
                 {
-                    string name = controller.MMData.PoseFeatures[i].Name;
-                    int index = controller.MMData.TrajectoryFeatures.Count + i;
-                    controller.FeatureWeights[index] = EditorGUILayout.FloatField(name, controller.FeatureWeights[index]);
+                    string name = controller.mmData.PoseFeatures[i].Name;
+                    int index = controller.mmData.TrajectoryFeatures.Count + i;
+                    controller.featureWeights[index] = EditorGUILayout.FloatField(name, controller.featureWeights[index]);
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.MMData.EnvironmentFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.EnvironmentFeatures.Count; ++i)
                 {
-                    string name = controller.MMData.EnvironmentFeatures[i].Name;
-                    int index = controller.MMData.TrajectoryFeatures.Count + controller.MMData.PoseFeatures.Count + i;
-                    controller.FeatureWeights[index] = EditorGUILayout.FloatField(name, controller.FeatureWeights[index]);
+                    string name = controller.mmData.EnvironmentFeatures[i].Name;
+                    int index = controller.mmData.TrajectoryFeatures.Count + controller.mmData.PoseFeatures.Count + i;
+                    controller.featureWeights[index] = EditorGUILayout.FloatField(name, controller.featureWeights[index]);
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUI.indentLevel--;

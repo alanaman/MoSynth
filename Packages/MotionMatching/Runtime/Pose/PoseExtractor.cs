@@ -116,7 +116,7 @@ namespace MotionMatching
             // Save Hips world position and rotation before smoothing Simulation Bone (Root)
             float3[] hipsWorldPositions = new float3[poses.Length];
             quaternion[] hipsWorldRotations = new quaternion[poses.Length];
-            if (!poseSet.Skeleton.Find(HumanBodyBones.Hips, out Joint hipsJoint))
+            if (!poseSet.Skeleton.TryFind(HumanBodyBones.Hips, out Joint hipsJoint))
             {
                 Debug.LogError("Hips Joint not found");
             }
@@ -177,16 +177,16 @@ namespace MotionMatching
 
             int nJoints = bvhAnimation.Skeleton.Joints.Count;
             int outNJoint = nJoints + 1; // +1 for SimulationBone
-            if (!bvhAnimation.Skeleton.Find(HumanBodyBones.LeftToes, out Joint leftToesJoint))
+            if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.LeftToes, out Joint leftToesJoint))
             {
                 Debug.LogError("LeftToes not found in BVHAnimation");
             }
-            int leftToesIndex = leftToesJoint.Index + 1; // +1 for SimulationBone
-            if (!bvhAnimation.Skeleton.Find(HumanBodyBones.RightToes, out Joint rightToesJoint))
+            int leftToesIndex = leftToesJoint.index + 1; // +1 for SimulationBone
+            if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.RightToes, out Joint rightToesJoint))
             {
                 Debug.LogError("RightToes not found in BVHAnimation");
             }
-            int rightToesIndex = rightToesJoint.Index + 1; // +1 for SimulationBone
+            int rightToesIndex = rightToesJoint.index + 1; // +1 for SimulationBone
 
             // Native Arrays used by Burst for Output
             NativeArray<float3> jointLocalPositions = new NativeArray<float3>(outNJoint, Allocator.TempJob);
@@ -196,7 +196,7 @@ namespace MotionMatching
 
             // Native Arrays used by Burst for Input
             NativeArray<float3> jointOffsets = new NativeArray<float3>(nJoints, Allocator.TempJob);
-            for (int i = 0; i < nJoints; i++) jointOffsets[i] = bvhAnimation.Skeleton.Joints[i].LocalOffset;
+            for (int i = 0; i < nJoints; i++) jointOffsets[i] = bvhAnimation.Skeleton.Joints[i].localOffset;
             NativeArray<quaternion> frameLocalRotations = new NativeArray<quaternion>(nJoints, Allocator.TempJob);
             for (int i = 0; i < nJoints; i++) frameLocalRotations[i] = frame.localRotations[i];
 
@@ -230,7 +230,7 @@ namespace MotionMatching
 
                 // Native Arrays used by Burst for Input
                 NativeArray<int> jointParents = new NativeArray<int>(outNJoint, Allocator.TempJob);
-                for (int i = 0; i < outNJoint; i++) jointParents[i] = poseSet.Skeleton.Joints[i].ParentIndex; // poseSet skeleton already includes SimulationBone
+                for (int i = 0; i < outNJoint; i++) jointParents[i] = poseSet.Skeleton.Joints[i].parentIndex; // poseSet skeleton already includes SimulationBone
                 NativeArray<float3> prevLocalPositions = new NativeArray<float3>(outNJoint, Allocator.TempJob);
                 for (int i = 0; i < outNJoint; i++) prevLocalPositions[i] = prevPos.JointLocalPositions[i];
                 NativeArray<quaternion> prevLocalRotations = new NativeArray<quaternion>(outNJoint, Allocator.TempJob);
@@ -304,7 +304,7 @@ namespace MotionMatching
             {
                 Joint joint = skeleton.Joints[j - 1];
                 int parentIndex = 0;
-                if (j > 1) parentIndex = joint.ParentIndex + 1; // +1 for SimulationBone
+                if (j > 1) parentIndex = joint.parentIndex + 1; // +1 for SimulationBone
                 float3 rotatedLocalOffset = math.mul(jointRotations[parentIndex], jointLocalPositions[j]);
                 jointPositions[j] = rotatedLocalOffset + jointPositions[parentIndex];
                 jointRotations[j] = math.mul(jointRotations[parentIndex], jointLocalRotations[j]);

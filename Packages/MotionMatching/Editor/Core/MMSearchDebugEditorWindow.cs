@@ -34,11 +34,11 @@ namespace MotionMatching
                 EditorGUILayout.HelpBox("Please select a MotionMatchingController.", MessageType.Info);
                 return;
             }
-            MotionMatchingData mmData = mmController.MMData;
+            MotionMatchingData mmData = mmController.mmData;
             FeatureSet featureSet = mmController.FeatureSet;
 
             GUI.enabled = false;
-            EditorGUILayout.IntField("Last Frame", mmController.LastMMSearchFrame);
+            EditorGUILayout.IntField("Last Frame", mmController.LastMmSearchFrame);
             GUI.enabled = true;
             int currentFrame = EditorGUILayout.IntField("Current Frame", mmController.CurrentFrame);
             if (currentFrame != mmController.CurrentFrame) mmController.SetCurrentFrame(currentFrame);

@@ -86,9 +86,9 @@ namespace MotionMatching
                     }
                     else
                     {
-                        PoseSet.Tag tag = poseSet.GetTag(Tags[g]);
-                        start = tag.GetStartRanges();
-                        end = tag.GetEndRanges();
+                        PoseSet.AnimationTag animationTag = poseSet.GetTag(Tags[g]);
+                        start = animationTag.GetStartRanges();
+                        end = animationTag.GetEndRanges();
                     }
                 }
                 else // at least an operation was performed

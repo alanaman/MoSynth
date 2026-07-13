@@ -85,16 +85,16 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (int i = 0; i < MotionMatching.MMData.TrajectoryFeatures.Count; ++i)
+            for (int i = 0; i < MotionMatching.mmData.TrajectoryFeatures.Count; ++i)
             {
-                if (MotionMatching.MMData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (MotionMatching.MMData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = MotionMatching.MMData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
-            TrajectoryRotPredictionFrames = MotionMatching.MMData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            TrajectoryPosPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
+            TrajectoryRotPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
             // TODO: generalize this... allow different number of prediction frames for different features
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
             for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)

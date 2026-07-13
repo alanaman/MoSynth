@@ -41,9 +41,9 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             // Joints
             Skeleton.Joint joint = _poseSet.Skeleton.Joints[j];
             Transform t = (new GameObject()).transform;
-            t.name = joint.Name;
-            t.SetParent(_skeletonTransforms[joint.ParentIndex], false);
-            t.localPosition = joint.LocalOffset;
+            t.name = joint.name;
+            t.SetParent(_skeletonTransforms[joint.parentIndex], false);
+            t.localPosition = joint.localOffset;
             _skeletonTransforms[j] = t;
         }
 
@@ -128,9 +128,9 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             if (trajectoryFeature.FeatureType == TrajectoryFeature.Type.Direction &&
                 !trajectoryFeature.SimulationBone)
             {
-                if (!_poseSet.Skeleton.Find(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
-                float3 dir = _skeletonTransforms[joint.Index].TransformDirection(motionMatchingData.GetLocalForward(joint.Index));
-                float3 jointPos = _skeletonTransforms[joint.Index].position;
+                if (!_poseSet.Skeleton.TryFind(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
+                float3 dir = _skeletonTransforms[joint.index].TransformDirection(motionMatchingData.GetLocalForward(joint.index));
+                float3 jointPos = _skeletonTransforms[joint.index].position;
                 GizmosExtensions.DrawArrow(jointPos, jointPos + dir * 0.5f, 0.1f, thickness: 3);
             }
         }
@@ -138,10 +138,10 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         // Contacts
         if (debugContacts)
         {
-            if (!_poseSet.Skeleton.Find(HumanBodyBones.LeftToes, out Skeleton.Joint leftToesJoint)) Debug.Assert(false, "Bone not found");
-            if (!_poseSet.Skeleton.Find(HumanBodyBones.RightToes, out Skeleton.Joint rightToesJoint)) Debug.Assert(false, "Bone not found");
-            int leftToesIndex = leftToesJoint.Index;
-            int rightToesIndex = rightToesJoint.Index;
+            if (!_poseSet.Skeleton.TryFind(HumanBodyBones.LeftToes, out Skeleton.Joint leftToesJoint)) Debug.Assert(false, "Bone not found");
+            if (!_poseSet.Skeleton.TryFind(HumanBodyBones.RightToes, out Skeleton.Joint rightToesJoint)) Debug.Assert(false, "Bone not found");
+            int leftToesIndex = leftToesJoint.index;
+            int rightToesIndex = rightToesJoint.index;
             Gizmos.color = Color.green;
             if (pose.LeftFootContact)
             {
@@ -219,8 +219,8 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                         value = math.mul(characterRot, value);
                         if (math.length(value) > 0.001f)
                         {
-                            skeleton.Find(poseFeature.Bone, out Skeleton.Joint joint);
-                            float3 jointPos = joints[joint.Index].position;
+                            skeleton.TryFind(poseFeature.Bone, out Skeleton.Joint joint);
+                            float3 jointPos = joints[joint.index].position;
                             GizmosExtensions.DrawArrow(jointPos, jointPos + value * 0.2f, 0.25f * math.length(value) * 0.2f, thickness: 4, useDepth: false);
                         }
                         break;
@@ -269,8 +269,8 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                     }
                     else
                     {
-                        if (!skeleton.Find(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
-                        jointPos = joints[joint.Index].position;
+                        if (!skeleton.TryFind(trajectoryFeature.Bone, out Skeleton.Joint joint)) Debug.Assert(false, "Bone not found");
+                        jointPos = joints[joint.index].position;
                     }
                     value = math.mul(characterRot, value);
                     //GizmosExtensions.DrawArrow(jointPos, jointPos + value, 0.1f, thickness: 3);

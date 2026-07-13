@@ -1,11 +1,12 @@
-using Unity.Collections;
+using MotionMatching.Editor;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Serialization;
 
-namespace MotionMatching.Editor
+namespace MotionMatching
 {
+/// <summary>
+/// To be added alongside a MotionMatchingController to draw debug information in the viewport.
+/// </summary>
 public class MotionMatchingControllerDrawer : MonoBehaviour
 {
     [Header("Debug")]
@@ -54,11 +55,11 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
         {
             // Find Main Position Trajectory
             MotionMatchingData.TrajectoryFeature feature = null;
-            for (int i = 0; i < mmc.MMData.TrajectoryFeatures.Count; i++)
+            for (int i = 0; i < mmc.mmData.TrajectoryFeatures.Count; i++)
             {
-                if (mmc.MMData.TrajectoryFeatures[i].IsMainPositionFeature)
+                if (mmc.mmData.TrajectoryFeatures[i].IsMainPositionFeature)
                 {
-                    feature = mmc.MMData.TrajectoryFeatures[i];
+                    feature = mmc.mmData.TrajectoryFeatures[i];
                 }
             }
 
@@ -74,7 +75,7 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
                     for (int i = 2; i < mmc.PoseSet.Skeleton.Joints.Count; i++)
                     {
                         float3 child = worldPositions[i];
-                        float3 parent = worldPositions[mmc.PoseSet.Skeleton.Joints[i].ParentIndex];
+                        float3 parent = worldPositions[mmc.PoseSet.Skeleton.Joints[i].parentIndex];
                         GizmosExtensions.DrawLine(parent, child, 3);
                     }
                 }
@@ -105,7 +106,7 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
         // Feature Set
         if (mmc.FeatureSet == null) return;
 
-        MotionMatchingDataVisualiser.DrawFeatureGizmos(mmc.FeatureSet, mmc.MMData, spheresRadius, currentFrame,
+        MotionMatchingDataVisualiser.DrawFeatureGizmos(mmc.FeatureSet, mmc.mmData, spheresRadius, currentFrame,
             characterOrigin, characterForward,
             mmc.SkeletonTransforms, mmc.PoseSet.Skeleton, Color.blue, debugPose, debugTrajectory,
             debugEnvironment);

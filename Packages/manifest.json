@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.jlpm.motionmatching": "https://github.com/JLPM22/MotionMatching.git?path=/com.jlpm.motionmatching",
+    "com.mackysoft.serializereference-extensions": "https://github.com/mackysoft/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
     "com.monitor1394.xcharts": "https://github.com/XCharts-Team/XCharts.git",
     "com.unity.ai.navigation": "2.0.12",
     "com.unity.barracuda": "3.0.2",

@@ -39,7 +39,7 @@ public class BvhVisualiser : MonoBehaviour
         _skeletonBoneTransforms = EnsureSkeletonHierarchy(bvhAnimation.Skeleton);
         for (int i = 0; i < _skeletonBoneTransforms.Length; i++)
         {
-            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.Joints[i].LocalOffset;
+            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.Joints[i].localOffset;
         }
     }
 
@@ -124,13 +124,13 @@ public class BvhVisualiser : MonoBehaviour
 
             // Resolve the parent transform first (recursion ensures parents exist before children)
             var parentTransform = this.transform; 
-            if (joint.ParentIndex >= 0)
+            if (joint.parentIndex >= 0)
             {
-                parentTransform = GetOrCreateBone(joint.ParentIndex);
+                parentTransform = GetOrCreateBone(joint.parentIndex);
             }
 
             // Check if the bone already exists as a direct child of the resolved parent
-            var existingBone = parentTransform.Find(joint.Name);
+            var existingBone = parentTransform.Find(joint.name);
 
             if (existingBone != null)
             {
@@ -140,7 +140,7 @@ public class BvhVisualiser : MonoBehaviour
             else
             {
                 // Bone is missing, create it
-                var newBone = new GameObject(joint.Name);
+                var newBone = new GameObject(joint.name);
                 
                 // SetParent with worldPositionStays = false to preserve local transform identity
                 newBone.transform.SetParent(parentTransform, false);

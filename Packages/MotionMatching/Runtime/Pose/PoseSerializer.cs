@@ -32,11 +32,11 @@ namespace MotionMatching
                     // Write Joints
                     foreach (var joint in poseSet.Skeleton.Joints)
                     {
-                        writer.Write(joint.Name);
-                        writer.Write((uint)joint.Index);
-                        writer.Write((uint)joint.ParentIndex);
-                        WriteFloat3(writer, (float3)joint.LocalOffset);
-                        writer.Write((uint)joint.Type);
+                        writer.Write(joint.name);
+                        writer.Write((uint)joint.index);
+                        writer.Write((uint)joint.parentIndex);
+                        WriteFloat3(writer, (float3)joint.localOffset);
+                        writer.Write((uint)joint.type);
                     }
                 }
             }
@@ -74,12 +74,12 @@ namespace MotionMatching
                     // Serialize Tags
                     for (int i = 0; i < poseSet.NumberTags; ++i)
                     {
-                        PoseSet.Tag tag = poseSet.GetTag(i);
-                        writer.Write(tag.Name);
-                        writer.Write((uint)tag.NumberRanges);
-                        for (int r = 0; r < tag.NumberRanges; ++r)
+                        PoseSet.AnimationTag animationTag = poseSet.GetTag(i);
+                        writer.Write(animationTag.Name);
+                        writer.Write((uint)animationTag.NumberRanges);
+                        for (int r = 0; r < animationTag.NumberRanges; ++r)
                         {
-                            tag.GetRange(r, out int startRange, out int endRange);
+                            animationTag.GetRange(r, out int startRange, out int endRange);
                             writer.Write((uint)startRange);
                             writer.Write((uint)endRange);
                         }

@@ -10,6 +10,13 @@
         "com.unity.splines": "2.7.2"
       }
     },
+    "com.mackysoft.serializereference-extensions": {
+      "version": "https://github.com/mackysoft/Unity-SerializeReferenceExtensions.git?path=Assets/MackySoft/MackySoft.SerializeReferenceExtensions",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "5fadcb6564f0c6e988641e2e4a4aba4b6b1caafe"
+    },
     "com.monitor1394.xcharts": {
       "version": "https://github.com/XCharts-Team/XCharts.git",
       "depth": 0,

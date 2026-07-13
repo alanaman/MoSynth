@@ -27,10 +27,10 @@ namespace MotionMatching
             SkinnedMeshRenderer = GetComponentInChildren<MotionMatchingSkinnedMeshRenderer>();
             Debug.Assert(SkinnedMeshRenderer != null, "SimpleMMController requires an avatar with a MotionMatchingSkinnedMeshRenderer in a children GameObject");
 
-            MMController.MMData = MotionMatchingData;
-            MMController.CharacterController = CharacterController;
+            MMController.mmData = MotionMatchingData;
+            MMController.characterController = CharacterController;
             CharacterController.MotionMatching = MMController;
-            SkinnedMeshRenderer.MotionMatching = MMController;
+            SkinnedMeshRenderer.motionMatching = MMController;
         }
 
         /// <summary>

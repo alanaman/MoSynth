@@ -135,7 +135,7 @@ namespace MotionMatching
                 {
                     foreach (MotionMatchingData.JointToMecanim jtm in data.SkeletonToMecanim)
                     {
-                        if (!animation.Skeleton.Find(jtm.Name, out _))
+                        if (!animation.Skeleton.TryFind(jtm.Name, out _))
                         {
                             shouldResetSkeletonToMecanim = true;
                             break;
@@ -150,13 +150,13 @@ namespace MotionMatching
                         HumanBodyBones bone;
                         try
                         {
-                            bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), joint.Name);
+                            bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), joint.name);
                         }
                         catch (Exception)
                         {
                             bone = HumanBodyBones.LastBone;
                         }
-                        data.SkeletonToMecanim.Add(new MotionMatchingData.JointToMecanim(joint.Name, bone));
+                        data.SkeletonToMecanim.Add(new MotionMatchingData.JointToMecanim(joint.name, bone));
                     }
                 }
             }

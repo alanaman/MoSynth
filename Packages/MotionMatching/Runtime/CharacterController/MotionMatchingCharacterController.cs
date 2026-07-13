@@ -27,7 +27,7 @@ namespace MotionMatching
             // Update the character
             OnUpdate();
             // Update other components depending on the character controller
-            if (OnUpdated != null) OnUpdated.Invoke(Time.deltaTime);
+            OnUpdated?.Invoke(Time.deltaTime);
         }
 
         /// <summary>
@@ -36,7 +36,7 @@ namespace MotionMatching
         /// </summary>
         protected void NotifyInputChangedQuickly()
         {
-            if (OnInputChangedQuickly != null) OnInputChangedQuickly.Invoke();
+            OnInputChangedQuickly?.Invoke();
         }
 
         /// <summary>

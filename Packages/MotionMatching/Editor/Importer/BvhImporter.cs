@@ -43,8 +43,8 @@ namespace MotionMatching.Editor
             if (words[w++] != "ROOT") Debug.LogError("[BVHImporter] ROOT not found");
             Joint root = new Joint(words[w++], 0, -1, Vector3.zero);
             ReadLeftBracket(words, ref w);
-            root.LocalOffset = ReadOffset(words, ref w) * scale;
-            root.LocalOffset = Vector3.zero; // even if we read the offset, it is not used... it should always be 0...
+            root.localOffset = ReadOffset(words, ref w) * scale;
+            root.localOffset = Vector3.zero; // even if we read the offset, it is not used... it should always be 0...
             ReadChannels(channels, words, ref w, true);
             bvhSo.AddJoint(root);
             // JOINTS
@@ -61,7 +61,7 @@ namespace MotionMatching.Editor
                 parentIndexStack.Push(parent);
                 parent = jointIndex - 1;
                 brackets += 1;
-                joint.LocalOffset = ReadOffset(words, ref w) * scale;
+                joint.localOffset = ReadOffset(words, ref w) * scale;
                 ReadChannels(channels, words, ref w);
                 bvhSo.AddJoint(joint);
                 if (words[w] == "End")

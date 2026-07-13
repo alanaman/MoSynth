@@ -502,7 +502,7 @@ namespace MotionMatching
                     trajectoryFeature.FeatureType == TrajectoryFeature.Type.Direction)
                     && !trajectoryFeature.SimulationBone)
                 {
-                    if (!poseSet.Skeleton.Find(trajectoryFeature.Bone, out jointsTrajectory[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + trajectoryFeature.Bone);
+                    if (!poseSet.Skeleton.TryFind(trajectoryFeature.Bone, out jointsTrajectory[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + trajectoryFeature.Bone);
                 }
                 i += 1;
             }
@@ -510,7 +510,7 @@ namespace MotionMatching
             i = 0;
             foreach (var poseFeature in mmData.PoseFeatures)
             {
-                if (!poseSet.Skeleton.Find(poseFeature.Bone, out jointsPose[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + poseFeature.Bone);
+                if (!poseSet.Skeleton.TryFind(poseFeature.Bone, out jointsPose[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + poseFeature.Bone);
                 i += 1;
             }
             Joint[] jointsEnvironment = new Joint[NumberEnvironmentFeatures];
@@ -521,7 +521,7 @@ namespace MotionMatching
                     environmentFeature.FeatureType == TrajectoryFeature.Type.Direction)
                     && !environmentFeature.SimulationBone)
                 {
-                    if (!poseSet.Skeleton.Find(environmentFeature.Bone, out jointsEnvironment[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + environmentFeature.Bone);
+                    if (!poseSet.Skeleton.TryFind(environmentFeature.Bone, out jointsEnvironment[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + environmentFeature.Bone);
                 }
                 i += 1;
             }
@@ -750,7 +750,7 @@ namespace MotionMatching
             else
             {
                 worldRotation = GetWorldRotation(skeleton, pose, joint);
-                localForward = mmData.GetLocalForward(joint.Index);
+                localForward = mmData.GetLocalForward(joint.index);
             }
             float3 worldDirection = math.mul(worldRotation, localForward);
             futureLocalDirection = GetLocalDirectionFromCharacter(worldDirection, characterForward);
@@ -777,9 +777,9 @@ namespace MotionMatching
         public static float3 GetWorldPosition(Skeleton skeleton, PoseVector pose, Joint joint)
         {
             Matrix4x4 localToWorld = Matrix4x4.identity;
-            while (joint.Index != 0) // while not root
+            while (joint.index != 0) // while not root
             {
-                localToWorld = Matrix4x4.TRS(pose.JointLocalPositions[joint.Index], pose.JointLocalRotations[joint.Index], new float3(1.0f, 1.0f, 1.0f)) * localToWorld;
+                localToWorld = Matrix4x4.TRS(pose.JointLocalPositions[joint.index], pose.JointLocalRotations[joint.index], new float3(1.0f, 1.0f, 1.0f)) * localToWorld;
                 joint = skeleton.GetParent(joint);
             }
             localToWorld = Matrix4x4.TRS(pose.JointLocalPositions[0], pose.JointLocalRotations[0], new float3(1.0f, 1.0f, 1.0f)) * localToWorld; // root
@@ -792,9 +792,9 @@ namespace MotionMatching
         public static quaternion GetWorldRotation(Skeleton skeleton, PoseVector pose, Joint joint)
         {
             quaternion worldRot = quaternion.identity;
-            while (joint.Index != 0) // while not root
+            while (joint.index != 0) // while not root
             {
-                worldRot = math.mul(pose.JointLocalRotations[joint.Index], worldRot);
+                worldRot = math.mul(pose.JointLocalRotations[joint.index], worldRot);
                 joint = skeleton.GetParent(joint);
             }
             worldRot = math.mul(pose.JointLocalRotations[0], worldRot); // root
