@@ -1,45 +1,38 @@
+using System;
 using Unity.Collections;
 using UnityEngine;
 using Unity.Jobs;
 
 namespace MotionMatching
 {
+[Serializable]
 public class LinearMotionMatchingSearch : MotionMatchingSearch
 {
-    private NativeArray<int> SearchResult;
-    private bool IsDisposed = false;
 
-    public override void Initialize(MotionMatchingController controller)
+    public override void Initialize(FeatureSet featureSet, NativeArray<bool> tagMask, NativeArray<float> featuresWeights)
     {
+        FeatureSet = featureSet;
+        TagMask = tagMask;
+        FeatureWeights = featuresWeights;
+        
         SearchResult = new NativeArray<int>(2, Allocator.Persistent);
         SearchResult[0] = 0;
         SearchResult[1] = 0;
-
-        IsDisposed = false;
     }
 
-    public override void OnEnabled()
+    public override int FindBestFrame(NativeArray<float> queryFeature, float currentDistance)
     {
-    }
-
-    public override void OnDisabled()
-    {
-    }
-
-    public override int FindBestFrame(MotionMatchingController controller, float currentDistance)
-    {
-        if (IsDisposed) return controller.CurrentFrame;
-
         var job = new LinearMotionMatchingSearchBurst
         {
-            Valid = controller.FeatureSet.GetValid(),
-            TagMask = controller.TagMask,
-            Features = controller.FeatureSet.GetFeatures(),
-            QueryFeature = controller.QueryFeature,
-            FeatureWeights = controller.FeaturesWeightsNativeArray,
-            FeatureSize = controller.FeatureSet.FeatureSize,
-            FeatureStaticSize = controller.FeatureSet.FeatureStaticSize,
+            Valid = FeatureSet.GetValid(),
+            TagMask = TagMask,
+            Features = FeatureSet.GetFeatures(),
+            QueryFeature = queryFeature,
+            FeatureWeights = FeatureWeights,
+            FeatureSize = FeatureSet.FeatureSize,
+            FeatureStaticSize = FeatureSet.FeatureStaticSize,
             CurrentDistance = currentDistance,
+            
             BestIndex = SearchResult
         };
         job.Schedule().Complete();
@@ -47,14 +40,9 @@ public class LinearMotionMatchingSearch : MotionMatchingSearch
         return SearchResult[0];
     }
 
-    public override void OnSearchCompleted(MotionMatchingController controller)
-    {
-    }
-
     public override void Dispose()
     {
-        if (SearchResult != null && SearchResult.IsCreated) SearchResult.Dispose();
-        IsDisposed = true;
+        if (SearchResult.IsCreated) SearchResult.Dispose();
     }
 }
 }

@@ -25,7 +25,7 @@ namespace MotionMatching
 
             PROFILE.BEGIN_SAMPLE_PROFILING("Pose Serialize");
             PoseSerializer poseSerializer = new();
-            poseSerializer.Serialize(mmData.PoseSet, mmData.GetAssetPath(), mmData.name);
+            poseSerializer.Serialize(mmData.GetOrImportPoseSet(), mmData.GetAssetPath(), mmData.name);
             PROFILE.END_AND_PRINT_SAMPLE_PROFILING("Pose Serialize");
 
             mmData.ComputeJointsLocalForward();

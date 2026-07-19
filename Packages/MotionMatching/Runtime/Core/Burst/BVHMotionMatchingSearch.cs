@@ -69,7 +69,6 @@ namespace MotionMatching
         [ReadOnly] public NativeArray<float> FeatureWeights; // Size = FeatureSize
         [ReadOnly] public int FeatureSize;
         [ReadOnly] public int FeatureStaticSize;
-        [ReadOnly] public int PoseOffset;
         [ReadOnly] public float CurrentDistance;
         // BVH
         [ReadOnly] public NativeArray<float> LargeBoundingBoxMin; // Size = NumberBoundingBoxLarge x FeatureSize

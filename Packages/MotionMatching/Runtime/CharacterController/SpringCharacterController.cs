@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -321,8 +322,13 @@ public class SpringCharacterController : MotionMatchingCharacterController, IPla
         return transform.position;
     }
 
-    public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character,
-        NativeArray<float> output)
+    // TODO: the trajectory construction should be inside the animation system
+    // and not the character controller. Move it
+
+    public override void GetTrajectoryFeature(
+        TrajectoryFeature feature, int index,
+        Transform character, Span<float> output
+    )
     {
         if (feature.Name == "FutureSphere")
         {

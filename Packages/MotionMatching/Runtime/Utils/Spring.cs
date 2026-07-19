@@ -13,16 +13,16 @@ namespace MotionMatching
         /// </summary>
         public static float3 DampAdjustmentImplicit(float3 goal, float halfLife, float dt, float eps = 1e-5f)
         {
-            const float LN2f = 0.69314718056f;
-            return goal * (1.0f - FastNEgeExp((LN2f * dt) / (halfLife + eps)));
+            const float ln2 = 0.69314718056f;
+            return goal * (1.0f - FastNegativeExponent((ln2 * dt) / (halfLife + eps)));
         }
         /// <summary>
         /// Variation of the damper code that damps a rotation starting at the identity rotation toward the desired difference
         /// </summary>
         public static quaternion DampAdjustmentImplicit(quaternion goal, float halfLife, float dt, float eps = 1e-5f)
         {
-            const float LN2f = 0.69314718056f;
-            return math.slerp(quaternion.identity, goal, 1.0f - FastNEgeExp((LN2f * dt) / (halfLife + eps)));
+            const float ln2 = 0.69314718056f;
+            return math.slerp(quaternion.identity, goal, 1.0f - FastNegativeExponent((ln2 * dt) / (halfLife + eps)));
         }
         /// <summary>
         /// Given a position, velocity, desired velocity and acceleration, returns the new
@@ -34,7 +34,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float2 j0 = velocity - velocityGoal;
             float2 j1 = acceleration + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             pos = eyedt * (((-j1) / (y * y)) + ((-j0 - j1 * deltaTime) / y)) +
                   (j1 / (y * y)) + j0 / y + velocityGoal * deltaTime + pos;
@@ -51,7 +51,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float3 j0 = velocity - velocityGoal;
             float3 j1 = acceleration + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             pos = eyedt * (((-j1) / (y * y)) + ((-j0 - j1 * deltaTime) / y)) +
                   (j1 / (y * y)) + j0 / y + velocityGoal * deltaTime + pos;
@@ -68,7 +68,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float3 j0 = MathExtensions.QuaternionToScaledAngleAxis(MathExtensions.Abs(math.mul(rot, math.inverse(rotGoal))));
             float3 j1 = angularVel + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             rot = math.mul(MathExtensions.QuaternionFromScaledAngleAxis(eyedt * (j0 + j1 * deltaTime)), rotGoal);
             angularVel = eyedt * (angularVel - j1 * y * deltaTime);
@@ -82,7 +82,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float3 j0 = pos - posGoal;
             float3 j1 = velocity + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             pos = eyedt * (j0 + j1 * deltaTime) + posGoal;
             velocity = eyedt * (velocity - j1 * y * deltaTime);
@@ -96,7 +96,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float2 j0 = pos - posGoal;
             float2 j1 = velocity + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             pos = eyedt * (j0 + j1 * deltaTime) + posGoal;
             velocity = eyedt * (velocity - j1 * y * deltaTime);
@@ -110,7 +110,7 @@ namespace MotionMatching
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float3 j0 = MathExtensions.QuaternionToScaledAngleAxis(rot);
             float3 j1 = angularVel + j0 * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             rot = MathExtensions.QuaternionFromScaledAngleAxis(eyedt * (j0 + j1 * deltaTime));
             angularVel = eyedt * (angularVel - j1 * y * deltaTime);
@@ -122,7 +122,7 @@ namespace MotionMatching
         {
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float3 j1 = velocity + pos * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             pos = eyedt * (pos + j1 * deltaTime);
             velocity = eyedt * (velocity - j1 * y * deltaTime);
@@ -134,7 +134,7 @@ namespace MotionMatching
         {
             float y = HalfLifeToDamping(halfLife) / 2.0f; // this could be precomputed
             float j1 = velocity + value * y;
-            float eyedt = FastNEgeExp(y * deltaTime); // this could be precomputed if several agents use it the same frame
+            float eyedt = FastNegativeExponent(y * deltaTime); // this could be precomputed if several agents use it the same frame
 
             value = eyedt * (value + j1 * deltaTime);
             velocity = eyedt * (velocity - j1 * y * deltaTime);
@@ -143,11 +143,11 @@ namespace MotionMatching
 
         private static float HalfLifeToDamping(float halfLife, float eps = 1e-5f)
         {
-            const float LN2f = 0.69314718056f;
-            return (4.0f * LN2f) / (halfLife + eps);
+            const float ln2 = 0.69314718056f;
+            return (4.0f * ln2) / (halfLife + eps);
         }
 
-        private static float FastNEgeExp(float x)
+        private static float FastNegativeExponent(float x)
         {
             return 1.0f / (1.0f + x + 0.48f * x * x + 0.235f * x * x * x);
         }

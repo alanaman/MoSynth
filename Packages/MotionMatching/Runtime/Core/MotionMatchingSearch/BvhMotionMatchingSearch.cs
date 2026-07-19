@@ -1,75 +1,63 @@
+using System;
 using Unity.Collections;
 using Unity.Jobs;
 
 namespace MotionMatching
 {
+[Serializable]
 public class BvhMotionMatchingSearch : MotionMatchingSearch
 {
-    private NativeArray<int> _searchResult;
-    private bool _isDisposed = false;
-
     // Acceleration Structure
     private NativeArray<float> _largeBoundingBoxMin;
     private NativeArray<float> _largeBoundingBoxMax;
     private NativeArray<float> _smallBoundingBoxMin;
     private NativeArray<float> _smallBoundingBoxMax;
 
-    public override void Initialize(MotionMatchingController controller)
+    public override void Initialize(
+        FeatureSet featureSet, NativeArray<bool> tagMask,
+        NativeArray<float> featuresWeights
+        )
     {
-        controller.FeatureSet.GetBVHBuffers(out _largeBoundingBoxMin,
+        FeatureSet = featureSet;
+        TagMask = tagMask;
+        FeatureWeights = featuresWeights;
+        featureSet.GetBVHBuffers(out _largeBoundingBoxMin,
             out _largeBoundingBoxMax,
             out _smallBoundingBoxMin,
             out _smallBoundingBoxMax);
-
-        _searchResult = new NativeArray<int>(2, Allocator.Persistent);
-        _searchResult[0] = 0;
-        _searchResult[1] = 0;
-
-        _isDisposed = false;
+        SearchResult = new NativeArray<int>(2, Allocator.Persistent);
+        SearchResult[0] = 0;
+        SearchResult[1] = 0;
     }
 
-    public override int FindBestFrame(MotionMatchingController controller, float currentDistance)
+    public override int FindBestFrame(NativeArray<float> queryFeature, float currentDistance)
     {
-        if (_isDisposed) return controller.CurrentFrame;
-
         var job = new BVHMotionMatchingSearchBurst
         {
-            Valid = controller.FeatureSet.GetValid(),
-            TagMask = controller.TagMask,
-            Features = controller.FeatureSet.GetFeatures(),
-            QueryFeature = controller.QueryFeature,
-            FeatureWeights = controller.FeaturesWeightsNativeArray,
-            FeatureSize = controller.FeatureSet.FeatureSize,
-            FeatureStaticSize = controller.FeatureSet.FeatureStaticSize,
-            PoseOffset = controller.FeatureSet.PoseOffset,
+            Valid = FeatureSet.GetValid(),
+            TagMask = TagMask,
+            Features = FeatureSet.GetFeatures(),
+            QueryFeature = queryFeature,
+            FeatureWeights = FeatureWeights,
+            FeatureSize = FeatureSet.FeatureSize,
+            FeatureStaticSize = FeatureSet.FeatureStaticSize,
             CurrentDistance = currentDistance,
+            
             LargeBoundingBoxMin = _largeBoundingBoxMin,
             LargeBoundingBoxMax = _largeBoundingBoxMax,
             SmallBoundingBoxMin = _smallBoundingBoxMin,
             SmallBoundingBoxMax = _smallBoundingBoxMax,
-            BestIndex = _searchResult
+            
+            BestIndex = SearchResult
         };
         job.Schedule().Complete();
 
-        return _searchResult[0];
-    }
-
-    public override void OnSearchCompleted(MotionMatchingController controller)
-    {
-    }
-
-    public override void OnEnabled()
-    {
-    }
-
-    public override void OnDisabled()
-    {
+        return SearchResult[0];
     }
 
     public override void Dispose()
     {
-        if (_searchResult.IsCreated) _searchResult.Dispose();
-        _isDisposed = true;
+        if (SearchResult.IsCreated) SearchResult.Dispose();
     }
 }
 }

@@ -7,23 +7,23 @@ namespace MotionMatching
 {
     /// <summary>
     /// Inertialization is a type of blending between two poses.
-    /// Typically to blend between two poses, we use crossfade. Both poses are stored queried during the transition
+    ///
+    /// Typically to blend between two poses, we use crossfade.
+    /// Both poses are stored queried during the transition,
     /// and they are blended during the transition.
-    /// The basic idea of inertialization is when we change the pose we change it for real but compute offsets that
-    /// takes us from the new/target pose to the source one. Then, we decay this offset using a polynomial function or springs.
+    ///
+    /// The basic idea of inertialization is when we change the pose,
+    /// we change a target pose instantly but compute offsets that
+    /// take us from the current pose to the target one.
+    /// Then, we decay this offset using a polynomial function or springs.
     /// Decaying the offset will progressively take us to the target pose.
     /// </summary>
     public class Inertialization
     {
         public quaternion[] InertializedRotations;
-        public float3[] InertializedAngularVelocities;
+        private float3[] InertializedAngularVelocities;
         public float3 InertializedHips;
         public float3 InertializedHipsVelocity;
-        // Contacts
-        public float3 InertializedLeftContact;
-        public float3 InertializedLeftContactVelocity;
-        public float3 InertializedRightContact;
-        public float3 InertializedRightContactVelocity;
 
         private quaternion[] OffsetRotations;
         private float3[] OffsetAngularVelocities;
@@ -44,6 +44,69 @@ namespace MotionMatching
             for (int i = 0; i < numJoints; i++) OffsetRotations[i] = quaternion.identity; // init to a valid quaternion
             OffsetAngularVelocities = new float3[numJoints];
         }
+        
+        // TODO: this should be the currently displayed pose
+        // (or should it just be an internal inertialization state?)
+        private PoseVector _currentPose;
+        private float _halfLife;
+        private float _deltaTime;
+
+        // TODO: init with current pose
+        public Inertialization(PoseVector currentPose)
+        {
+            _currentPose = currentPose;
+        }
+
+        public PoseVector Apply(PoseVector targetPose)
+        {
+            var outPose = _currentPose;
+            // Update the inertialization for joint local rotations
+            for (int i = 1; i < targetPose.JointLocalRotations.Length; i++)
+            {
+                var targetRot = targetPose.JointLocalRotations[i];
+                var targetAngularVelocity = targetPose.JointLocalAngularVelocities[i];
+                var currentRot = _currentPose.JointLocalRotations[i];
+                var currentAngularVelocity = _currentPose.JointLocalAngularVelocities[i];
+                (outPose.JointLocalRotations[i], outPose.JointLocalAngularVelocities[i]) = InertializeJointUpdate(
+                    currentRot, currentAngularVelocity,
+                    targetRot, targetAngularVelocity);
+            }
+            // Update the inertialization for hips
+            var targetHipPos = targetPose.JointLocalPositions[1];
+            var targetHipVel = targetPose.JointLocalVelocities[1];
+            var currentHipPos = _currentPose.JointLocalPositions[1];
+            var currentHipVel = _currentPose.JointLocalVelocities[1];
+            (outPose.JointLocalPositions[1], outPose.JointLocalVelocities[1]) = InertializeJointUpdate(
+                currentHipPos, currentHipVel,
+                targetHipPos, targetHipVel
+            );
+            return outPose;
+        }
+
+        (quaternion newRot, float3 newAngularVel) InertializeJointUpdate(
+            quaternion currentRot, float3 currentAngularVel,
+            quaternion targetRot, float3 targetAngularVel
+        )
+        {
+            var offsetRot = math.mul(targetRot, math.inverse(currentRot));
+            var offsetAngularVel = targetAngularVel - currentAngularVel;
+            Spring.DecaySpringDamperImplicit(ref offsetRot, ref offsetAngularVel, _halfLife, _deltaTime);
+            var newRot = math.mul(currentRot, offsetRot);
+            var newAngularVel = targetAngularVel + offsetAngularVel;
+            return (newRot, newAngularVel);
+        }
+        
+        (float3 newPos, float3 newVel) InertializeJointUpdate(float3 currentPos, float3 currentVel,
+            float3 targetPos, float3 targetVel)
+        {
+            var offsetPos = targetPos - currentPos;
+            var offsetVel = targetVel - currentVel;
+            Spring.DecaySpringDamperImplicit(ref offsetPos, ref offsetVel, _halfLife, _deltaTime);
+            var newPos = targetPos + offsetPos;
+            var newVel = targetVel + offsetVel;
+            return (newPos, newVel);
+        }
+
 
         /// <summary>
         /// It takes as input the current state of the source pose and the target pose.
@@ -95,6 +158,21 @@ namespace MotionMatching
                                        targetRightContact, targetRightContactVelocity,
                                        ref OffsetRightContact, ref OffsetRightContactVelocity);
         }
+        public void UpdateLeftContact(float3 targetPos, float3 targetVelocity, float halfLife, float deltaTime, out float3 newPos, out float3 newVel)
+        {
+            InertializeJointUpdate(targetPos, targetVelocity,
+                halfLife, deltaTime,
+                ref OffsetLeftContact, ref OffsetLeftContactVelocity,
+                out newPos, out newVel);
+        }
+    
+        public void UpdateRightContact(float3 targetPos, float3 targetVelocity, float halfLife, float deltaTime, out float3 newPos, out float3 newVel)
+        {
+            InertializeJointUpdate(targetPos, targetVelocity,
+                halfLife, deltaTime,
+                ref OffsetRightContact, ref OffsetRightContactVelocity,
+                out newPos, out newVel);
+        }
 
         /// <summary>
         /// Updates the inertialization decaying the offset from the source pose (specified in PoseTransition(...))
@@ -121,22 +199,23 @@ namespace MotionMatching
                                    out InertializedHips, out InertializedHipsVelocity);
         }
 
-        /// <summary>
-        /// Updates the inertialization decaying the offset from the source contact (specified in ContactTransition(...))
-        /// to the target contact.
-        /// </summary>
-        public void UpdateContact(float3 leftTargetPos, float3 leftTargetVelocity, float3 rightTargetPos, float3 rightTargetVelocity, float halfLife, float deltaTime)
-        {
-            // Update the inertialization for contacts
-            InertializeJointUpdate(leftTargetPos, leftTargetVelocity,
-                                   halfLife, deltaTime,
-                                   ref OffsetLeftContact, ref OffsetLeftContactVelocity,
-                                   out InertializedLeftContact, out InertializedLeftContactVelocity);
-            InertializeJointUpdate(rightTargetPos, rightTargetVelocity,
-                                   halfLife, deltaTime,
-                                   ref OffsetRightContact, ref OffsetRightContactVelocity,
-                                   out InertializedRightContact, out InertializedRightContactVelocity);
-        }
+        // /// <summary>
+        // /// Updates the inertialization decaying the offset from the source contact (specified in ContactTransition(...))
+        // /// to the target contact.
+        // /// </summary>
+        // public void UpdateContact(float3 leftTargetPos, float3 leftTargetVelocity, float3 rightTargetPos, float3 rightTargetVelocity, float halfLife, float deltaTime)
+        // {
+        //     // Update the inertialization for contacts
+        //     InertializeJointUpdate(leftTargetPos, leftTargetVelocity,
+        //                            halfLife, deltaTime,
+        //                            ref OffsetLeftContact, ref OffsetLeftContactVelocity,
+        //                            out InertializedLeftContact, out InertializedLeftContactVelocity);
+        //     InertializeJointUpdate(rightTargetPos, rightTargetVelocity,
+        //                            halfLife, deltaTime,
+        //                            ref OffsetRightContact, ref OffsetRightContactVelocity,
+        //                            out InertializedRightContact, out InertializedRightContactVelocity);
+        // }
+        
 
         /// <summary>
         /// Compute the offsets from the source pose to the target pose.
@@ -153,12 +232,12 @@ namespace MotionMatching
         /// Compute the offsets from the source pose to the target pose.
         /// Offsets are in/out since we may start a inertialization in the middle of another inertialization.
         /// </summary>
-        public static void InertializeJointTransition(float3 source, float3 sourceVel,
-                                                      float3 target, float3 targetVel,
+        public static void InertializeJointTransition(float3 currentPos, float3 currentVel,
+                                                      float3 targetPos, float3 targetVel,
                                                       ref float3 offset, ref float3 offsetVel)
         {
-            offset = (source + offset) - target;
-            offsetVel = (sourceVel + offsetVel) - targetVel;
+            offset = (currentPos + offset) - targetPos;
+            offsetVel = (currentVel + offsetVel) - targetVel;
         }
         /// <summary>
         /// Compute the offsets from the source pose to the target pose.

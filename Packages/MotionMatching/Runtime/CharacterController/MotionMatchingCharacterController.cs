@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace MotionMatching
 {
@@ -15,7 +16,7 @@ namespace MotionMatching
         //       by the current controller (eg. simulation bone pos + dir, or HMD + L/R controllers pos + dir)
 
         public event Action<float> OnUpdated;
-        public event Action OnInputChangedQuickly;
+        public UnityAction OnInputChangedQuickly;
 
         public MotionMatchingController MotionMatching; // MotionMatchingController's transform is the SimulationBone of the character
 
@@ -40,7 +41,7 @@ namespace MotionMatching
         }
 
         /// <summary>
-        /// Use this intead of Unity's Update() method.
+        /// Use this instead of Unity's Update() method.
         /// </summary>
         protected abstract void OnUpdate();
 
@@ -68,12 +69,19 @@ namespace MotionMatching
         ///       then, since the projected position is 2D (2 floats), thus, output[0] and output[1] should be filled with the X and Z coordinates.
         ///       e.g., when index==1, it should return the position of the character at frame 40.
         /// </summary>
-        public abstract void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, NativeArray<float> output);
+        public abstract void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span);
+
+
+        public virtual float[] GetTrajectoryFeature(TrajectoryFeature feature)
+        {
+            throw new NotImplementedException();
+            return null;
+        }
 
         /// <summary>
         /// Get the prediction in character space of a environment feature.
         /// Similarly to GetTrajectoryFeature, the output should be filled with the predicted values of the feature.
         /// </summary>
-        public virtual void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, NativeArray<float> output) { }
+        public virtual void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> output) { }
     }
 }

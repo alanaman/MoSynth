@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using System.IO;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
@@ -24,18 +25,28 @@ namespace MotionMatching
         //public bool SmoothSimulationBone; // Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter
         public float ContactVelocityThreshold = 0.15f; // Minimum velocity of the foot to be considered in movement and not in contact with the ground
         public List<JointToMecanim> SkeletonToMecanim = new();
+        
+        // TODO: these should prolly be inside FeatureSet
         public List<TrajectoryFeature> TrajectoryFeatures = new();
         public List<PoseFeature> PoseFeatures = new();
         public List<TrajectoryFeature> EnvironmentFeatures = new(); // Features used for dynamic computations and not used during the standard distance check in the Motion Matching search
 
-        public PoseSet PoseSet { get; private set; }
-        public FeatureSet FeatureSet { get; private set; }
+        private PoseSet _poseSet;
+
+        public FeatureSet FeatureSet
+        {
+            get => _featureSet;
+            private set => _featureSet = value;
+        }
+
         private int PoseSetUserCount = 0;
         private int FeatureSetUserCount = 0;
 
         // Information extracted form T-Pose
-        [SerializeField] private float3[] JointsLocalForward; // Local forward vector of each joint 
-        public bool JointsLocalForwardError { get { return JointsLocalForward == null; } }
+        [FormerlySerializedAs("JointsLocalForward")] 
+        [SerializeField] private float3[] jointsLocalForward; // Local forward vector of each joint 
+        private FeatureSet _featureSet;
+        public bool JointsLocalForwardError => jointsLocalForward == null;
 
         private void ImportAnimations()
         {
@@ -51,7 +62,7 @@ namespace MotionMatching
 
         public PoseSet GetOrImportPoseSet()
         {
-            if (PoseSet == null)
+            if (_poseSet == null)
             {
                 PROFILE.BEGIN_SAMPLE_PROFILING("Pose Import");
                 PoseSerializer serializer = new PoseSerializer();
@@ -62,37 +73,37 @@ namespace MotionMatching
 #if UNITY_EDITOR
                     PROFILE.BEGIN_SAMPLE_PROFILING("Pose Serialize");
                     PoseSerializer poseSerializer = new PoseSerializer();
-                    poseSerializer.Serialize(PoseSet, GetAssetPath(), this.name);
+                    poseSerializer.Serialize(_poseSet, GetAssetPath(), this.name);
                     PROFILE.END_AND_PRINT_SAMPLE_PROFILING("Pose Serialize");
 #endif
                 }
                 else
                 {
-                    PoseSet = poseSet;
+                    _poseSet = poseSet;
                 }
                 PROFILE.END_AND_PRINT_SAMPLE_PROFILING("Pose Import");
             }
             PoseSetUserCount += 1;
-            return PoseSet;
+            return _poseSet;
         }
 
         public void ImportPoseSet()
         {
             ImportAnimations();
-            PoseSet = new PoseSet(this);
-            PoseSet.SetSkeletonFromBvh(AnimationDatas[0].GetAnimation().Skeleton);
+            _poseSet = new PoseSet(this);
+            _poseSet.SetSkeletonFromBvh(AnimationDatas[0].GetAnimation().Skeleton);
             for (int i = 0; i < AnimationDatas.Count; i++)
             {
                 // Extract poses
                 BvhAnimation animation = AnimationDatas[i].GetAnimation();
                 PoseExtractor poseExtractor = new PoseExtractor();
-                if (!poseExtractor.Extract(AnimationDatas[i], PoseSet, this))
+                if (!poseExtractor.Extract(AnimationDatas[i], _poseSet, this))
                 {
                     Debug.LogWarning("[FeatureDebug] Failed to extract poseSet from AnimationDat. Animation Index: " + i);
                 }
             }
-            PoseSet.ConvertTagsToNativeArrays();
-            Debug.Log("Number of poses: " + PoseSet.NumberPoses);
+            _poseSet.ConvertTagsToNativeArrays();
+            Debug.Log("Number of poses: " + _poseSet.NumberPoses);
         }
 
         public FeatureSet GetOrImportFeatureSet()
@@ -124,40 +135,40 @@ namespace MotionMatching
 
         public void ImportFeatureSet()
         {
-            FeatureSet = new FeatureSet(this, PoseSet.NumberPoses);
-            FeatureSet.Extract(PoseSet, this);
+            FeatureSet = new FeatureSet(this, _poseSet.NumberPoses);
+            FeatureSet.Extract(_poseSet, this);
             FeatureSet.NormalizeFeatures();
         }
 
         public void ComputeJointsLocalForward()
         {
             // Import T-Pose
-            BvhAnimation tposeAnimation = AnimationDataTPose.GetAnimation();
-            JointsLocalForward = new float3[tposeAnimation.Skeleton.Joints.Count + 1]; // +1 for the simulation bone
+            BvhAnimation tPoseAnimation = AnimationDataTPose.GetAnimation();
+            jointsLocalForward = new float3[tPoseAnimation.Skeleton.Joints.Count + 1]; // +1 for the simulation bone
             // Find forward character vector by projecting hips forward vector onto the ground
-            Quaternion[] localRotations = tposeAnimation.Frames[0].localRotations;
+            Quaternion[] localRotations = tPoseAnimation.Frames[0].localRotations;
             float3 hipsWorldForwardProjected = math.mul(localRotations[0], HipsForwardLocalVector);
             hipsWorldForwardProjected.y = 0;
             hipsWorldForwardProjected = math.normalize(hipsWorldForwardProjected);
             // Find right character vector by rotating Y-Axis 90 degrees (Unity is Left-Handed and Y-Axis is Up)
             float3 hipsWorldRightProjected = math.mul(quaternion.AxisAngle(math.up(), math.radians(90.0f)), hipsWorldForwardProjected);
             // Compute JointsLocalForward based on the T-Pose
-            JointsLocalForward[0] = math.forward();
-            for (int i = 1; i < JointsLocalForward.Length; i++)
+            jointsLocalForward[0] = math.forward();
+            for (int i = 1; i < jointsLocalForward.Length; i++)
             {
                 quaternion worldRot = quaternion.identity;
                 int joint = i - 1;
                 while (joint != 0) // while not root
                 {
                     worldRot = math.mul(localRotations[joint], worldRot);
-                    joint = tposeAnimation.Skeleton.Joints[joint].parentIndex;
+                    joint = tPoseAnimation.Skeleton.Joints[joint].parentIndex;
                 }
                 worldRot = math.mul(localRotations[0], worldRot); // root
                 joint = i - 1;
                 // Change to Local
-                if (!GetMecanimBone(tposeAnimation.Skeleton.Joints[joint].name, out HumanBodyBones bone))
+                if (!GetMecanimBone(tPoseAnimation.Skeleton.Joints[joint].name, out HumanBodyBones bone))
                 {
-                    Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " + tposeAnimation.Skeleton.Joints[joint].name);
+                    Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " + tPoseAnimation.Skeleton.Joints[joint].name);
                 }
                 float3 worldForward = hipsWorldForwardProjected;
                 if (HumanBodyBonesExtensions.IsLeftArmBone(bone))
@@ -168,7 +179,7 @@ namespace MotionMatching
                 {
                     worldForward = hipsWorldRightProjected;
                 }
-                JointsLocalForward[i] = math.mul(math.inverse(worldRot), worldForward);
+                jointsLocalForward[i] = math.mul(math.inverse(worldRot), worldForward);
             }
         }
 
@@ -179,7 +190,7 @@ namespace MotionMatching
         public float3 GetLocalForward(int jointIndex)
         {
             Debug.Assert(!JointsLocalForwardError, "JointsLocalForward is not initialized");
-            return JointsLocalForward[jointIndex];
+            return jointsLocalForward[jointIndex];
         }
 
         public bool GetMecanimBone(string jointName, out HumanBodyBones bone)
@@ -300,10 +311,10 @@ namespace MotionMatching
         {
             PoseSetUserCount = math.max(0, PoseSetUserCount - 1);
             FeatureSetUserCount = math.max(0, FeatureSetUserCount - 1);
-            if (PoseSet != null && PoseSetUserCount == 0)
+            if (_poseSet != null && PoseSetUserCount == 0)
             {
-                PoseSet.Dispose();
-                PoseSet = null;
+                _poseSet.Dispose();
+                _poseSet = null;
             }
             if (FeatureSet != null && FeatureSetUserCount == 0)
             {
