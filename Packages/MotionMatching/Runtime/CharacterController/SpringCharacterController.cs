@@ -301,11 +301,9 @@ public class SpringCharacterController : MotionMatchingCharacterController, IPla
         float maxLength = RotMaximumAdjustmentRatio * math.length(MotionMatching.AngularVelocity) * Time.deltaTime;
         if (math.length(MathExtensions.QuaternionToScaledAngleAxis(adjustmentRotation)) > maxLength)
         {
-            adjustmentRotation = MathExtensions.QuaternionFromScaledAngleAxis(maxLength *
-                                                                              math.normalize(
-                                                                                  MathExtensions
-                                                                                      .QuaternionToScaledAngleAxis(
-                                                                                          adjustmentRotation)));
+            adjustmentRotation = MathExtensions.QuaternionFromScaledAngleAxis(
+                maxLength * math.normalize(
+                    MathExtensions.QuaternionToScaledAngleAxis(adjustmentRotation)));
         }
 
         // Rotate the simulation bone towards the simulation object

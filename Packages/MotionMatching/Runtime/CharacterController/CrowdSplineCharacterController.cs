@@ -230,7 +230,7 @@ namespace MotionMatching
             return rot;
         }
 
-        public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, NativeArray<float> output)
+        public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
         {
             if (!feature.SimulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
             switch (feature.FeatureType)
@@ -238,14 +238,14 @@ namespace MotionMatching
                 case TrajectoryFeature.Type.Position:
                     float2 world = GetWorldPredictedPos(index);
                     float3 local = character.InverseTransformPoint(new float3(world.x, 0.0f, world.y));
-                    output[0] = local.x;
-                    output[1] = local.z;
+                    span[0] = local.x;
+                    span[1] = local.z;
                     break;
                 case TrajectoryFeature.Type.Direction:
                     float2 worldDir = GetWorldPredictedDir(index);
                     float3 localDir = character.InverseTransformDirection(new Vector3(worldDir.x, 0.0f, worldDir.y));
-                    output[0] = localDir.x;
-                    output[1] = localDir.z;
+                    span[0] = localDir.x;
+                    span[1] = localDir.z;
                     break;
                 default:
                     Debug.Assert(false, "Unknown feature type: " + feature.FeatureType);
@@ -348,18 +348,18 @@ namespace MotionMatching
             return (ObstaclesCirclesArray, ObstaclesCirclesArrayCount, ObstaclesEllipsesArray, ObstaclesEllipsesArrayCount);
         }
 
-        public override void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, NativeArray<float> output)
+        public override void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
         {
             if (feature.Name == "FutureEllipse")
             {
-                output[0] = 0.0f;
-                output[1] = 0.0f;
-                output[2] = 0.0f;
+                span[0] = 0.0f;
+                span[1] = 0.0f;
+                span[2] = 0.0f;
             }
             else if (feature.Name == "FutureHeight")
             {
-                output[0] = 0.0f;
-                output[1] = 0.0f;
+                span[0] = 0.0f;
+                span[1] = 0.0f;
             }
             else
             {

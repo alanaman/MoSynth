@@ -18,7 +18,7 @@ namespace MotionMatching
     /// Then, we decay this offset using a polynomial function or springs.
     /// Decaying the offset will progressively take us to the target pose.
     /// </summary>
-    public class Inertialization
+    public class Inertialization : MoSynthStage
     {
         public quaternion[] InertializedRotations;
         private float3[] InertializedAngularVelocities;

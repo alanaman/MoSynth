@@ -71,9 +71,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     private void Awake()
     {
         _animator = GetComponent<Animator>();
-        _previousJointMask = new bool[_bodyJoints.Length];
-        _previousJointRotations = new quaternion[_bodyJoints.Length];
-        _offsetJointRotations = new quaternion[_bodyJoints.Length];
+        _previousJointMask = new bool[BodyJoints.Length];
+        _previousJointRotations = new quaternion[BodyJoints.Length];
+        _offsetJointRotations = new quaternion[BodyJoints.Length];
     }
 
     private void OnEnable()
@@ -101,18 +101,18 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     private void InitRetargeting()
     {
         MotionMatchingData mmData = motionMatching.mmData;
-        _sourceTPose = new Quaternion[_bodyJoints.Length];
-        _targetTPose = new Quaternion[_bodyJoints.Length];
-        _sourceBones = new Transform[_bodyJoints.Length];
-        _targetBones = new Transform[_bodyJoints.Length];
+        _sourceTPose = new Quaternion[BodyJoints.Length];
+        _targetTPose = new Quaternion[BodyJoints.Length];
+        _sourceBones = new Transform[BodyJoints.Length];
+        _targetBones = new Transform[BodyJoints.Length];
         // Animation containing in the first frame a T-Pose
         BvhAnimation tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
         // Store Rotations
         // Source
         Skeleton skeleton = tPoseAnimation.Skeleton;
-        for (int i = 0; i < _bodyJoints.Length; i++)
+        for (int i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.GetJointName(_bodyJoints[i], out string jointName) &&
+            if (mmData.GetJointName(BodyJoints[i], out string jointName) &&
                 skeleton.TryFind(jointName, out Skeleton.Joint joint))
             {
                 // Get the rotation for the first frame of the animation
@@ -125,9 +125,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         _animator.transform.rotation = Quaternion.identity;
         SkeletonBone[] targetSkeletonBones = _animator.avatar.humanDescription.skeleton;
         Quaternion targetHipsRot = Quaternion.identity;
-        for (int i = 0; i < _bodyJoints.Length; i++)
+        for (int i = 0; i < BodyJoints.Length; i++)
         {
-            Transform targetJoint = _animator.GetBoneTransform(_bodyJoints[i]);
+            Transform targetJoint = _animator.GetBoneTransform(BodyJoints[i]);
 
             // Use Array.FindIndex to find the index of the joint in the targetSkeletonBones array
             int targetJointIndex = Array.FindIndex(targetSkeletonBones, bone => bone.name == targetJoint.name);
@@ -155,7 +155,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
             // Store the world rotation
             _targetTPose[i] = cumulativeRotation;
-            if (_bodyJoints[i] == HumanBodyBones.Hips)
+            if (BodyJoints[i] == HumanBodyBones.Hips)
             {
                 targetHipsRot = cumulativeRotation;
             }
@@ -182,9 +182,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         }
 
         // Source
-        for (int i = 0; i < _bodyJoints.Length; i++)
+        for (int i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.GetJointName(_bodyJoints[i], out string jointName) &&
+            if (mmData.GetJointName(BodyJoints[i], out string jointName) &&
                 boneDict.TryGetValue(jointName, out Transform bone))
             {
                 _sourceBones[i] = bone;
@@ -192,9 +192,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         }
 
         // Target
-        for (int i = 0; i < _bodyJoints.Length; i++)
+        for (int i = 0; i < BodyJoints.Length; i++)
         {
-            _targetBones[i] = _animator.GetBoneTransform(_bodyJoints[i]);
+            _targetBones[i] = _animator.GetBoneTransform(BodyJoints[i]);
         }
     }
 
@@ -212,15 +212,15 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
 
         // Retargeting
-        for (int i = 0; i < _bodyJoints.Length; i++)
+        for (int i = 0; i < BodyJoints.Length; i++)
         {
             bool currentJointMask = false;
             // Unity's Animator Target Rotation
             Quaternion targetRotation = _targetBones[i].rotation;
             // Check Avatar Mask
             if (avatarMask == null ||
-                (_bodyJoints[i] == HumanBodyBones.Hips && rootRotationsMask) ||
-                (_bodyJoints[i] != HumanBodyBones.Hips && avatarMask != null && avatarMask.IsEnabled(_bodyJoints[i])))
+                (BodyJoints[i] == HumanBodyBones.Hips && rootRotationsMask) ||
+                (BodyJoints[i] != HumanBodyBones.Hips && avatarMask != null && avatarMask.IsEnabled(BodyJoints[i])))
             {
                 currentJointMask = true;
                 // Motion Matching Target Rotation
@@ -326,9 +326,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     {
         // Previous Joint Mask
         _previousJointMask[0] = rootRotationsMask;
-        for (int i = 1; i < _bodyJoints.Length; i++)
+        for (int i = 1; i < BodyJoints.Length; i++)
         {
-            _previousJointMask[i] = !avatarMask || avatarMask.IsEnabled(_bodyJoints[i]);
+            _previousJointMask[i] = !avatarMask || avatarMask.IsEnabled(BodyJoints[i]);
         }
 
         _previousHipsPositionMask = rootPositionsMask;
@@ -339,7 +339,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     }
 
     // Used for retargeting. First parent, then children
-    private readonly HumanBodyBones[] _bodyJoints =
+    public static readonly HumanBodyBones[] BodyJoints =
     {
         HumanBodyBones.Hips, // 0
 

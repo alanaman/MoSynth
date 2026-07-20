@@ -10,7 +10,7 @@ namespace MotionMatching
 [Serializable]
 public class MotionMatchingStage : MoSynthStage
 {
-    public MotionSynthesizer owner;
+    public MotionSynthesisComponent owner;
     
     public MotionMatchingCharacterController characterController;
     
@@ -86,13 +86,13 @@ public class MotionMatchingStage : MoSynthStage
     public bool IsLeftFootContact { get; private set; }
     public bool IsRightFootContact { get; private set; }
 
-    public override void Init(MotionSynthesizer motionSynthesizer)
+    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         _poseSet = mmData.GetOrImportPoseSet();
         var featureSet = mmData.GetOrImportFeatureSet();
 
         Assert.IsTrue(
-            motionSynthesizer.skeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
+            motionSynthesisComponent.skeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
         
@@ -158,7 +158,12 @@ public class MotionMatchingStage : MoSynthStage
         mmSearch.Initialize(featureSet, _tagMask, _featureWeights);
         
     }
-    
+
+    public override Skeleton GetSkeleton(in Skeleton inSkeleton)
+    {
+        return _poseSet.Skeleton;
+    }
+
     // // TODO: not here
     // PoseVector ConstructPoseFromSkeletonTransforms(in PoseVector prevPose, Transform[] skeletonTransforms)
     // {
@@ -197,7 +202,7 @@ public class MotionMatchingStage : MoSynthStage
     //     return pose;
     // }
 
-    public override PoseVector Apply(PoseVector inPose, float deltaTime)
+    public override void Apply(PoseVector pose, float deltaTime)
     {
         _searchTimeLeft -= deltaTime;
         if (_searchTimeLeft <= 0)
@@ -229,8 +234,7 @@ public class MotionMatchingStage : MoSynthStage
         _currentFrameTime += deltaTime / _poseSet.FrameTime;
         CurrentFrame = (int)math.floor(_currentFrameTime);
         
-        _poseSet.GetPose(CurrentFrame, out var outPose);
-        return outPose;
+        _poseSet.GetPose(CurrentFrame, out pose);
     }
 
     public static float SqrDistance(ReadOnlySpan<float> featureVectorA, ReadOnlySpan<float> featureVectorB, ReadOnlySpan<float> featureWeights)
