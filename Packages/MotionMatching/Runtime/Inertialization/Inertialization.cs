@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -18,11 +19,15 @@ namespace MotionMatching
     /// Then, we decay this offset using a polynomial function or springs.
     /// Decaying the offset will progressively take us to the target pose.
     /// </summary>
+    [Serializable]
     public class Inertialization : MoSynthStage
     {
+        [NonSerialized]
         public quaternion[] InertializedRotations;
         private float3[] InertializedAngularVelocities;
+        [NonSerialized]
         public float3 InertializedHips;
+        [NonSerialized]
         public float3 InertializedHipsVelocity;
 
         private quaternion[] OffsetRotations;
@@ -34,7 +39,14 @@ namespace MotionMatching
         private float3 OffsetLeftContactVelocity;
         private float3 OffsetRightContact;
         private float3 OffsetRightContactVelocity;
+        
+        MotionSynthesisComponent _owner;
 
+        public Inertialization()
+        {
+                
+        }
+        
         public Inertialization(Skeleton skeleton)
         {
             int numJoints = skeleton.Joints.Count;
@@ -49,59 +61,59 @@ namespace MotionMatching
         // (or should it just be an internal inertialization state?)
         private PoseVector _currentPose;
         private float _halfLife;
-        private float _deltaTime;
-
-        // TODO: init with current pose
-        public Inertialization(PoseVector currentPose)
+        
+        public override void Init(MotionSynthesisComponent motionSynthesisComponent)
         {
-            _currentPose = currentPose;
+            _owner = motionSynthesisComponent;
+             _currentPose = new PoseVector(motionSynthesisComponent.CurrentPose);
         }
 
-        public PoseVector Apply(PoseVector targetPose)
+        public override void Apply(PoseVector pose, float deltaTime)
         {
-            var outPose = _currentPose;
+            var currentPose = _owner.CurrentPose;
             // Update the inertialization for joint local rotations
-            for (int i = 1; i < targetPose.JointLocalRotations.Length; i++)
+            for (int i = 1; i < pose.JointLocalRotations.Length; i++)
             {
-                var targetRot = targetPose.JointLocalRotations[i];
-                var targetAngularVelocity = targetPose.JointLocalAngularVelocities[i];
-                var currentRot = _currentPose.JointLocalRotations[i];
-                var currentAngularVelocity = _currentPose.JointLocalAngularVelocities[i];
-                (outPose.JointLocalRotations[i], outPose.JointLocalAngularVelocities[i]) = InertializeJointUpdate(
+                var targetRot = pose.JointLocalRotations[i];
+                var targetAngularVelocity = pose.JointLocalAngularVelocities[i];
+                var currentRot = currentPose.JointLocalRotations[i];
+                var currentAngularVelocity = currentPose.JointLocalAngularVelocities[i];
+                (pose.JointLocalRotations[i], pose.JointLocalAngularVelocities[i]) = InertializeJointUpdate(
                     currentRot, currentAngularVelocity,
-                    targetRot, targetAngularVelocity);
+                    targetRot, targetAngularVelocity, deltaTime);
             }
             // Update the inertialization for hips
-            var targetHipPos = targetPose.JointLocalPositions[1];
-            var targetHipVel = targetPose.JointLocalVelocities[1];
-            var currentHipPos = _currentPose.JointLocalPositions[1];
-            var currentHipVel = _currentPose.JointLocalVelocities[1];
-            (outPose.JointLocalPositions[1], outPose.JointLocalVelocities[1]) = InertializeJointUpdate(
+            var targetHipPos = pose.JointLocalPositions[1];
+            var targetHipVel = pose.JointLocalVelocities[1];
+            var currentHipPos = currentPose.JointLocalPositions[1];
+            var currentHipVel = currentPose.JointLocalVelocities[1];
+            (pose.JointLocalPositions[1], pose.JointLocalVelocities[1]) = InertializeJointUpdate(
                 currentHipPos, currentHipVel,
-                targetHipPos, targetHipVel
+                targetHipPos, targetHipVel,
+                deltaTime
             );
-            return outPose;
         }
 
         (quaternion newRot, float3 newAngularVel) InertializeJointUpdate(
             quaternion currentRot, float3 currentAngularVel,
-            quaternion targetRot, float3 targetAngularVel
+            quaternion targetRot, float3 targetAngularVel,
+            float deltaTime
         )
         {
             var offsetRot = math.mul(targetRot, math.inverse(currentRot));
             var offsetAngularVel = targetAngularVel - currentAngularVel;
-            Spring.DecaySpringDamperImplicit(ref offsetRot, ref offsetAngularVel, _halfLife, _deltaTime);
+            Spring.DecaySpringDamperImplicit(ref offsetRot, ref offsetAngularVel, _halfLife, deltaTime);
             var newRot = math.mul(currentRot, offsetRot);
             var newAngularVel = targetAngularVel + offsetAngularVel;
             return (newRot, newAngularVel);
         }
         
         (float3 newPos, float3 newVel) InertializeJointUpdate(float3 currentPos, float3 currentVel,
-            float3 targetPos, float3 targetVel)
+            float3 targetPos, float3 targetVel, float deltaTime)
         {
             var offsetPos = targetPos - currentPos;
             var offsetVel = targetVel - currentVel;
-            Spring.DecaySpringDamperImplicit(ref offsetPos, ref offsetVel, _halfLife, _deltaTime);
+            Spring.DecaySpringDamperImplicit(ref offsetPos, ref offsetVel, _halfLife, deltaTime);
             var newPos = targetPos + offsetPos;
             var newVel = targetVel + offsetVel;
             return (newPos, newVel);

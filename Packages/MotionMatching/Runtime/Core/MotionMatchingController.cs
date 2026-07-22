@@ -366,11 +366,49 @@ public class MotionMatchingController : MonoBehaviour
     private void UpdateTransformAndSkeleton(int frameIndex)
     {
         
-        PoseSet.GetPose(frameIndex, out var targetPose);
+        PoseSet.GetPose(frameIndex, out var pose);
         if (inertialize)
         {
-            targetPose = _inertialization.Apply(targetPose);
+            _inertialization.Update(pose, inertializeHalfLife, Time.deltaTime);
         }
+        
+        // Simulation Bone
+        float3 previousPosition = SkeletonTransforms[0].position;
+        quaternion previousRotation = SkeletonTransforms[0].rotation;
+        // animation space to local space
+        float3 localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
+            pose.JointLocalPositions[0] - _animationSpaceOriginPos);
+        quaternion localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.JointLocalRotations[0]);
+        // local space to world space
+        SkeletonTransforms[0].SetPositionAndRotation(
+            math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos,
+            math.mul(_mmTransformOriginRot, localSpaceRot));
+        // update velocity and angular velocity
+        Velocity = ((float3)SkeletonTransforms[0].position - previousPosition) / Time.deltaTime;
+        AngularVelocity =
+            MathExtensions.AngularVelocity(previousRotation, SkeletonTransforms[0].rotation, Time.deltaTime);
+        // Joints
+        if (inertialize)
+        {
+            for (int i = 1; i < _inertialization.InertializedRotations.Length; i++)
+            {
+                SkeletonTransforms[i].localRotation = _inertialization.InertializedRotations[i];
+            }
+        }
+        else
+        {
+            for (int i = 1; i < pose.JointLocalRotations.Length; i++)
+            {
+                SkeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+            }
+        }
+
+        // Hips Position
+        SkeletonTransforms[1].localPosition =
+            inertialize ? _inertialization.InertializedHips : pose.JointLocalPositions[1];
+        // Foot Lock
+        UpdateFootLock(pose);
+        // Post-processing the transforms
         OnSkeletonTransformUpdated?.Invoke();
     }
 

@@ -207,7 +207,7 @@ namespace MotionMatching
             return false;
         }
 
-        public bool GetJointName(HumanBodyBones bone, out string jointName)
+        public bool TryGetJointName(HumanBodyBones bone, out string jointName)
         {
             for (int i = 0; i < SkeletonToMecanim.Count; i++)
             {

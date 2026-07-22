@@ -112,7 +112,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         Skeleton skeleton = tPoseAnimation.Skeleton;
         for (int i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.GetJointName(BodyJoints[i], out string jointName) &&
+            if (mmData.TryGetJointName(BodyJoints[i], out string jointName) &&
                 skeleton.TryFind(jointName, out Skeleton.Joint joint))
             {
                 // Get the rotation for the first frame of the animation
@@ -184,7 +184,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         // Source
         for (int i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.GetJointName(BodyJoints[i], out string jointName) &&
+            if (mmData.TryGetJointName(BodyJoints[i], out string jointName) &&
                 boneDict.TryGetValue(jointName, out Transform bone))
             {
                 _sourceBones[i] = bone;

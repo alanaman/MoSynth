@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
@@ -8,23 +9,56 @@ public class MotionSynthesisComponent : MonoBehaviour
 {
     public PoseVector CurrentPose;
     
+    
     Skeleton skeleton;
+    public Skeleton Skeleton => skeleton;
+    
+    /// <summary>
+    /// The transforms of the character controlled by this <see cref="MotionSynthesisComponent"/>.
+    /// These are the transforms that will be used to render the character.
+    /// </summary>
     public Transform[] skeletonTransforms;
     
+    // TODO: remove?
+    private Animator _animator;
+    
     [SerializeReference] [SubclassSelector] public List<MoSynthStage> stages;
+
+    [Tooltip("Whether to animate the root position by Motion Matching or not.")]
+    // maybe change this to 'root motion'?
+    public bool rootPositionsMask = true;
     
     private void Awake()
     {
+        _animator = GetComponent<Animator>();
+        
         skeleton = null;
         foreach (var stage in stages)
         {
-            stage.Init(this);
             skeleton = stage.GetSkeleton(skeleton);
         }
 
+        InitSkeletonTransforms();
         InitCurrentPose();
+
+        foreach (var stage in stages)
+        {
+            stage.Init(this);
+        }
     }
-    
+
+    private void InitSkeletonTransforms()
+    {
+        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
+        // +1 for SimulationBone
+        skeletonTransforms = new Transform[bodyJoints.Length + 1];
+        skeletonTransforms[0] = transform; // SimulationBone
+        for (int i = 0; i < bodyJoints.Length; i++)
+        {
+            skeletonTransforms[i + 1] = _animator.GetBoneTransform(bodyJoints[i]);
+        }
+    }
+
     private void Update()
     {
         ConstructCurrentPoseFromSkeletonTransforms();
@@ -32,7 +66,10 @@ public class MotionSynthesisComponent : MonoBehaviour
         var pose = new PoseVector(CurrentPose);
         foreach (var stage in stages)
         {
-            stage.Apply(pose, Time.deltaTime);
+            if (stage.isEnabled)
+            {
+                stage.Apply(pose, Time.deltaTime);
+            }
         }
         
         ApplyPoseToSkeletonTransforms(pose);
@@ -103,111 +140,70 @@ public class MotionSynthesisComponent : MonoBehaviour
             transform.position = simulationBone;
         }
 
-        // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
-
-        // Retargeting
-        for (int i = 0; i < skeleton.Joints.Count; i++)
+        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
+        for (int i = 0; i < bodyJoints.Length; i++)
         {
-            // Motion Matching Target Rotation
-            Quaternion sourceTPoseRotation = _sourceTPose[i];
-            Quaternion targetTPoseRotation = _targetTPose[i];
-            var newRot = pose.GetWorldSpaceRotation(skeleton, skeleton.Joints[i]);
-            
-            // targetTPoseRotation -> Local Target -> World (Target TPose)
-            /*
-                R_t = Rotation transforming from target local space to world space.
-                R_s = Rotation transforming from source local space to world space.
-                R_t = R_s * R_st (R_st is a matrix transforming from target local to source local space).
-                // It makes sense because R_st will be mapping from target to source, and R_s from source to world.
-                // The result is transforming from T to world, which is what R_t does.
-                RTPose_t = RTPose_s * R_st
-                R_st = (RTPose_s)^-1 * RTPose_t
-                R_t = R_s * (R_st)^-1 * RTPose_t
-            */
-            // HipsCorrection -> World (Target TPose) -> World (Source TPose)
-            // sourceTPoseRotation^-1 -> World (SourceTPose) -> Local Source
-            // sourceRotation -> Local Source -> World (Source)
-
-            skeletonTransforms[i].rotation =
-                sourceRotation * Quaternion.Inverse(sourceTPoseRotation) * _hipsCorrection *
-                targetTPoseRotation;
-
-
-            // if (blendPoses && _previousJointMask[i] != currentJointMask)
-            // {
-            //     // Pose Transition
-            //     float3 offsetAngVel = float3.zero;
-            //     Inertialization.InertializeJointTransition(_previousJointRotations[i], float3.zero,
-            //         targetRotation, float3.zero,
-            //         ref _offsetJointRotations[i], ref offsetAngVel);
-            // }
-
-            // if (blendPoses)
-            // {
-            //     float3 offsetAngVel = float3.zero;
-            //     Inertialization.InertializeJointUpdate(targetRotation, float3.zero,
-            //         blendHalfLife, Time.deltaTime,
-            //         ref _offsetJointRotations[i], ref offsetAngVel,
-            //         out quaternion inertializedRotation, out _);
-            //     _targetBones[i].rotation = inertializedRotation;
-            // }
-            // else
-            // {
-            //     _targetBones[i].rotation = targetRotation;
-            // }
+            skeletonTransforms[i + 1].rotation = pose.JointLocalRotations[i + 1];
         }
 
+        // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
         // Hips
-        float3 targetHipsPosition = _targetBones[0].position;
         if (rootPositionsMask)
         {
-            targetHipsPosition = motionMatching.SkeletonTransforms[1].position;
+            skeletonTransforms[0].position = pose.JointLocalPositions[1];
         }
 
-        if (blendPoses && _previousHipsPositionMask != rootPositionsMask)
-        {
-            // Position Transition
-            float3 offsetAngVel = float3.zero;
-            Inertialization.InertializeJointTransition(_previousHipsPosition, float3.zero,
-                targetHipsPosition, float3.zero,
-                ref _offsetHipsPosition, ref offsetAngVel);
-        }
+        // if (blendPoses && _previousHipsPositionMask != rootPositionsMask)
+        // {
+        //     // Position Transition
+        //     float3 offsetAngVel = float3.zero;
+        //     Inertialization.InertializeJointTransition(_previousHipsPosition, float3.zero,
+        //         targetHipsPosition, float3.zero,
+        //         ref _offsetHipsPosition, ref offsetAngVel);
+        // }
+        //
+        // if (blendPoses)
+        // {
+        //     float3 offsetAngVel = float3.zero;
+        //     Inertialization.InertializeJointUpdate(targetHipsPosition, float3.zero,
+        //         blendHalfLife, Time.deltaTime,
+        //         ref _offsetHipsPosition, ref offsetAngVel,
+        //         out float3 inertializedHipsPosition, out _);
+        //     _targetBones[0].position = inertializedHipsPosition;
+        // }
+        // else
+        // {
+        //     _targetBones[0].position = targetHipsPosition;
+        // }
 
-        if (blendPoses)
-        {
-            float3 offsetAngVel = float3.zero;
-            Inertialization.InertializeJointUpdate(targetHipsPosition, float3.zero,
-                blendHalfLife, Time.deltaTime,
-                ref _offsetHipsPosition, ref offsetAngVel,
-                out float3 inertializedHipsPosition, out _);
-            _targetBones[0].position = inertializedHipsPosition;
-        }
-        else
-        {
-            _targetBones[0].position = targetHipsPosition;
-        }
-
-        // Toes-Floor Penetration
-        if (avoidToesFloorPenetration)
-        {
-            const int leftToesIndex = 17;
-            const int rightToesIndex = 21;
-            float soleHeightOffset = Mathf.Min(_targetBones[leftToesIndex].TransformPoint(toesSoleOffset).y,
-                _targetBones[rightToesIndex].TransformPoint(toesSoleOffset).y);
-            soleHeightOffset = soleHeightOffset < _floorHeight ? -soleHeightOffset : 0.0f;
-
-            const float movingAverageFactor = 0.99f;
-            _toesPenetrationMovingCorrection = _toesPenetrationMovingCorrection * movingAverageFactor +
-                                               (soleHeightOffset + _floorHeight) * (1.0f - movingAverageFactor);
-
-            Vector3 hipsPos = _targetBones[0].position;
-            hipsPos.y += _toesPenetrationMovingCorrection;
-            _targetBones[0].position = hipsPos;
-        }
-
-        // Update State
-        UpdatePreviousInertialization();
+        // // Toes-Floor Penetration
+        // if (avoidToesFloorPenetration)
+        // {
+        //     const int leftToesIndex = 17;
+        //     const int rightToesIndex = 21;
+        //     float soleHeightOffset = Mathf.Min(_targetBones[leftToesIndex].TransformPoint(toesSoleOffset).y,
+        //         _targetBones[rightToesIndex].TransformPoint(toesSoleOffset).y);
+        //     soleHeightOffset = soleHeightOffset < _floorHeight ? -soleHeightOffset : 0.0f;
+        //
+        //     const float movingAverageFactor = 0.99f;
+        //     _toesPenetrationMovingCorrection = _toesPenetrationMovingCorrection * movingAverageFactor +
+        //                                        (soleHeightOffset + _floorHeight) * (1.0f - movingAverageFactor);
+        //
+        //     Vector3 hipsPos = _targetBones[0].position;
+        //     hipsPos.y += _toesPenetrationMovingCorrection;
+        //     _targetBones[0].position = hipsPos;
+        // }
+        //
+        // // Update State
+        // UpdatePreviousInertialization();
     }
 
+    private void OnValidate()
+    {
+        foreach (var stage in stages)
+        {
+            stage.OnValidate();
+        }
+    }
 }
 }

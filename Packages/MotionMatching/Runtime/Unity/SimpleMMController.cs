@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.TextCore.Text;
 
 namespace MotionMatching
@@ -12,25 +13,11 @@ namespace MotionMatching
     [DefaultExecutionOrder(-100)]
     public class SimpleMMController : MonoBehaviour
     {
-        public MotionMatchingData MotionMatchingData;
-
-        private SpringCharacterController CharacterController;
-        private MotionMatchingController MMController;
-        private MotionMatchingSkinnedMeshRenderer SkinnedMeshRenderer;
+        private SpringCharacterController _characterController;
 
         private void Awake()
         {
-            CharacterController = GetComponentInChildren<SpringCharacterController>();
-            Debug.Assert(CharacterController != null, "SimpleMMController requires a SpringCharacterController in a children GameObject");
-            MMController = GetComponentInChildren<MotionMatchingController>();
-            Debug.Assert(MMController != null, "SimpleMMController requires a MotionMatchingController in a children GameObject");
-            SkinnedMeshRenderer = GetComponentInChildren<MotionMatchingSkinnedMeshRenderer>();
-            Debug.Assert(SkinnedMeshRenderer != null, "SimpleMMController requires an avatar with a MotionMatchingSkinnedMeshRenderer in a children GameObject");
-
-            MMController.mmData = MotionMatchingData;
-            MMController.characterController = CharacterController;
-            CharacterController.MotionMatching = MMController;
-            SkinnedMeshRenderer.motionMatching = MMController;
+            _characterController = GetComponentInChildren<SpringCharacterController>();
         }
 
         /// <summary>
@@ -39,7 +26,7 @@ namespace MotionMatching
         /// <param name="velocity">The desired direction and speed of the character.</param>
         public void SetVelocity(Vector2 velocity)
         {
-            CharacterController.SetMovementDirection(velocity);
+            _characterController.SetMovementDirection(velocity);
         }
     }
 }

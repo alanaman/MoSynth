@@ -1,17 +1,19 @@
 using System;
-using NUnit.Framework;
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Assertions;
 
 namespace MotionMatching
 {
 [Serializable]
 public class MotionMatchingStage : MoSynthStage
 {
-    public MotionSynthesisComponent owner;
+    private MotionSynthesisComponent _owner;
     
+    // TODO: rename: MM shouldn't be in the name?
     public MotionMatchingCharacterController characterController;
     
     
@@ -43,7 +45,7 @@ public class MotionMatchingStage : MoSynthStage
     
     // TODO: editor inspector for feature weights
     [SerializeField]
-    private float[] featureWeights;
+    private List<float> featureWeights = new();
     NativeArray<float> _featureWeights;
     public NativeArray<float> FeatureWeights => _featureWeights;
 
@@ -88,6 +90,7 @@ public class MotionMatchingStage : MoSynthStage
 
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
+        _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();
         var featureSet = mmData.GetOrImportFeatureSet();
 
@@ -122,15 +125,15 @@ public class MotionMatchingStage : MoSynthStage
             "Feature weights length does not match the number of features.");
         
         
-        _featureWeights = new NativeArray<float>(featureSet.FeatureSize, Allocator.Persistent);
+        _featureWeights = new NativeArray<float>(featureSet.FeatureSize, Allocator.Domain);
         // copy serialized weights
-        for (int i = 0; i < math.min(featureWeights.Length, _featureWeights.Length); i++)
+        for (int i = 0; i < math.min(featureWeights.Count, _featureWeights.Length); i++)
         {
             _featureWeights[i] = featureWeights[i];
         }
-        _queryFeatureVector = new NativeArray<float>(featureSet.FeatureSize, Allocator.Persistent);
+        _queryFeatureVector = new NativeArray<float>(featureSet.FeatureSize, Allocator.Domain);
         
-        _tagMask = new NativeArray<bool>(featureSet.NumberFeatureVectors, Allocator.Persistent);
+        _tagMask = new NativeArray<bool>(featureSet.NumberFeatureVectors, Allocator.Domain);
         for (var i = 0; i < _tagMask.Length; i++)
         {
             _tagMask[i] = true;
@@ -161,6 +164,7 @@ public class MotionMatchingStage : MoSynthStage
 
     public override Skeleton GetSkeleton(in Skeleton inSkeleton)
     {
+        _poseSet = mmData.GetOrImportPoseSet();
         return _poseSet.Skeleton;
     }
 
@@ -250,7 +254,7 @@ public class MotionMatchingStage : MoSynthStage
     
     public void FillQueryVector()
     {
-        var simulationBone = owner.skeletonTransforms[0];
+        var simulationBone = _owner.skeletonTransforms[0];
         var queryFeatureSpan = _queryFeatureVector.AsSpan();
         
         // Trajectory features
@@ -272,7 +276,7 @@ public class MotionMatchingStage : MoSynthStage
         {
             var poseFeatureDef = mmData.PoseFeatures[i];
             var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
-            var currPose = owner.CurrentPose;
+            var currPose = _owner.CurrentPose;
             var skeleton = _poseSet.Skeleton;
             var joint = skeleton.Find(poseFeatureDef.Bone);
             if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
@@ -375,6 +379,31 @@ public class MotionMatchingStage : MoSynthStage
 
                 offset += featureSize;
             }
+        }
+    }
+
+    public override void OnValidate()
+    {
+        if(mmData == null) return;
+        var numFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count + mmData.EnvironmentFeatures.Count;
+        
+        if(featureWeights.Count < numFeatures)
+        {
+            featureWeights.AddRange(new float[numFeatures - featureWeights.Count]);
+        }
+        else if(featureWeights.Count > numFeatures)
+        {
+            featureWeights.RemoveRange(numFeatures, featureWeights.Count - numFeatures);
+        }
+
+        if (_featureWeights.Length != numFeatures)
+        {
+            _featureWeights = new NativeArray<float>(numFeatures, Allocator.Domain);
+        }
+
+        for (int i = 0; i < featureWeights.Count; i++)
+        {
+            _featureWeights[i] = featureWeights[i];
         }
     }
 }
