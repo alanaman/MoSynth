@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -57,31 +58,51 @@ public class MotionSynthesisComponent : MonoBehaviour
 
     private void InitSkeletonTransformsArray()
     {
-        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
+        var poseSet = mmData.GetOrImportPoseSet();
+        var poseJoints = poseSet.Skeleton.Joints;
+        
         // +1 for SimulationBone
-        skeletonTransforms = new Transform[bodyJoints.Length + 1];
+        skeletonTransforms = new Transform[poseJoints.Count];
         skeletonTransforms[0] = transform; // SimulationBone
-        for (int i = 0; i < bodyJoints.Length; i++)
+        for (var i = 1; i < poseJoints.Count; i++)
         {
-            skeletonTransforms[i + 1] = _animator.GetBoneTransform(bodyJoints[i]);
+            skeletonTransforms[i] = _animator.GetBoneTransform(poseJoints[i].type);
         }
     }
     
     private void ApplyTransformOffsetsFromSkeleton()
     {
         var poseSet = mmData.GetOrImportPoseSet();
+        var animJoints = poseSet.Skeleton.Joints;
         
-        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
-        var templateSkeleton = _animator.avatar.humanDescription.skeleton;
-        for (int i = 0; i < bodyJoints.Length; i++)
+        for (var i = 1; i < animJoints.Count; i++)
         {
-            var skeletonTransform = _animator.GetBoneTransform(bodyJoints[i]);
-            var targetJointIndex = Array.FindIndex(templateSkeleton, bone => bone.name == skeletonTransform.name);
-            var skeletonBone = templateSkeleton[targetJointIndex];
-            // var skeletonJoint = poseSet.Skeleton.Joints[i+1];
-            
+            var skeletonTransform = _animator.GetBoneTransform(animJoints[i].type);
+            var skeletonBone = GetSkeletonBone(_animator.avatar.humanDescription, animJoints[i].type);
             skeletonTransform.localPosition = skeletonBone.position;
         }
+    }
+    
+    /// <summary>
+    /// Finds the <see cref="SkeletonBone"/> in <paramref name="humanDescription"/>, corresponding to the <see cref="HumanBodyBones"/> <paramref name="boneEnum"/>.
+    /// </summary>
+    /// <returns>The <see cref="SkeletonBone"/> corresponding to <paramref name="boneEnum"/></returns>
+    public SkeletonBone GetSkeletonBone(HumanDescription humanDescription, HumanBodyBones boneEnum)
+    {
+        // Ensure we aren't passing an invalid enum value
+        if (boneEnum < 0 || boneEnum >= HumanBodyBones.LastBone)
+        {
+            throw new ArgumentException("Invalid HumanBodyBones enum value.");
+        }
+
+        // Get the standard Mecanim human bone name (e.g., "LeftUpperArm")
+        var targetHumanName = HumanTrait.BoneName[(int)boneEnum];
+
+        // Find the mapped transform name in the rig
+        var targetRigBoneName = humanDescription.human.First(b => b.humanName == targetHumanName).boneName;
+        
+        
+        return humanDescription.skeleton.First(skeletonBone => skeletonBone.name == targetRigBoneName);
     }
 
     private void Update()
@@ -131,7 +152,7 @@ public class MotionSynthesisComponent : MonoBehaviour
         //
         // pose.JointLocalPositions[0] = math.mul(_inverseAnimationSpaceOriginRot, localSpacePos) + _animationSpaceOriginPos;
         
-        for (int i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
+        for (var i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
         {
             var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
             CurrentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
@@ -165,8 +186,7 @@ public class MotionSynthesisComponent : MonoBehaviour
         //     transform.position = simulationBone;
         // }
 
-        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
-        for (int i = 1; i < skeleton.Joints.Count; i++)
+        for (var i = 1; i < skeleton.Joints.Count; i++)
         {
             skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
         }

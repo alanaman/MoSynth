@@ -69,10 +69,10 @@ namespace MotionMatching
         /// Apply forward kinematics to obtain the quaternion rotating from the local
         /// coordinate system of the joint to the world coordinate system.
         /// </summary>
-        public quaternion GetWorldRotation(Joint joint, int frameIndex)
+        public Quaternion GetWorldRotation(Joint joint, int frameIndex)
         {
             var frame = Frames[frameIndex];
-            var worldRot = quaternion.identity;
+            var worldRot = Quaternion.identity;
 
             while (joint.index != 0) // while not root
             {

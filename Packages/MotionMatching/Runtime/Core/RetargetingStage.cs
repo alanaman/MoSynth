@@ -24,33 +24,31 @@ public class RetargetingStage : MoSynthStage
     
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
-        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
         _owner = motionSynthesisComponent;
         _animator = motionSynthesisComponent.GetComponent<Animator>();
         
-        _animationTPose = new Quaternion[bodyJoints.Length];
-        _characterTPose = new Quaternion[bodyJoints.Length];
+        // TODO: use only one list of joints
+        // currently animJoints dont have Joint.type set correctly
+        // and poseJoints have extra simBone entry
+        var poseSet = mmData.GetOrImportPoseSet();
+        var poseJoints = poseSet.Skeleton.Joints;
         
         var tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
-        var skeleton = tPoseAnimation.Skeleton;
-        for (var i = 0; i < bodyJoints.Length; i++)
+        var animJoints = tPoseAnimation.Skeleton.Joints;
+        
+        _animationTPose = new Quaternion[animJoints.Count];
+        _characterTPose = new Quaternion[animJoints.Count];
+        
+        for (var i = 0; i < animJoints.Count - 1; i++)
         {
-            if (mmData.TryGetJointName(bodyJoints[i], out var jointName) &&
-                skeleton.TryFind(jointName, out var joint))
-            {
-                // Get the rotation for the first frame of the animation
-                
-                _animationTPose[i] = tPoseAnimation.GetWorldRotation(joint, 0);
-                
-                // _animationTPose[i] = tPoseAnimation.Frames[0].localRotations[joint.index];
-            }
+            _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], 0);
         }
         
         var tPoseSkeleton = _animator.avatar.humanDescription.skeleton;
         var targetHipsRot = Quaternion.identity;
-        for (var i = 0; i < bodyJoints.Length; i++)
+        for (var i = 0; i < animJoints.Count; i++)
         {
-            var jointTransform = _animator.GetBoneTransform(bodyJoints[i]);
+            var jointTransform = _animator.GetBoneTransform(poseJoints[i + 1].type);
             var targetJointIndex = Array.FindIndex(tPoseSkeleton, bone => bone.name == jointTransform.name);
             Debug.Assert(targetJointIndex != -1, "Target joint not found: " + jointTransform.name);
             
@@ -79,23 +77,23 @@ public class RetargetingStage : MoSynthStage
             
             // _characterTPose[i] = tPoseSkeleton[targetJointIndex].rotation;
             
-            if (bodyJoints[i] == HumanBodyBones.Hips)
+            if (poseJoints[i + 1].type == HumanBodyBones.Hips)
             {
                 targetHipsRot = cumulativeRotation;
             }
         }
         
         // Find ForwardLocalVector and UpLocalVector
-        var forwardLocalVector = math.mul(math.inverse(targetHipsRot), math.forward());
-        var upLocalVector = math.mul(math.inverse(targetHipsRot), math.up());
+        var forwardLocalVector = Quaternion.Inverse(targetHipsRot) * Vector3.forward;
+        var upLocalVector = Quaternion.Inverse(targetHipsRot) * Vector3.up;
         // Correct body orientation so they are both facing the same direction
-        var targetWorldForward = math.mul(_characterTPose[0], forwardLocalVector);
-        var targetWorldUp = math.mul(_characterTPose[0], upLocalVector);
-        var sourceWorldForward = math.mul(_animationTPose[0], mmData.HipsForwardLocalVector);
-        var sourceWorldUp = math.mul(_animationTPose[0], mmData.HipsUpLocalVector);
-        var targetLookAt = quaternion.LookRotation(targetWorldForward, targetWorldUp);
-        var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
-        _hipsCorrection = math.mul(sourceLookAt, math.inverse(targetLookAt));
+        var targetWorldForward = _characterTPose[0] * forwardLocalVector;
+        var targetWorldUp = _characterTPose[0] * upLocalVector;
+        var sourceWorldForward = _animationTPose[0] * mmData.HipsForwardLocalVector;
+        var sourceWorldUp = _animationTPose[0] * mmData.HipsUpLocalVector;
+        var targetLookAt = Quaternion.LookRotation(targetWorldForward, targetWorldUp);
+        var sourceLookAt = Quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
+        _hipsCorrection = sourceLookAt * Quaternion.Inverse(targetLookAt);
     }
 
 
@@ -103,7 +101,7 @@ public class RetargetingStage : MoSynthStage
     {
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
         
-        var skeleton = _owner.Skeleton;
+        var animationSkeleton = _owner.Skeleton;
         
         var sourcePose = new PoseVector(pose);
         
@@ -114,14 +112,14 @@ public class RetargetingStage : MoSynthStage
         
         
         // Retargeting
-        for (var i = 0; i < skeleton.Joints.Count-1; i++)
+        for (var i = 0; i < animationSkeleton.Joints.Count-1; i++)
         {
             // Motion Matching Target Rotation
             var sourceTPoseRotation = _animationTPose[i];
             var targetTPoseRotation = _characterTPose[i];
             // var newRot = pose.GetWorldSpaceRotation(skeleton, skeleton.Joints[i]);
             var newSourceLocalRot = sourcePose.JointLocalRotations[i+1];
-            var newSourceRot = sourcePose.GetWorldSpaceRotation(skeleton, skeleton.Joints[i+1]);
+            var newSourceRot = sourcePose.GetWorldSpaceRotation(animationSkeleton, animationSkeleton.Joints[i+1]);
             
             // targetTPoseRotation -> Local Target -> World (Target TPose)
             /*
@@ -145,10 +143,17 @@ public class RetargetingStage : MoSynthStage
                 newSourceRot * Quaternion.Inverse(sourceTPoseRotation) *
                 _hipsCorrection * targetTPoseRotation;
             
-            var parentJoint = skeleton.GetParent(skeleton.Joints[i+1]);
-            var parentRot = pose.GetWorldSpaceRotation(skeleton, parentJoint);
+            var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i+1]);
+            var parentRot = pose.GetWorldSpaceRotation(animationSkeleton, parentJoint);
             
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
+
+            // animationSkeleton.Joints;
+            //
+            // MotionMatchingSkinnedMeshRenderer.BodyJoints;
+            
+            
+            
             pose.JointLocalRotations[i+1] = newTargetLocalRot;
             // hipcorrection
         }
