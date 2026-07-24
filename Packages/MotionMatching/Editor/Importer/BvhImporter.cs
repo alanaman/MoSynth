@@ -21,7 +21,7 @@ namespace MotionMatching.Editor
         public override void OnImportAsset(AssetImportContext ctx)
         {
             // Create a new instance of your custom ScriptableObject
-            BvhAnimation bvhAsset = Import(ctx, unitScale, onlyFirstFrame);
+            var bvhAsset = Import(ctx, unitScale, onlyFirstFrame);
             // Register the ScriptableObject as the main imported asset
             ctx.AddObjectToAsset("main obj", bvhAsset);
             ctx.SetMainObject(bvhAsset);
@@ -29,48 +29,48 @@ namespace MotionMatching.Editor
 
         private static BvhAnimation Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
         {
-            List<AxisOrder> channels = new List<AxisOrder>();
-            BvhAnimation bvhSo = ScriptableObject.CreateInstance<BvhAnimation>();
+            var channelAxisOrders = new List<AxisOrder>();
+            var bvhSo = ScriptableObject.CreateInstance<BvhAnimation>();
 
-            Stack<int> parentIndexStack = new Stack<int>();
-            char[] whitespace = new char[] { ' ', '\t', '\r', '\n' };
+            var parentIndexStack = new Stack<int>();
+            var whitespace = new char[] { ' ', '\t', '\r', '\n' };
             
-            string[] words = File.ReadAllText(ctx.assetPath).Split(whitespace, System.StringSplitOptions.RemoveEmptyEntries);
+            var words = File.ReadAllText(ctx.assetPath).Split(whitespace, System.StringSplitOptions.RemoveEmptyEntries);
             // string[] words = Regex.Split(bvh.text, "[\\s+|\\r*\\n+]+");
-            int w = 0;
+            var w = 0;
             // ROOT
             if (words[w++] != "HIERARCHY") Debug.LogError("[BVHImporter] HIERARCHY not found");
             if (words[w++] != "ROOT") Debug.LogError("[BVHImporter] ROOT not found");
-            Joint root = new Joint(words[w++], 0, -1, Vector3.zero);
+            var root = new Joint(words[w++], 0, -1, Vector3.zero);
             ReadLeftBracket(words, ref w);
             root.localOffset = ReadOffset(words, ref w) * scale;
             root.localOffset = Vector3.zero; // even if we read the offset, it is not used... it should always be 0...
-            ReadChannels(channels, words, ref w, true);
+            ReadChannels(channelAxisOrders, words, ref w, true);
             bvhSo.AddJoint(root);
             // JOINTS
-            int brackets = 1;
-            int parent = 0;
-            int jointIndex = 1;
-            int it = 100000;
+            var brackets = 1;
+            var parent = 0;
+            var jointIndex = 1;
+            var it = 100000;
             if (ReadRightBracket(words, ref w)) brackets -= 1;
             while (brackets > 0 && --it > 0)
             {
                 if (words[w++] != "JOINT") Debug.LogError("[BVHImporter] JOINT not found");
-                Joint joint = new Joint(words[w++], jointIndex++, parent, Vector3.zero);
+                var joint = new Joint(words[w++], jointIndex++, parent, Vector3.zero);
                 ReadLeftBracket(words, ref w);
                 parentIndexStack.Push(parent);
                 parent = jointIndex - 1;
                 brackets += 1;
                 joint.localOffset = ReadOffset(words, ref w) * scale;
-                ReadChannels(channels, words, ref w);
+                ReadChannels(channelAxisOrders, words, ref w);
                 bvhSo.AddJoint(joint);
                 if (words[w] == "End")
                 {
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    Vector3 offset = ReadOffset(words, ref w) * scale;
-                    EndSite endSite = new EndSite(parent, offset);
+                    var offset = ReadOffset(words, ref w) * scale;
+                    var endSite = new EndSite(parent, offset);
                     bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
@@ -79,8 +79,8 @@ namespace MotionMatching.Editor
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    Vector3 offset = ReadOffset(words, ref w) * scale;
-                    EndSite endSite = new EndSite(parent, offset);
+                    var offset = ReadOffset(words, ref w) * scale;
+                    var endSite = new EndSite(parent, offset);
                     bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
@@ -94,8 +94,8 @@ namespace MotionMatching.Editor
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    Vector3 offset = ReadOffset(words, ref w) * scale;
-                    EndSite endSite = new EndSite(parent, offset);
+                    var offset = ReadOffset(words, ref w) * scale;
+                    var endSite = new EndSite(parent, offset);
                     bvhSo.AddEndSite(endSite);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
@@ -110,25 +110,25 @@ namespace MotionMatching.Editor
             // MOTION
             if (words[w++] != "MOTION") Debug.LogError("[BVHImporter] MOTION not found");
             if (words[w++] != "Frames:") Debug.LogError("[BVHImporter] Frames: not found");
-            int numberFrames = int.Parse(words[w++]);
+            var numberFrames = int.Parse(words[w++]);
             bvhSo.InitFrames(numberFrames);
             if (words[w++] != "Frame") Debug.LogError("[BVHImporter] Frame not found");
             if (words[w++] != "Time:") Debug.LogError("[BVHImporter] Time: not found");
-            float frameTime = float.Parse(words[w++], CultureInfo.InvariantCulture);
+            var frameTime = float.Parse(words[w++], CultureInfo.InvariantCulture);
             bvhSo.SetFrameTime(frameTime);
             // Frames
-            int numberChannels = channels.Count;
+            var numberChannels = channelAxisOrders.Count;
             numberFrames = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
-            for (int i = 0; i < numberFrames; i++)
+            for (var i = 0; i < numberFrames; i++)
             {
-                Vector3 rootMotion = new Vector3();
-                Quaternion[] localRotations = new Quaternion[numberChannels - 1];
-                for (int j = 0; j < numberChannels; ++j)
+                var rootMotion = new Vector3();
+                var localRotations = new Quaternion[numberChannels - 1];
+                for (var j = 0; j < numberChannels; ++j)
                 {
-                    float v1 = float.Parse(words[w++], CultureInfo.InvariantCulture);
-                    float v2 = float.Parse(words[w++], CultureInfo.InvariantCulture);
-                    float v3 = float.Parse(words[w++], CultureInfo.InvariantCulture);
-                    AxisOrder axisOrder = channels[j];
+                    var v1 = float.Parse(words[w++], CultureInfo.InvariantCulture);
+                    var v2 = float.Parse(words[w++], CultureInfo.InvariantCulture);
+                    var v3 = float.Parse(words[w++], CultureInfo.InvariantCulture);
+                    var axisOrder = channelAxisOrders[j];
                     if (j == 0)
                     {
                         rootMotion = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
@@ -138,7 +138,7 @@ namespace MotionMatching.Editor
                         localRotations[j - 1] = BvhToUnityRotation(v1, v2, v3, axisOrder);
                     }
                 }
-                Frame frame = new Frame(rootMotion, localRotations);
+                var frame = new Frame(rootMotion, localRotations);
                 bvhSo.AddFrame(i, frame);
             }
             return bvhSo;
@@ -151,7 +151,7 @@ namespace MotionMatching.Editor
 
         private static bool ReadRightBracket(string[] words, ref int w)
         {
-            bool isRightBracket = words[w] == "}";
+            var isRightBracket = words[w] == "}";
             if (isRightBracket)
             {
                 w += 1;
@@ -161,7 +161,7 @@ namespace MotionMatching.Editor
 
         private static Vector3 ReadOffset(string[] words, ref int w)
         {
-            Vector3 offset = Vector3.zero;
+            var offset = Vector3.zero;
             if (words[w++] != "OFFSET") Debug.LogError("[BVHImporter] OFFSET not found");
             offset.x = float.Parse(words[w++], CultureInfo.InvariantCulture);
             offset.y = float.Parse(words[w++], CultureInfo.InvariantCulture);
@@ -177,7 +177,7 @@ namespace MotionMatching.Editor
                 return;
             }
 
-            int numChannels = int.Parse(words[w++]);
+            var numChannels = int.Parse(words[w++]);
 
             if (root)
             {
@@ -211,9 +211,9 @@ namespace MotionMatching.Editor
 
         private static AxisOrder ReadChannelPosition(string[] words, ref int w)
         {
-            string order1 = words[w++];
-            string order2 = words[w++];
-            string order3 = words[w++];
+            var order1 = words[w++];
+            var order2 = words[w++];
+            var order3 = words[w++];
             if (order1 != "Xposition" && order1 != "Yposition" && order1 != "Zposition") Debug.LogError("[BVHImporter] root position channels must be Xposition, Yposition or Zposition");
             if (order2 != "Xposition" && order2 != "Yposition" && order2 != "Zposition") Debug.LogError("[BVHImporter] root position channels must be Xposition, Yposition or Zposition");
             if (order3 != "Xposition" && order3 != "Yposition" && order3 != "Zposition") Debug.LogError("[BVHImporter] root position channels must be Xposition, Yposition or Zposition");
@@ -261,9 +261,9 @@ namespace MotionMatching.Editor
 
         private static AxisOrder ReadChannelRotation(string[] words, ref int w)
         {
-            string order1 = words[w++];
-            string order2 = words[w++];
-            string order3 = words[w++];
+            var order1 = words[w++];
+            var order2 = words[w++];
+            var order3 = words[w++];
             if (order1 != "Xrotation" && order1 != "Yrotation" && order1 != "Zrotation") Debug.LogError("[BVHImporter] root or joint rotation channels must be Xrotation, Yrotation or Zrotation");
             if (order2 != "Xrotation" && order2 != "Yrotation" && order2 != "Zrotation") Debug.LogError("[BVHImporter] root or joint rotation channels must be Xrotation, Yrotation or Zrotation");
             if (order3 != "Xrotation" && order3 != "Yrotation" && order3 != "Zrotation") Debug.LogError("[BVHImporter] root or joint rotation channels must be Xrotation, Yrotation or Zrotation");

@@ -54,10 +54,10 @@ namespace MotionMatching
 
         public void UpdateMecanimInformation(MotionMatchingData motionMatchingData)
         {
-            for (int i = 0; i < Skeleton.Joints.Count; i++)
+            for (var i = 0; i < Skeleton.Joints.Count; i++)
             {
-                Joint joint = Skeleton.Joints[i];
-                if (motionMatchingData.GetMecanimBone(joint.name, out HumanBodyBones bone))
+                var joint = Skeleton.Joints[i];
+                if (motionMatchingData.TryGetMecanimBone(joint.name, out var bone))
                 {
                     joint.type = bone;
                     Skeleton.Joints[i] = joint;
@@ -71,8 +71,8 @@ namespace MotionMatching
         /// </summary>
         public quaternion GetWorldRotation(Joint joint, int frameIndex)
         {
-            Frame frame = Frames[frameIndex];
-            quaternion worldRot = quaternion.identity;
+            var frame = Frames[frameIndex];
+            var worldRot = quaternion.identity;
 
             while (joint.index != 0) // while not root
             {

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 using System;
+using System.Linq;
 
 namespace MotionMatching
 {
@@ -42,9 +43,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
     // Retargeting
     // Initial orientations of the bones. The code assumes the initial orientations are in T-Pose
-    private Quaternion[] _sourceTPose;
+    private Quaternion[] _animationTPose;
 
-    private Quaternion[] _targetTPose;
+    private Quaternion[] _characterTPose;
 
     // Mapping from BodyJoints to the actual transforms
     private Transform[] _sourceBones;
@@ -100,47 +101,47 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
     private void InitRetargeting()
     {
-        MotionMatchingData mmData = motionMatching.mmData;
-        _sourceTPose = new Quaternion[BodyJoints.Length];
-        _targetTPose = new Quaternion[BodyJoints.Length];
+        var mmData = motionMatching.mmData;
+        _animationTPose = new Quaternion[BodyJoints.Length];
+        _characterTPose = new Quaternion[BodyJoints.Length];
         _sourceBones = new Transform[BodyJoints.Length];
         _targetBones = new Transform[BodyJoints.Length];
         // Animation containing in the first frame a T-Pose
-        BvhAnimation tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
+        var tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
         // Store Rotations
         // Source
-        Skeleton skeleton = tPoseAnimation.Skeleton;
-        for (int i = 0; i < BodyJoints.Length; i++)
+        var skeleton = tPoseAnimation.Skeleton;
+        for (var i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.TryGetJointName(BodyJoints[i], out string jointName) &&
-                skeleton.TryFind(jointName, out Skeleton.Joint joint))
+            if (mmData.TryGetJointName(BodyJoints[i], out var jointName) &&
+                skeleton.TryFind(jointName, out var joint))
             {
                 // Get the rotation for the first frame of the animation
-                _sourceTPose[i] = tPoseAnimation.GetWorldRotation(joint, 0);
+                _animationTPose[i] = tPoseAnimation.GetWorldRotation(joint, 0);
             }
         }
 
         // Target
-        Quaternion rot = _animator.transform.rotation;
+        var rot = _animator.transform.rotation;
         _animator.transform.rotation = Quaternion.identity;
-        SkeletonBone[] targetSkeletonBones = _animator.avatar.humanDescription.skeleton;
-        Quaternion targetHipsRot = Quaternion.identity;
-        for (int i = 0; i < BodyJoints.Length; i++)
+        var targetSkeletonBones = _animator.avatar.humanDescription.skeleton;
+        var targetHipsRot = Quaternion.identity;
+        for (var i = 0; i < BodyJoints.Length; i++)
         {
-            Transform targetJoint = _animator.GetBoneTransform(BodyJoints[i]);
+            var targetJoint = _animator.GetBoneTransform(BodyJoints[i]);
 
             // Use Array.FindIndex to find the index of the joint in the targetSkeletonBones array
-            int targetJointIndex = Array.FindIndex(targetSkeletonBones, bone => bone.name == targetJoint.name);
+            var targetJointIndex = Array.FindIndex(targetSkeletonBones, bone => bone.name == targetJoint.name);
             Debug.Assert(targetJointIndex != -1, "Target joint not found: " + targetJoint.name);
 
             // Initialize the rotation as the local rotation of the joint
-            Quaternion cumulativeRotation = targetSkeletonBones[targetJointIndex].rotation;
+            var cumulativeRotation = targetSkeletonBones[targetJointIndex].rotation;
 
             // Traverse up the hierarchy until reaching the Animator's transform
-            Transform currentTransform = targetJoint.parent;
+            var currentTransform = targetJoint.parent;
             while (currentTransform != null && currentTransform != _animator.transform)
             {
-                int parentIndex = Array.FindIndex(targetSkeletonBones, bone => bone.name == currentTransform.name);
+                var parentIndex = Array.FindIndex(targetSkeletonBones, bone => bone.name == currentTransform.name);
                 if (parentIndex != -1)
                 {
                     // Multiply with the parent's local rotation
@@ -154,7 +155,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
             }
 
             // Store the world rotation
-            _targetTPose[i] = cumulativeRotation;
+            _characterTPose[i] = cumulativeRotation;
             if (BodyJoints[i] == HumanBodyBones.Hips)
             {
                 targetHipsRot = cumulativeRotation;
@@ -163,36 +164,30 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
         _animator.transform.rotation = rot;
         // Find ForwardLocalVector and UpLocalVector
-        float3 forwardLocalVector = math.mul(math.inverse(targetHipsRot), math.forward());
-        float3 upLocalVector = math.mul(math.inverse(targetHipsRot), math.up());
+        var forwardLocalVector = math.mul(math.inverse(targetHipsRot), math.forward());
+        var upLocalVector = math.mul(math.inverse(targetHipsRot), math.up());
         // Correct body orientation so they are both facing the same direction
-        float3 targetWorldForward = math.mul(_targetTPose[0], forwardLocalVector);
-        float3 targetWorldUp = math.mul(_targetTPose[0], upLocalVector);
-        float3 sourceWorldForward = math.mul(_sourceTPose[0], mmData.HipsForwardLocalVector);
-        float3 sourceWorldUp = math.mul(_sourceTPose[0], mmData.HipsUpLocalVector);
-        quaternion targetLookAt = quaternion.LookRotation(targetWorldForward, targetWorldUp);
-        quaternion sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
+        var targetWorldForward = math.mul(_characterTPose[0], forwardLocalVector);
+        var targetWorldUp = math.mul(_characterTPose[0], upLocalVector);
+        var sourceWorldForward = math.mul(_animationTPose[0], mmData.HipsForwardLocalVector);
+        var sourceWorldUp = math.mul(_animationTPose[0], mmData.HipsUpLocalVector);
+        var targetLookAt = quaternion.LookRotation(targetWorldForward, targetWorldUp);
+        var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
         _hipsCorrection = math.mul(sourceLookAt, math.inverse(targetLookAt));
         // Store Transforms
-        Transform[] mmBones = motionMatching.SkeletonTransforms;
-        Dictionary<string, Transform> boneDict = new Dictionary<string, Transform>();
-        foreach (Transform bone in mmBones)
-        {
-            boneDict.Add(bone.name, bone);
-        }
+        var mmBones = motionMatching.SkeletonTransforms;
 
         // Source
-        for (int i = 0; i < BodyJoints.Length; i++)
+        for (var i = 0; i < BodyJoints.Length; i++)
         {
-            if (mmData.TryGetJointName(BodyJoints[i], out string jointName) &&
-                boneDict.TryGetValue(jointName, out Transform bone))
+            if (mmData.TryGetJointName(BodyJoints[i], out var jointName))
             {
-                _sourceBones[i] = bone;
+                _sourceBones[i] = mmBones.FirstOrDefault(b => b.name == jointName);
             }
         }
 
         // Target
-        for (int i = 0; i < BodyJoints.Length; i++)
+        for (var i = 0; i < BodyJoints.Length; i++)
         {
             _targetBones[i] = _animator.GetBoneTransform(BodyJoints[i]);
         }
@@ -204,7 +199,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         if (rootPositionsMask)
         {
             // Motion Matching Root Motion + Floor Height
-            Vector3 simulationBone = motionMatching.transform.position;
+            var simulationBone = motionMatching.transform.position;
             simulationBone.y = _floorHeight;
             transform.position = simulationBone;
         }
@@ -212,11 +207,11 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
 
         // Retargeting
-        for (int i = 0; i < BodyJoints.Length; i++)
+        for (var i = 0; i < BodyJoints.Length; i++)
         {
-            bool currentJointMask = false;
+            var currentJointMask = false;
             // Unity's Animator Target Rotation
-            Quaternion targetRotation = _targetBones[i].rotation;
+            var targetRotation = _targetBones[i].rotation;
             // Check Avatar Mask
             if (avatarMask == null ||
                 (BodyJoints[i] == HumanBodyBones.Hips && rootRotationsMask) ||
@@ -224,9 +219,9 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
             {
                 currentJointMask = true;
                 // Motion Matching Target Rotation
-                Quaternion sourceTPoseRotation = _sourceTPose[i];
-                Quaternion targetTPoseRotation = _targetTPose[i];
-                Quaternion sourceRotation = _sourceBones[i].rotation;
+                var sourceTPoseRotation = _animationTPose[i];
+                var targetTPoseRotation = _characterTPose[i];
+                var sourceRotation = _sourceBones[i].rotation;
                 // targetTPoseRotation -> Local Target -> World (Target TPose)
                 /*
                     R_t = Rotation transforming from target local space to world space.
@@ -249,7 +244,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
             if (blendPoses && _previousJointMask[i] != currentJointMask)
             {
                 // Pose Transition
-                float3 offsetAngVel = float3.zero;
+                var offsetAngVel = float3.zero;
                 Inertialization.InertializeJointTransition(_previousJointRotations[i], float3.zero,
                     targetRotation, float3.zero,
                     ref _offsetJointRotations[i], ref offsetAngVel);
@@ -257,11 +252,11 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
             if (blendPoses)
             {
-                float3 offsetAngVel = float3.zero;
+                var offsetAngVel = float3.zero;
                 Inertialization.InertializeJointUpdate(targetRotation, float3.zero,
                     blendHalfLife, Time.deltaTime,
                     ref _offsetJointRotations[i], ref offsetAngVel,
-                    out quaternion inertializedRotation, out _);
+                    out var inertializedRotation, out _);
                 _targetBones[i].rotation = inertializedRotation;
             }
             else
@@ -280,7 +275,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         if (blendPoses && _previousHipsPositionMask != rootPositionsMask)
         {
             // Position Transition
-            float3 offsetAngVel = float3.zero;
+            var offsetAngVel = float3.zero;
             Inertialization.InertializeJointTransition(_previousHipsPosition, float3.zero,
                 targetHipsPosition, float3.zero,
                 ref _offsetHipsPosition, ref offsetAngVel);
@@ -288,11 +283,11 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
         if (blendPoses)
         {
-            float3 offsetAngVel = float3.zero;
+            var offsetAngVel = float3.zero;
             Inertialization.InertializeJointUpdate(targetHipsPosition, float3.zero,
                 blendHalfLife, Time.deltaTime,
                 ref _offsetHipsPosition, ref offsetAngVel,
-                out float3 inertializedHipsPosition, out _);
+                out var inertializedHipsPosition, out _);
             _targetBones[0].position = inertializedHipsPosition;
         }
         else
@@ -305,7 +300,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         {
             const int leftToesIndex = 17;
             const int rightToesIndex = 21;
-            float soleHeightOffset = Mathf.Min(_targetBones[leftToesIndex].TransformPoint(toesSoleOffset).y,
+            var soleHeightOffset = Mathf.Min(_targetBones[leftToesIndex].TransformPoint(toesSoleOffset).y,
                 _targetBones[rightToesIndex].TransformPoint(toesSoleOffset).y);
             soleHeightOffset = soleHeightOffset < _floorHeight ? -soleHeightOffset : 0.0f;
 
@@ -313,7 +308,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
             _toesPenetrationMovingCorrection = _toesPenetrationMovingCorrection * movingAverageFactor +
                                                (soleHeightOffset + _floorHeight) * (1.0f - movingAverageFactor);
 
-            Vector3 hipsPos = _targetBones[0].position;
+            var hipsPos = _targetBones[0].position;
             hipsPos.y += _toesPenetrationMovingCorrection;
             _targetBones[0].position = hipsPos;
         }
@@ -326,14 +321,14 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     {
         // Previous Joint Mask
         _previousJointMask[0] = rootRotationsMask;
-        for (int i = 1; i < BodyJoints.Length; i++)
+        for (var i = 1; i < BodyJoints.Length; i++)
         {
             _previousJointMask[i] = !avatarMask || avatarMask.IsEnabled(BodyJoints[i]);
         }
 
         _previousHipsPositionMask = rootPositionsMask;
         // Previous Joint Rotations
-        for (int i = 0; i < _previousJointRotations.Length; ++i)
+        for (var i = 0; i < _previousJointRotations.Length; ++i)
             _previousJointRotations[i] = _targetBones != null ? _targetBones[i].rotation : quaternion.identity;
         _previousHipsPosition = _targetBones != null ? _targetBones[0].position : float3.zero;
     }
@@ -375,12 +370,12 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
     private void OnDrawGizmosSelected()
     {
         if (!enabled) return;
-        Animator animator = GetComponent<Animator>();
+        var animator = GetComponent<Animator>();
 
         if (animator == null) return;
 
-        Vector3 leftSole = animator.GetBoneTransform(HumanBodyBones.LeftToes).TransformPoint(toesSoleOffset);
-        Vector3 rightSole = animator.GetBoneTransform(HumanBodyBones.RightToes).TransformPoint(toesSoleOffset);
+        var leftSole = animator.GetBoneTransform(HumanBodyBones.LeftToes).TransformPoint(toesSoleOffset);
+        var rightSole = animator.GetBoneTransform(HumanBodyBones.RightToes).TransformPoint(toesSoleOffset);
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(leftSole, 0.005f);
         Gizmos.DrawSphere(rightSole, 0.005f);

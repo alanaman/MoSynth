@@ -64,10 +64,10 @@ namespace MotionMatching
                     for (int i = 0; i < poseSet.NumberPoses; ++i)
                     {
                         poseSet.GetPose(i, out PoseVector pose);
-                        WriteFloat3Array(writer, pose.JointLocalPositions);
+                        Write(writer, pose.JointLocalPositions);
                         WriteQuaternionArray(writer, pose.JointLocalRotations);
-                        WriteFloat3Array(writer, pose.JointLocalVelocities);
-                        WriteFloat3Array(writer, pose.JointLocalAngularVelocities);
+                        Write(writer, pose.JointLocalVelocities);
+                        Write(writer, pose.JointLocalAngularVelocities);
                         writer.Write(pose.LeftFootContact ? 1u : 0u);
                         writer.Write(pose.RightFootContact ? 1u : 0u);
                     }
@@ -168,10 +168,10 @@ namespace MotionMatching
                         // --- Read JointLocalPositions ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> positionsSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalPositions = new float3[nJoints];
+                        pose.JointLocalPositions = new Vector3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalPositions[j] = new float3(
+                            pose.JointLocalPositions[j] = new Vector3(
                                 positionsSpan[j * 3],
                                 positionsSpan[j * 3 + 1],
                                 positionsSpan[j * 3 + 2]
@@ -181,7 +181,7 @@ namespace MotionMatching
                         // --- Read JointLocalRotations ---
                         reader.Read(quaternionBuffer, 0, quaternionBufferSize);
                         Span<float> rotationsSpan = MemoryMarshal.Cast<byte, float>(quaternionBuffer);
-                        pose.JointLocalRotations = new quaternion[nJoints];
+                        pose.JointLocalRotations = new Quaternion[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
                             pose.JointLocalRotations[j] = new quaternion(
@@ -195,10 +195,10 @@ namespace MotionMatching
                         // --- Read JointLocalVelocities ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> velocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalVelocities = new float3[nJoints];
+                        pose.JointLocalVelocities = new Vector3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalVelocities[j] = new float3(
+                            pose.JointLocalVelocities[j] = new Vector3(
                                 velocitiesSpan[j * 3],
                                 velocitiesSpan[j * 3 + 1],
                                 velocitiesSpan[j * 3 + 2]
@@ -208,10 +208,10 @@ namespace MotionMatching
                         // --- Read JointLocalAngularVelocities ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> angularVelocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalAngularVelocities = new float3[nJoints];
+                        pose.JointLocalAngularVelocities = new Vector3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalAngularVelocities[j] = new float3(
+                            pose.JointLocalAngularVelocities[j] = new Vector3(
                                 angularVelocitiesSpan[j * 3],
                                 angularVelocitiesSpan[j * 3 + 1],
                                 angularVelocitiesSpan[j * 3 + 2]

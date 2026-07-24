@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -238,9 +239,11 @@ public class MotionMatchingStage : MoSynthStage
         _currentFrameTime += deltaTime / _poseSet.FrameTime;
         CurrentFrame = (int)math.floor(_currentFrameTime);
         
-        _poseSet.GetPose(CurrentFrame, out pose);
+        _poseSet.GetPose(CurrentFrame, out var newPose);
+        pose.CopyFrom(newPose);
     }
-
+    
+    [Pure]
     public static float SqrDistance(ReadOnlySpan<float> featureVectorA, ReadOnlySpan<float> featureVectorB, ReadOnlySpan<float> featureWeights)
     {
         var sqrDistance = 0.0f;
@@ -281,7 +284,7 @@ public class MotionMatchingStage : MoSynthStage
             var joint = skeleton.Find(poseFeatureDef.Bone);
             if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
             {
-                var feature = currPose.GetCharacterSpacePosition(skeleton, joint);
+                var feature = currPose.GetHipSpacePosition(skeleton, joint);
                 
                 queryFeatureSpan[featureOffset + 0] = feature.x;
                 queryFeatureSpan[featureOffset + 1] = feature.y;
@@ -389,7 +392,10 @@ public class MotionMatchingStage : MoSynthStage
         
         if(featureWeights.Count < numFeatures)
         {
-            featureWeights.AddRange(new float[numFeatures - featureWeights.Count]);
+            for (var i = featureWeights.Count; i < numFeatures; i++)
+            {
+                featureWeights.Add(1.0f);
+            }
         }
         else if(featureWeights.Count > numFeatures)
         {

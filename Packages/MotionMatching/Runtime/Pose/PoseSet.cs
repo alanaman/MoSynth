@@ -210,7 +210,7 @@ public class PoseSet
     public bool GetPose(int poseIndex, out PoseVector pose)
     {
         bool isPredictionSafe = IsPoseValidForPrediction(poseIndex);
-        pose = _poses[poseIndex];
+        pose = new PoseVector(_poses[poseIndex]);
         return isPredictionSafe;
     }
 
@@ -265,7 +265,7 @@ public class PoseSet
     /// worldJoints has size Skeleton.Joints.Count
     /// </summary>
     public NativeArray<float3> GetWorldPositions(PoseVector pose, quaternion inverseRotAnimationSpace,
-        float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
+        Vector3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
     {
 
         // animation space to local space

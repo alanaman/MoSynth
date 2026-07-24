@@ -129,35 +129,20 @@ namespace MotionMatching
             if (GUILayout.Button("Read Skeleton from BVH"))
             {
                 BvhAnimation animation = data.AnimationDataTPose.GetAnimation();
-                // Check if SkeletonToMecanim should be reset
-                bool shouldResetSkeletonToMecanim = true || data.SkeletonToMecanim.Count != animation.Skeleton.Joints.Count;
-                if (!shouldResetSkeletonToMecanim)
+                // TODO: Check if SkeletonToMecanim should be reset
+                data.animationChannelToMecanim.Clear();
+                foreach (Joint joint in animation.Skeleton.Joints)
                 {
-                    foreach (MotionMatchingData.JointToMecanim jtm in data.SkeletonToMecanim)
+                    HumanBodyBones bone;
+                    try
                     {
-                        if (!animation.Skeleton.TryFind(jtm.Name, out _))
-                        {
-                            shouldResetSkeletonToMecanim = true;
-                            break;
-                        }
+                        bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), joint.name);
                     }
-                }
-                if (shouldResetSkeletonToMecanim)
-                {
-                    data.SkeletonToMecanim.Clear();
-                    foreach (Joint joint in animation.Skeleton.Joints)
+                    catch (Exception)
                     {
-                        HumanBodyBones bone;
-                        try
-                        {
-                            bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), joint.name);
-                        }
-                        catch (Exception)
-                        {
-                            bone = HumanBodyBones.LastBone;
-                        }
-                        data.SkeletonToMecanim.Add(new MotionMatchingData.JointToMecanim(joint.name, bone));
+                        bone = HumanBodyBones.LastBone;
                     }
+                    data.animationChannelToMecanim.Add(new MotionMatchingData.JointToMecanim(joint.name, bone));
                 }
             }
 
@@ -166,15 +151,15 @@ namespace MotionMatching
             if (SkeletonToMecanimFoldout)
             {
                 EditorGUI.indentLevel++;
-                for (int i = 0; i < data.SkeletonToMecanim.Count; i++)
+                for (int i = 0; i < data.animationChannelToMecanim.Count; i++)
                 {
-                    MotionMatchingData.JointToMecanim jtm = data.SkeletonToMecanim[i];
+                    MotionMatchingData.JointToMecanim jtm = data.animationChannelToMecanim[i];
                     EditorGUILayout.BeginHorizontal();
-                    GUI.contentColor = jtm.MecanimBone == HumanBodyBones.LastBone ? new Color(1.0f, 0.6f, 0.6f) : Color.white;
-                    HumanBodyBones newHumanBodyBone = (HumanBodyBones)EditorGUILayout.EnumPopup(jtm.Name, jtm.MecanimBone);
+                    GUI.contentColor = jtm.mecanimBone == HumanBodyBones.LastBone ? new Color(1.0f, 0.6f, 0.6f) : Color.white;
+                    HumanBodyBones newHumanBodyBone = (HumanBodyBones)EditorGUILayout.EnumPopup(jtm.name, jtm.mecanimBone);
                     GUI.contentColor = Color.white;
-                    jtm.MecanimBone = newHumanBodyBone;
-                    data.SkeletonToMecanim[i] = jtm;
+                    jtm.mecanimBone = newHumanBodyBone;
+                    data.animationChannelToMecanim[i] = jtm;
                     EditorGUILayout.EndHorizontal();
                 }
                 EditorGUI.indentLevel--;

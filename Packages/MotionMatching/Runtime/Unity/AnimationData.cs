@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics.Contracts;
 using UnityEngine;
 using static UnityEngine.GraphicsBuffer;
 #if UNITY_EDITOR
@@ -20,6 +21,7 @@ public class AnimationData : ScriptableObject
     public BvhAnimation Animation;
     public List<Tag> Tags = new();
 
+    [Pure]
     public BvhAnimation GetAnimation()
     {
         return Animation;

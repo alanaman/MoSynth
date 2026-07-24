@@ -1,6 +1,7 @@
 using System.Diagnostics.Contracts;
 using UnityEngine;
 using Unity.Mathematics;
+using Unity.Mathematics.Geometry;
 
 namespace MotionMatching
 {
@@ -10,35 +11,35 @@ namespace MotionMatching
 public struct PoseVector
 {
     // The first element is the SimulationBone (added artificially), and the rest are the bones of the original skeleton
-    public float3[] JointLocalPositions;
-    public quaternion[] JointLocalRotations;
-    public float3[] JointLocalVelocities; // Computed from World Positions
-    public float3[] JointLocalAngularVelocities; // Computed from World Rotations
+    public Vector3[] JointLocalPositions;
+    public Quaternion[] JointLocalRotations;
+    public Vector3[] JointLocalVelocities; // Computed from World Positions
+    public Vector3[] JointLocalAngularVelocities; // Computed from World Rotations
     public bool LeftFootContact; // True if the foot is in contact with the ground, false otherwise
     public bool RightFootContact;
 
     public PoseVector(int numJoints)
     {
-        JointLocalPositions = new float3[numJoints];
-        JointLocalRotations = new quaternion[numJoints];
-        JointLocalVelocities = new float3[numJoints];
-        JointLocalAngularVelocities = new float3[numJoints];
+        JointLocalPositions = new Vector3[numJoints];
+        JointLocalRotations = new Quaternion[numJoints];
+        JointLocalVelocities = new Vector3[numJoints];
+        JointLocalAngularVelocities = new Vector3[numJoints];
         LeftFootContact = false;
         RightFootContact = false;
     }
 
     public PoseVector(PoseVector other)
     {
-        JointLocalPositions = (float3[])other.JointLocalPositions.Clone();
-        JointLocalRotations = (quaternion[])other.JointLocalRotations.Clone();
-        JointLocalVelocities = (float3[])other.JointLocalVelocities.Clone();
-        JointLocalAngularVelocities = (float3[])other.JointLocalAngularVelocities.Clone();
+        JointLocalPositions = (Vector3[])other.JointLocalPositions.Clone();
+        JointLocalRotations = (Quaternion[])other.JointLocalRotations.Clone();
+        JointLocalVelocities = (Vector3[])other.JointLocalVelocities.Clone();
+        JointLocalAngularVelocities = (Vector3[])other.JointLocalAngularVelocities.Clone();
         LeftFootContact = other.LeftFootContact;
         RightFootContact = other.RightFootContact;
     }
     
-    public PoseVector(float3[] jointLocalPositions, quaternion[] jointLocalRotations,
-        float3[] jointLocalVelocities, float3[] jointLocalAngularVelocities,
+    public PoseVector(Vector3[] jointLocalPositions, Quaternion[] jointLocalRotations,
+        Vector3[] jointLocalVelocities, Vector3[] jointLocalAngularVelocities,
         bool leftFootContact, bool rightFootContact)
     {
         JointLocalPositions = jointLocalPositions;
@@ -49,20 +50,33 @@ public struct PoseVector
         RightFootContact = rightFootContact;
     }
 
+    public void CopyFrom(PoseVector other)
+    {
+        for (var i = 0; i < JointLocalPositions.Length; i++)
+        {
+            JointLocalPositions[i] = other.JointLocalPositions[i];
+            JointLocalRotations[i] = other.JointLocalRotations[i];
+            JointLocalVelocities[i] = other.JointLocalVelocities[i];
+            JointLocalAngularVelocities[i] = other.JointLocalAngularVelocities[i];
+        }
+        LeftFootContact = other.LeftFootContact;
+        RightFootContact = other.RightFootContact;
+    }
+
     /// <summary>
     /// Returns the rotation of the joint in world space after applying FK using the pose
     /// </summary>
     /// <remarks>World here is the immediate parent transform of the Simulation Bone</remarks>
-    public quaternion GetWorldSpaceRotation(Skeleton skeleton, Skeleton.Joint joint)
+    public Quaternion GetWorldSpaceRotation(Skeleton skeleton, Skeleton.Joint joint)
     {
-        var worldRot = quaternion.identity;
+        var worldRot = Quaternion.identity;
         while (joint.index != 0) // while not root
         {
-            worldRot = math.mul(JointLocalRotations[joint.index], worldRot);
+            worldRot = JointLocalRotations[joint.index] * worldRot;
             joint = skeleton.GetParent(joint);
         }
 
-        worldRot = math.mul(JointLocalRotations[0], worldRot); // root
+        worldRot = JointLocalRotations[0] * worldRot; // root
         return worldRot;
     }
 
@@ -88,28 +102,30 @@ public struct PoseVector
     /// <summary>
     /// Returns the rotation of the joint in character space after applying FK using the pose
     /// </summary>
-    public quaternion GetCharacterSpaceRotation(Skeleton skeleton, Skeleton.Joint joint)
+    public Quaternion GetHipSpaceRotation(Skeleton skeleton, Skeleton.Joint joint)
     {
-        var rot = quaternion.identity;
+        var rot = Quaternion.identity;
         while (joint.index != 0) // while not root
         {
-            rot = math.mul(JointLocalRotations[joint.index], rot);
+            rot = JointLocalRotations[joint.index] * rot;
             joint = skeleton.GetParent(joint);
         }
-
         return rot;
     }
 
     /// <summary>
     /// Returns the position of the joint in character space after applying FK using the pose
     /// </summary>
-    public float3 GetCharacterSpacePosition(Skeleton skeleton, Skeleton.Joint joint)
+    public Vector3 GetHipSpacePosition(Skeleton skeleton, Skeleton.Joint joint)
     {
         var localToCharacter = Matrix4x4.identity;
         while (joint.index != 0) // while not root
         {
-            localToCharacter = Matrix4x4.TRS(JointLocalPositions[joint.index], JointLocalRotations[joint.index],
-                new float3(1.0f, 1.0f, 1.0f)) * localToCharacter;
+            // TODO: move this normalization
+            JointLocalRotations[joint.index] = Quaternion.Normalize(JointLocalRotations[joint.index]);
+            localToCharacter = Matrix4x4.TRS(
+                JointLocalPositions[joint.index], JointLocalRotations[joint.index],
+                Vector3.one) * localToCharacter;
             joint = skeleton.GetParent(joint);
         }
 
@@ -121,9 +137,9 @@ public struct PoseVector
     /// </summary>
     public float3 GetWorldSpaceVelocity(Skeleton skeleton, Skeleton.Joint joint)
     {
-        var posAcc = float3.zero;
-        var linVelAcc = float3.zero;
-        var angVelAcc = float3.zero;
+        var posAcc = Vector3.zero;
+        var linVelAcc = Vector3.zero;
+        var angVelAcc = Vector3.zero;
 
         while (joint.index != 0) // while not root
         {
@@ -132,11 +148,11 @@ public struct PoseVector
             var v = JointLocalVelocities[joint.index];
             var w = JointLocalAngularVelocities[joint.index];
 
-            var rotatedPosAcc = math.mul(q, posAcc);
-
+            var rotatedPosAcc = q * posAcc;
+            
             // Spatial velocity transfer formula: V = v + (w x rotated_pos) + q * V_acc
-            linVelAcc = v + math.cross(w, rotatedPosAcc) + math.mul(q, linVelAcc);
-            angVelAcc = w + math.mul(q, angVelAcc);
+            linVelAcc = v + Vector3.Cross(w, rotatedPosAcc) + q * linVelAcc;
+            angVelAcc = w + q * angVelAcc;
             posAcc = p + rotatedPosAcc;
 
             joint = skeleton.GetParent(joint);
@@ -147,8 +163,8 @@ public struct PoseVector
         var rootV = JointLocalVelocities[0];
         var rootW = JointLocalAngularVelocities[0];
 
-        var rootRotatedPosAcc = math.mul(rootQ, posAcc);
-        linVelAcc = rootV + math.cross(rootW, rootRotatedPosAcc) + math.mul(rootQ, linVelAcc);
+        var rootRotatedPosAcc = rootQ * posAcc;
+        linVelAcc = rootV + Vector3.Cross(rootW, rootRotatedPosAcc) + rootQ * linVelAcc;
 
         return linVelAcc;
     }
@@ -165,14 +181,14 @@ public struct PoseVector
             var q = JointLocalRotations[joint.index];
             var w = JointLocalAngularVelocities[joint.index];
 
-            angVelAcc = w + math.mul(q, angVelAcc);
+            angVelAcc = w + q * angVelAcc;
             joint = skeleton.GetParent(joint);
         }
 
         var rootQ = JointLocalRotations[0];
         var rootW = JointLocalAngularVelocities[0];
 
-        return rootW + math.mul(rootQ, angVelAcc);
+        return rootW + rootQ * angVelAcc;
     }
 
     /// <summary>
@@ -180,9 +196,9 @@ public struct PoseVector
     /// </summary>
     public float3 GetCharacterSpaceVelocity(Skeleton skeleton, Skeleton.Joint joint)
     {
-        var posAcc = float3.zero;
-        var linVelAcc = float3.zero;
-        var angVelAcc = float3.zero;
+        var posAcc = Vector3.zero;
+        var linVelAcc = Vector3.zero;
+        var angVelAcc = Vector3.zero;
 
         while (joint.index != 0) // while not root
         {
@@ -191,10 +207,10 @@ public struct PoseVector
             var v = JointLocalVelocities[joint.index];
             var w = JointLocalAngularVelocities[joint.index];
 
-            var rotatedPosAcc = math.mul(q, posAcc);
+            var rotatedPosAcc = q * posAcc;
 
-            linVelAcc = v + math.cross(w, rotatedPosAcc) + math.mul(q, linVelAcc);
-            angVelAcc = w + math.mul(q, angVelAcc);
+            linVelAcc = v + Vector3.Cross(w, rotatedPosAcc) + q * linVelAcc;
+            angVelAcc = w + q * angVelAcc;
             posAcc = p + rotatedPosAcc;
 
             joint = skeleton.GetParent(joint);
@@ -215,7 +231,7 @@ public struct PoseVector
             var q = JointLocalRotations[joint.index];
             var w = JointLocalAngularVelocities[joint.index];
 
-            angVelAcc = w + math.mul(q, angVelAcc);
+            angVelAcc = w + q * angVelAcc;
             joint = skeleton.GetParent(joint);
         }
 

@@ -24,7 +24,7 @@ namespace MotionMatching
         // TODO: Implement Savitzky-Golay filter or similar low-pass filter in Unity (before I was using Python implementation)
         //public bool SmoothSimulationBone; // Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter
         public float ContactVelocityThreshold = 0.15f; // Minimum velocity of the foot to be considered in movement and not in contact with the ground
-        public List<JointToMecanim> SkeletonToMecanim = new();
+        [FormerlySerializedAs("SkeletonToMecanim")] public List<JointToMecanim> animationChannelToMecanim = new();
         
         // TODO: these should prolly be inside FeatureSet
         public List<TrajectoryFeature> TrajectoryFeatures = new();
@@ -51,11 +51,10 @@ namespace MotionMatching
         private void ImportAnimations()
         {
             PROFILE.BEGIN_SAMPLE_PROFILING("BVH Import");
-            for (int i = 0; i < AnimationDatas.Count; i++)
+            foreach (var animData in AnimationDatas)
             {
-                AnimationDatas[i].GetAnimation(); // Imports the animation
                 // Add Mecanim mapping information
-                AnimationDatas[i].UpdateMecanimInformation(this);
+                animData.UpdateMecanimInformation(this);
             }
             PROFILE.END_AND_PRINT_SAMPLE_PROFILING("BVH Import");
         }
@@ -95,9 +94,7 @@ namespace MotionMatching
             for (int i = 0; i < AnimationDatas.Count; i++)
             {
                 // Extract poses
-                BvhAnimation animation = AnimationDatas[i].GetAnimation();
-                PoseExtractor poseExtractor = new PoseExtractor();
-                if (!poseExtractor.Extract(AnimationDatas[i], _poseSet, this))
+                if (!PoseExtractor.Extract(AnimationDatas[i], _poseSet, this))
                 {
                     Debug.LogWarning("[FeatureDebug] Failed to extract poseSet from AnimationDat. Animation Index: " + i);
                 }
@@ -166,7 +163,7 @@ namespace MotionMatching
                 worldRot = math.mul(localRotations[0], worldRot); // root
                 joint = i - 1;
                 // Change to Local
-                if (!GetMecanimBone(tPoseAnimation.Skeleton.Joints[joint].name, out HumanBodyBones bone))
+                if (!TryGetMecanimBone(tPoseAnimation.Skeleton.Joints[joint].name, out HumanBodyBones bone))
                 {
                     Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " + tPoseAnimation.Skeleton.Joints[joint].name);
                 }
@@ -193,15 +190,13 @@ namespace MotionMatching
             return jointsLocalForward[jointIndex];
         }
 
-        public bool GetMecanimBone(string jointName, out HumanBodyBones bone)
+        public bool TryGetMecanimBone(string jointName, out HumanBodyBones bone)
         {
-            for (int i = 0; i < SkeletonToMecanim.Count; i++)
+            for (int i = 0; i < animationChannelToMecanim.Count; i++)
             {
-                if (SkeletonToMecanim[i].Name == jointName)
-                {
-                    bone = SkeletonToMecanim[i].MecanimBone;
-                    return true;
-                }
+                if (animationChannelToMecanim[i].name != jointName) continue;
+                bone = animationChannelToMecanim[i].mecanimBone;
+                return true;
             }
             bone = HumanBodyBones.LastBone;
             return false;
@@ -209,11 +204,11 @@ namespace MotionMatching
 
         public bool TryGetJointName(HumanBodyBones bone, out string jointName)
         {
-            for (int i = 0; i < SkeletonToMecanim.Count; i++)
+            for (int i = 0; i < animationChannelToMecanim.Count; i++)
             {
-                if (SkeletonToMecanim[i].MecanimBone == bone)
+                if (animationChannelToMecanim[i].mecanimBone == bone)
                 {
-                    jointName = SkeletonToMecanim[i].Name;
+                    jointName = animationChannelToMecanim[i].name;
                     return true;
                 }
             }
@@ -236,13 +231,13 @@ namespace MotionMatching
         [Serializable]
         public struct JointToMecanim
         {
-            public string Name;
-            public HumanBodyBones MecanimBone;
+            [FormerlySerializedAs("Name")] public string name;
+            [FormerlySerializedAs("MecanimBone")] public HumanBodyBones mecanimBone;
 
             public JointToMecanim(string name, HumanBodyBones mecanimBone)
             {
-                Name = name;
-                MecanimBone = mecanimBone;
+                this.name = name;
+                this.mecanimBone = mecanimBone;
             }
         }
 

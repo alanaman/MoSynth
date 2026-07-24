@@ -7,7 +7,6 @@ using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
-using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
 // Simulation bone is the transform
 public class MotionMatchingController : MonoBehaviour
@@ -77,18 +76,18 @@ public class MotionMatchingController : MonoBehaviour
     public int LastMmSearchFrame { get; private set; } 
     public NativeArray<bool> TagMask { get; private set; }
 
-    private float3 _animationSpaceOriginPos;
-    private quaternion _animationSpaceOriginRot;
-    private quaternion _inverseAnimationSpaceOriginRot;
+    private Vector3 _animationSpaceOriginPos;
+    private Quaternion _animationSpaceOriginRot;
+    private Quaternion _inverseAnimationSpaceOriginRot;
     
     /// <summary>
     /// Position of the transform right after motion matching search
     /// </summary>
-    private float3 _mmTransformOriginPos;
+    private Vector3 _mmTransformOriginPos;
     /// <summary>
     /// Rotation of the transform right after motion matching search
     /// </summary>
-    private quaternion _mmTransformOriginRot; 
+    private Quaternion _mmTransformOriginRot; 
     /// <summary>
     /// Current frame index as float to keep track of variable frame rate
     /// </summary>
@@ -278,7 +277,7 @@ public class MotionMatchingController : MonoBehaviour
         PoseSet.GetPose(CurrentFrame, out var mmPose);
         _animationSpaceOriginPos = mmPose.JointLocalPositions[0];
         _animationSpaceOriginRot = mmPose.JointLocalRotations[0];
-        _inverseAnimationSpaceOriginRot = math.inverse(mmPose.JointLocalRotations[0]);
+        _inverseAnimationSpaceOriginRot = Quaternion.Inverse(mmPose.JointLocalRotations[0]);
         _mmTransformOriginPos = SkeletonTransforms[0].position;
         _mmTransformOriginRot = SkeletonTransforms[0].rotation;
     }
@@ -376,12 +375,13 @@ public class MotionMatchingController : MonoBehaviour
         float3 previousPosition = SkeletonTransforms[0].position;
         quaternion previousRotation = SkeletonTransforms[0].rotation;
         // animation space to local space
-        float3 localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
-            pose.JointLocalPositions[0] - _animationSpaceOriginPos);
-        quaternion localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.JointLocalRotations[0]);
+        var localSpacePos = _inverseAnimationSpaceOriginRot * 
+                            (pose.JointLocalPositions[0] - _animationSpaceOriginPos);
+        var localSpaceRot = _inverseAnimationSpaceOriginRot * pose.JointLocalRotations[0];
+        
         // local space to world space
         SkeletonTransforms[0].SetPositionAndRotation(
-            math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos,
+            _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos,
             math.mul(_mmTransformOriginRot, localSpaceRot));
         // update velocity and angular velocity
         Velocity = ((float3)SkeletonTransforms[0].position - previousPosition) / Time.deltaTime;
@@ -567,8 +567,8 @@ public class MotionMatchingController : MonoBehaviour
         float3 currentPos = SkeletonTransforms[0].position;
         quaternion currentRot = SkeletonTransforms[0].rotation;
         // local space to world space
-        var newPos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
-        var newRot = math.mul(_mmTransformOriginRot, localSpaceRot);
+        var newPos = _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos;
+        var newRot = _mmTransformOriginRot * localSpaceRot;
 
         Velocity = ((float3)SkeletonTransforms[0].position - currentPos) / Time.deltaTime;
         AngularVelocity = MathExtensions.AngularVelocity(
@@ -638,7 +638,7 @@ public class MotionMatchingController : MonoBehaviour
     /// Adds an offset to the current transform space (useful to move the character to a different position)
     /// Simply changing the transform won't work because motion matching applies root motion based on the current motion matching search space
     /// </summary>
-    public void SetPosAdjustment(float3 posAdjustment)
+    public void SetPosAdjustment(Vector3 posAdjustment)
     {
         _mmTransformOriginPos += posAdjustment;
     }
@@ -647,9 +647,9 @@ public class MotionMatchingController : MonoBehaviour
     /// Adds a rot offset to the current transform space (useful to rotate the character to a different direction)
     /// Simply changing the transform won't work because motion matching applies root motion based on the current motion matching search space
     /// </summary>
-    public void SetRotAdjustment(quaternion rotAdjustment)
+    public void SetRotAdjustment(Quaternion rotAdjustment)
     {
-        _mmTransformOriginRot = math.mul(rotAdjustment, _mmTransformOriginRot);
+        _mmTransformOriginRot = rotAdjustment * _mmTransformOriginRot;
     }
 
     public void SetCurrentFrame(int frame)
@@ -788,7 +788,7 @@ public class MotionMatchingController : MonoBehaviour
             futurePose.JointLocalPositions[0] - _animationSpaceOriginPos);
         var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.JointLocalRotations[0]);
         // local space to world space
-        var simulationBonePos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
+        var simulationBonePos = _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos;
         var simulationBoneRot = math.mul(_mmTransformOriginRot, localSpaceRot);
 
         var simulationBoneTransform = Matrix4x4.TRS(simulationBonePos, simulationBoneRot, Vector3.one);

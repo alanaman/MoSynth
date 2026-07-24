@@ -23,10 +23,7 @@ public abstract class MoSynthStage
         return inSkeleton;
     }
     
-    public virtual void Init(MotionSynthesisComponent motionSynthesisComponent)
-    {
-        throw new System.NotImplementedException();
-    }
+    public abstract void Init(MotionSynthesisComponent motionSynthesisComponent);
 
     public virtual void OnValidate()
     {

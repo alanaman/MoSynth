@@ -7,8 +7,10 @@ namespace MotionMatching
 {
 public class MotionSynthesisComponent : MonoBehaviour
 {
-    public PoseVector CurrentPose;
+    // TODO: remove. shouldn't be coupled to MotionMatchingData
+    public MotionMatchingData mmData;
     
+    public PoseVector CurrentPose;
     
     Skeleton skeleton;
     public Skeleton Skeleton => skeleton;
@@ -21,6 +23,10 @@ public class MotionSynthesisComponent : MonoBehaviour
     
     // TODO: remove?
     private Animator _animator;
+    
+    [SerializeField]
+    [Tooltip("The avatar that maps from mecanim template to character tranforms.")]
+    private Avatar avatar;
     
     [SerializeReference] [SubclassSelector] public List<MoSynthStage> stages;
 
@@ -38,8 +44,9 @@ public class MotionSynthesisComponent : MonoBehaviour
             skeleton = stage.GetSkeleton(skeleton);
         }
 
-        InitSkeletonTransforms();
+        InitSkeletonTransformsArray();
         InitCurrentPose();
+        ApplyTransformOffsetsFromSkeleton();
 
         foreach (var stage in stages)
         {
@@ -47,7 +54,8 @@ public class MotionSynthesisComponent : MonoBehaviour
         }
     }
 
-    private void InitSkeletonTransforms()
+
+    private void InitSkeletonTransformsArray()
     {
         var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
         // +1 for SimulationBone
@@ -56,6 +64,23 @@ public class MotionSynthesisComponent : MonoBehaviour
         for (int i = 0; i < bodyJoints.Length; i++)
         {
             skeletonTransforms[i + 1] = _animator.GetBoneTransform(bodyJoints[i]);
+        }
+    }
+    
+    private void ApplyTransformOffsetsFromSkeleton()
+    {
+        var poseSet = mmData.GetOrImportPoseSet();
+        
+        var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
+        var templateSkeleton = _animator.avatar.humanDescription.skeleton;
+        for (int i = 0; i < bodyJoints.Length; i++)
+        {
+            var skeletonTransform = _animator.GetBoneTransform(bodyJoints[i]);
+            var targetJointIndex = Array.FindIndex(templateSkeleton, bone => bone.name == skeletonTransform.name);
+            var skeletonBone = templateSkeleton[targetJointIndex];
+            // var skeletonJoint = poseSet.Skeleton.Joints[i+1];
+            
+            skeletonTransform.localPosition = skeletonBone.position;
         }
     }
 
@@ -77,8 +102,7 @@ public class MotionSynthesisComponent : MonoBehaviour
 
     void InitCurrentPose()
     {
-        var numJoints = skeleton.Joints.Count + 1;
-        CurrentPose = new PoseVector(numJoints);
+        CurrentPose = new PoseVector(skeleton.Joints.Count);
         
         for (var i = 0; i < skeletonTransforms.Length; i++)
         {
@@ -109,8 +133,9 @@ public class MotionSynthesisComponent : MonoBehaviour
         
         for (int i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
         {
-            CurrentPose.JointLocalAngularVelocities[i] = math.Euler(math.mul(skeletonTransforms[0].localRotation, CurrentPose.JointLocalRotations[i]));
-            CurrentPose.JointLocalVelocities[i] = (float3)skeletonTransforms[0].localPosition - CurrentPose.JointLocalPositions[i];
+            var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
+            CurrentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
+            CurrentPose.JointLocalVelocities[i] = skeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
         }
         
         CurrentPose.JointLocalPositions[0] = skeletonTransforms[0].localPosition;
@@ -132,25 +157,24 @@ public class MotionSynthesisComponent : MonoBehaviour
     private void ApplyPoseToSkeletonTransforms(PoseVector pose)
     {
         // Motion
-        if (rootPositionsMask)
-        {
-            // Motion Matching Root Motion + Floor Height
-            Vector3 simulationBone = pose.JointLocalPositions[0];
-            // simulationBone.y = _floorHeight;
-            transform.position = simulationBone;
-        }
+        // if (rootPositionsMask)
+        // {
+        //     // Motion Matching Root Motion + Floor Height
+        //     Vector3 simulationBone = pose.JointLocalPositions[0];
+        //     // simulationBone.y = _floorHeight;
+        //     transform.position = simulationBone;
+        // }
 
         var bodyJoints = MotionMatchingSkinnedMeshRenderer.BodyJoints;
-        for (int i = 0; i < bodyJoints.Length; i++)
+        for (int i = 1; i < skeleton.Joints.Count; i++)
         {
-            skeletonTransforms[i + 1].rotation = pose.JointLocalRotations[i + 1];
+            skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
         }
 
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
-        // Hips
         if (rootPositionsMask)
         {
-            skeletonTransforms[0].position = pose.JointLocalPositions[1];
+            skeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
         }
 
         // if (blendPoses && _previousHipsPositionMask != rootPositionsMask)
@@ -202,7 +226,7 @@ public class MotionSynthesisComponent : MonoBehaviour
     {
         foreach (var stage in stages)
         {
-            stage.OnValidate();
+            stage?.OnValidate();
         }
     }
 }

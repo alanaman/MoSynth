@@ -19,6 +19,12 @@ namespace MotionMatching
             writer.Write(value.y);
             writer.Write(value.z);
         }
+        public static void Write(BinaryWriter writer, Vector3 value)
+        {
+            writer.Write(value.x);
+            writer.Write(value.y);
+            writer.Write(value.z);
+        }
         public static void WriteFloat4(BinaryWriter writer, float4 value)
         {
             writer.Write(value.x);
@@ -40,9 +46,26 @@ namespace MotionMatching
                 WriteFloat3(writer, value);
             }
         }
+        
+        public static void Write(BinaryWriter writer, Vector3[] array)
+        {
+            foreach (var value in array)
+            {
+                Write(writer, value);
+            }
+        }
+        
+        
         public static void WriteQuaternionArray(BinaryWriter writer, quaternion[] array)
         {
             foreach (quaternion value in array)
+            {
+                WriteQuaternion(writer, value);
+            }
+        }
+        public static void WriteQuaternionArray(BinaryWriter writer, Quaternion[] array)
+        {
+            foreach (var value in array)
             {
                 WriteQuaternion(writer, value);
             }
