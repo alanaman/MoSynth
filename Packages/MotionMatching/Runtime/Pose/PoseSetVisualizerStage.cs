@@ -5,12 +5,11 @@ using UnityEngine;
 namespace MotionMatching
 {
 [Serializable]
-public class PoseVisualizerStage : MoSynthStage
+public class PoseSetVisualizerStage : MoSynthStage
 {
     private MotionSynthesisComponent _owner;
     public MotionMatchingData mmData;
     private PoseSet _poseSet;
-    public bool lockFPS = true;
     
     public int CurrentFrame { get; private set; }
     private float _currentFrameTime;
@@ -25,26 +24,6 @@ public class PoseVisualizerStage : MoSynthStage
     {
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();
-        // FPS
-        var databaseFrameTime = _poseSet.FrameTime;
-        var databaseFrameRate = Mathf.RoundToInt(1.0f / databaseFrameTime);
-        if (lockFPS)
-        {
-            Application.targetFrameRate = databaseFrameRate;
-            Debug.Log(
-                "[Motion Matching] Updated Target FPS: " +
-                Application.targetFrameRate);
-        }
-        else
-        {
-            Application.targetFrameRate = -1;
-            Debug.LogWarning(
-                "[Motion Matching] LockFPS is not set. Motion Matching" +
-                " will malfunction if the application frame rate is higher" +
-                " than the animation database.");
-        }
-
-        
     }
 
     public override void Apply(PoseVector pose, float deltaTime)

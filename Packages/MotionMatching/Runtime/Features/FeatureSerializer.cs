@@ -29,7 +29,7 @@ namespace MotionMatching
                     // Serialize Number Features Dimension
                     writer.Write((uint)featureSet.FeatureSize);
                     // Serialize Number Features
-                    writer.Write((uint)(featureSet.NumberTrajectoryFeatures + featureSet.NumberPoseFeatures + featureSet.NumberEnvironmentFeatures));
+                    writer.Write((uint)(featureSet.NumberTrajectoryFeatures + featureSet.PoseFeatureCount + featureSet.NumberEnvironmentFeatures));
 
                     // Serialize Mean & StandardDeviation
                     for (int i = 0; i < featureSet.FeatureStaticSize; ++i)

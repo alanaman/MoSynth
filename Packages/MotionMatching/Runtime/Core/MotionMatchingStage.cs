@@ -14,7 +14,6 @@ public class MotionMatchingStage : MoSynthStage
 {
     private MotionSynthesisComponent _owner;
     
-    // TODO: rename: MM shouldn't be in the name?
     public MotionMatchingCharacterController characterController;
     
     
@@ -34,7 +33,7 @@ public class MotionMatchingStage : MoSynthStage
     /// <summary>
     /// The time left until the next search.
     /// </summary>
-    private float _searchTimeLeft = 0.0f;
+    private float _searchTimeLeft;
 
     [Tooltip("How important is the trajectory (future positions + future directions)")]
     [UnityEngine.Range(0.0f, 1.0f)]
@@ -65,6 +64,14 @@ public class MotionMatchingStage : MoSynthStage
     public int LastMmSearchFrame { get; private set; }
 
     private NativeArray<bool> _tagMask;
+
+    // This variable is used to correct the root motion when we switch to a 
+    // different frame in the PoseSet
+    // TODO:
+    // it is a bit confusing. either use separate channel for root motion
+    // add a separate root correction stage and pass a Tag down the pipeline
+    // to indicate when to do the correction
+    private bool _hasSwitchedFrames;
     
     private float3 _animationSpaceOriginPos;
     private quaternion _animationSpaceOriginRot;
@@ -83,7 +90,8 @@ public class MotionMatchingStage : MoSynthStage
     /// </summary>
     private float _currentFrameTime;
 
-    
+    private float4x4 _animToWorld;
+
 
     // Contact TODO: this frame? prev frame ?
     public bool IsLeftFootContact { get; private set; }
@@ -102,23 +110,7 @@ public class MotionMatchingStage : MoSynthStage
         
         // FPS
         var databaseFrameTime = _poseSet.FrameTime;
-        var databaseFrameRate = Mathf.RoundToInt(1.0f / databaseFrameTime);
-        if (lockFPS)
-        {
-            Application.targetFrameRate = databaseFrameRate;
-            Debug.Log(
-                "[Motion Matching] Updated Target FPS: " +
-                Application.targetFrameRate);
-        }
-        else
-        {
-            Application.targetFrameRate = -1;
-            Debug.LogWarning(
-                "[Motion Matching] LockFPS is not set. Motion Matching" +
-                " will malfunction if the application frame rate is higher" +
-                " than the animation database.");
-        }
-        
+
         var numberFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count + mmData.EnvironmentFeatures.Count;
         
         Assert.IsTrue(
@@ -151,7 +143,8 @@ public class MotionMatchingStage : MoSynthStage
                 _animationSpaceOriginPos = pose.JointLocalPositions[0];
                 _animationSpaceOriginRot = pose.JointLocalRotations[0];
                 _inverseAnimationSpaceOriginRot = math.inverse(_animationSpaceOriginRot);
-                
+
+                _hasSwitchedFrames = true;
                 // TODO: is this needed?
                 // _mmTransformOriginPos = skeletonTransforms[0].position;
                 // _mmTransformOriginRot = skeletonTransforms[0].rotation;
@@ -227,7 +220,11 @@ public class MotionMatchingStage : MoSynthStage
             
             if(isCurrentFrameValid && bestFrame == -1) bestFrame = CurrentFrame;
             Debug.Assert(bestFrame != -1, "Motion Matching is not able to find any valid pose. Maybe the motion database is empty or the query tag used produces an empty set of poses?");
-            
+
+            if (bestFrame != CurrentFrame)
+            {
+                _hasSwitchedFrames = true;
+            }
             
             CurrentFrame = bestFrame;
             
@@ -240,7 +237,25 @@ public class MotionMatchingStage : MoSynthStage
         CurrentFrame = (int)math.floor(_currentFrameTime);
         
         _poseSet.GetPose(CurrentFrame, out var newPose);
+
+        if (_hasSwitchedFrames)
+        {
+            // make sure the root doesn't jump around due to switching frames
+            var animSpacePos = newPose.JointLocalPositions[0];
+            var animSpaceRot = newPose.JointLocalRotations[0];
+
+            var animSpaceTransform = new float4x4(animSpaceRot, animSpacePos);
+            var worldTransformAtLastJump= new float4x4(_owner.transform.rotation, _owner.transform.position);
+            
+            _animToWorld = math.mul(worldTransformAtLastJump, math.inverse(animSpaceTransform));
+            
+            _hasSwitchedFrames = false;
+        }
+        
         pose.CopyFrom(newPose);
+        
+        pose.JointLocalPositions[0] = math.transform(_animToWorld, pose.JointLocalPositions[0]);
+        pose.JointLocalRotations[0] = math.mul(new quaternion(_animToWorld), pose.JointLocalRotations[0]);
     }
     
     [Pure]
@@ -265,43 +280,53 @@ public class MotionMatchingStage : MoSynthStage
         foreach (var featureDef in mmData.TrajectoryFeatures)
         {
             var featureSize = featureDef.GetSize();
-            var feature = queryFeatureSpan.Slice(offset, featureSize);
             for (var p = 0; p < featureDef.FramesPrediction.Length; ++p)
             {
+                var feature = queryFeatureSpan.Slice(offset, featureSize);
                 characterController.GetTrajectoryFeature(featureDef, p, simulationBone, feature);
                 offset += featureSize;
             }
         }
+        
         var featureSet = mmData.GetOrImportFeatureSet();
+        featureSet.NormalizeTrajectory(queryFeatureSpan);
 
-        // Pose features
-        for (int i = 0; i < featureSet.NumberPoseFeatures; i++)
-        {
-            var poseFeatureDef = mmData.PoseFeatures[i];
-            var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
-            var currPose = _owner.CurrentPose;
-            var skeleton = _poseSet.Skeleton;
-            var joint = skeleton.Find(poseFeatureDef.Bone);
-            if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
-            {
-                var feature = currPose.GetHipSpacePosition(skeleton, joint);
-                
-                queryFeatureSpan[featureOffset + 0] = feature.x;
-                queryFeatureSpan[featureOffset + 1] = feature.y;
-                queryFeatureSpan[featureOffset + 2] = feature.z;
-            }
-            else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
-            {
-                var feature = currPose.GetCharacterSpaceVelocity(skeleton, joint);
-                queryFeatureSpan[featureOffset + 0] = feature.x;
-                queryFeatureSpan[featureOffset + 1] = feature.y;
-                queryFeatureSpan[featureOffset + 2] = feature.z;
-            }
-            else
-            {
-                throw new Exception("Unknown PoseFeature.Type: " + poseFeatureDef.FeatureType);
-            }
-        }
+        // TODO:
+        // The currentPose of the character could be quite different from the 
+        // one poses stored in mmData due to retargeting. 
+        // We can use the currentPose if we implement a backpropagation
+        // that can inverse the retargeting.
+        
+        // // Pose features
+        // for (int i = 0; i < featureSet.NumberPoseFeatures; i++)
+        // {
+        //     var poseFeatureDef = mmData.PoseFeatures[i];
+        //     var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
+        //     var currPose = _owner.CurrentPose;
+        //     var skeleton = _poseSet.Skeleton;
+        //     var joint = skeleton.Find(poseFeatureDef.Bone);
+        //     if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
+        //     {
+        //         var feature = currPose.GetRootSpacePosition(skeleton, joint);
+        //         
+        //         queryFeatureSpan[featureOffset + 0] = feature.x;
+        //         queryFeatureSpan[featureOffset + 1] = feature.y;
+        //         queryFeatureSpan[featureOffset + 2] = feature.z;
+        //     }
+        //     else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
+        //     {
+        //         var feature = currPose.GetRootSpaceVelocity(skeleton, joint);
+        //         queryFeatureSpan[featureOffset + 0] = feature.x;
+        //         queryFeatureSpan[featureOffset + 1] = feature.y;
+        //         queryFeatureSpan[featureOffset + 2] = feature.z;
+        //     }
+        //     else
+        //     {
+        //         throw new Exception("Unknown PoseFeature.Type: " + poseFeatureDef.FeatureType);
+        //     }
+        // }
+        
+        featureSet.GetPoseFeatures(queryFeatureSpan.Slice(offset, featureSet.PoseFloatCount), CurrentFrame);
         
         // Environment features
         if (featureSet.EnvironmentOffset.Length > 0)
@@ -319,7 +344,7 @@ public class MotionMatchingStage : MoSynthStage
             }
         }
         
-        featureSet.NormalizeFeatureVector(_queryFeatureVector);
+        // featureSet.NormalizeFeatureVector(_queryFeatureVector);
     }
     
     /// <summary>

@@ -9,6 +9,7 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
+    // TODO: rename: MM shouldn't be in the name?
     public abstract class MotionMatchingCharacterController : MonoBehaviour
     {
         // TODO: Create a OnValidate() (other name because it will collide with Unity's

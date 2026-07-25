@@ -26,8 +26,9 @@ namespace MotionMatching
         private readonly int[] TrajectoryOffset; // Size: NumberTrajectoryFeatures. Offset of the trajectory feature in the feature vector (e.g. {0, 6}, means the position feature is at the beginning of the feature vector, and the direction feature starts at the sixth float)
 
         // Pose Features
-        public int NumberPoseFeatures { get; private set; } // Number of different pose features (e.g. 3 = leftFootPosition, leftFootVelocity, hipsVelocity)
-        public const int NumberFloatsPose = 3; // Number of floats per pose feature (e.g. 3 = float3)
+        public int PoseFeatureCount { get; private set; } // Number of different pose features (e.g. 3 = leftFootPosition, leftFootVelocity, hipsVelocity)
+        public const int FloatsPerPoseFeature = 3; // Number of floats per pose feature (e.g. 3 = float3)
+        public int PoseFloatCount => PoseFeatureCount * FloatsPerPoseFeature;
         
         /// <summary>
         /// Offset of the pose feature in the feature vector.
@@ -83,8 +84,8 @@ namespace MotionMatching
 
             // Pose Features
             PoseOffset = offset;
-            NumberPoseFeatures = mmData.PoseFeatures.Count;
-            offset += NumberPoseFeatures * NumberFloatsPose; // + Pose
+            PoseFeatureCount = mmData.PoseFeatures.Count;
+            offset += PoseFloatCount; // + Pose
 
             FeatureStaticSize = offset;
 
@@ -115,6 +116,20 @@ namespace MotionMatching
             for (var i = 0; i < FeatureSize; i++)
             {
                 feature[i] = Features[featureIndex * FeatureSize + i];
+            }
+        }
+        
+        public void GetPoseFeatures(Span<float> poseFeatures, int frameIndex, bool denormalize = false)
+        {
+            Debug.Assert(poseFeatures.Length == PoseFloatCount, "Feature vector has wrong size");
+            
+            for (var i = 0; i < PoseFloatCount; i++)
+            {
+                poseFeatures[i] = Features[frameIndex * FeatureSize + PoseOffset + i];
+                if (denormalize)
+                {
+                    poseFeatures[i] = poseFeatures[i] * StandardDeviation[PoseOffset + i] + Mean[PoseOffset + i];
+                }
             }
         }
 
@@ -181,7 +196,7 @@ namespace MotionMatching
         }
         public float3 GetPoseFeature(int featureIndex, int poseFeatureIndex, bool denormalize = false)
         {
-            var featureOffset = PoseOffset + poseFeatureIndex * NumberFloatsPose;
+            var featureOffset = PoseOffset + poseFeatureIndex * FloatsPerPoseFeature;
             var startIndex = featureIndex * FeatureSize + featureOffset;
             var x = Features[startIndex];
             var y = Features[startIndex + 1];
@@ -348,7 +363,7 @@ namespace MotionMatching
         /// <summary>
         /// Normalizes the trajectory features (pose features remaing untouched)
         /// </summary>
-        public void NormalizeTrajectory(NativeArray<float> featureVector)
+        public void NormalizeTrajectory(Span<float> featureVector)
         {
             Debug.Assert(Mean != null, "Mean is not initialized");
             Debug.Assert(StandardDeviation != null, "StandardDeviation is not initialized");
@@ -479,21 +494,21 @@ namespace MotionMatching
                     StandardDeviation[offset + j] = std;
                 }
             }
-            for (var d = 0; d < NumberPoseFeatures; d++)
+            for (var d = 0; d < PoseFeatureCount; d++)
             {
-                var offset = PoseOffset + d * NumberFloatsPose;
+                var offset = PoseOffset + d * FloatsPerPoseFeature;
                 float std = 0;
-                for (var j = 0; j < NumberFloatsPose; j++)
+                for (var j = 0; j < FloatsPerPoseFeature; j++)
                 {
                     std += math.sqrt(variance[offset + j]);
                 }
-                std /= NumberFloatsPose;
+                std /= FloatsPerPoseFeature;
                 Debug.Assert(std > 0, "Standard deviation is zero, feature with no variation is probably a bug");
                 if (std <= 0)
                 {
                     std = 1.0f;
                 }
-                for (var j = 0; j < NumberFloatsPose; j++)
+                for (var j = 0; j < FloatsPerPoseFeature; j++)
                 {
                     StandardDeviation[offset + j] = std;
                 }
@@ -522,7 +537,7 @@ namespace MotionMatching
                 }
                 i += 1;
             }
-            var jointsPose = new Joint[NumberPoseFeatures];
+            var jointsPose = new Joint[PoseFeatureCount];
             i = 0;
             foreach (var poseFeature in mmData.PoseFeatures)
             {
@@ -592,10 +607,10 @@ namespace MotionMatching
             }
 
             // Pose Features -------------------------------------------------------------
-            for (var i = 0; i < NumberPoseFeatures; i++)
+            for (var i = 0; i < PoseFeatureCount; i++)
             {
                 var poseFeature = mmData.PoseFeatures[i];
-                var featureOffset = featureIndex + PoseOffset + i * NumberFloatsPose;
+                var featureOffset = featureIndex + PoseOffset + i * FloatsPerPoseFeature;
                 float3 feature = new();
                 switch (poseFeature.FeatureType)
                 {

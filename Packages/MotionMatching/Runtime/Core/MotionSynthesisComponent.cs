@@ -26,10 +26,11 @@ public class MotionSynthesisComponent : MonoBehaviour
     private Animator _animator;
     
     [SerializeField]
-    [Tooltip("The avatar that maps from mecanim template to character tranforms.")]
+    [Tooltip("The avatar that maps from mecanim template to character transforms.")]
     private Avatar avatar;
     
-    [SerializeReference] [SubclassSelector] public List<MoSynthStage> stages;
+    [SerializeReference] [SubclassSelector]
+    public List<MoSynthStage> stages = new();
 
     [Tooltip("Whether to animate the root position by Motion Matching or not.")]
     // maybe change this to 'root motion'?
@@ -156,7 +157,7 @@ public class MotionSynthesisComponent : MonoBehaviour
         {
             var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
             CurrentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
-            CurrentPose.JointLocalVelocities[i] = skeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
+            CurrentPose.JointLocalVelocities[i] = (float3)skeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
         }
         
         CurrentPose.JointLocalPositions[0] = skeletonTransforms[0].localPosition;
@@ -186,7 +187,7 @@ public class MotionSynthesisComponent : MonoBehaviour
         //     transform.position = simulationBone;
         // }
 
-        for (var i = 1; i < skeleton.Joints.Count; i++)
+        for (var i = 0; i < skeleton.Joints.Count; i++)
         {
             skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
         }

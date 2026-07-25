@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
@@ -25,7 +24,7 @@ namespace MotionMatching
             // Write Skeleton
             using (var stream = File.Open(Path.Combine(path, fileName + ".mmskeleton"), FileMode.Create))
             {
-                using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8))
+                using (var writer = new BinaryWriter(stream, Encoding.UTF8))
                 {
                     // Write Number Joints
                     writer.Write((uint)poseSet.Skeleton.Joints.Count);
@@ -35,7 +34,7 @@ namespace MotionMatching
                         writer.Write(joint.name);
                         writer.Write((uint)joint.index);
                         writer.Write((uint)joint.parentIndex);
-                        WriteFloat3(writer, (float3)joint.localOffset);
+                        WriteFloat3(writer, joint.localOffset);
                         writer.Write((uint)joint.type);
                     }
                 }
@@ -64,10 +63,10 @@ namespace MotionMatching
                     for (int i = 0; i < poseSet.NumberPoses; ++i)
                     {
                         poseSet.GetPose(i, out PoseVector pose);
-                        Write(writer, pose.JointLocalPositions);
+                        WriteFloat3Array(writer, pose.JointLocalPositions);
                         WriteQuaternionArray(writer, pose.JointLocalRotations);
-                        Write(writer, pose.JointLocalVelocities);
-                        Write(writer, pose.JointLocalAngularVelocities);
+                        WriteFloat3Array(writer, pose.JointLocalVelocities);
+                        WriteFloat3Array(writer, pose.JointLocalAngularVelocities);
                         writer.Write(pose.LeftFootContact ? 1u : 0u);
                         writer.Write(pose.RightFootContact ? 1u : 0u);
                     }
@@ -168,10 +167,10 @@ namespace MotionMatching
                         // --- Read JointLocalPositions ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> positionsSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalPositions = new Vector3[nJoints];
+                        pose.JointLocalPositions = new float3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalPositions[j] = new Vector3(
+                            pose.JointLocalPositions[j] = new float3(
                                 positionsSpan[j * 3],
                                 positionsSpan[j * 3 + 1],
                                 positionsSpan[j * 3 + 2]
@@ -181,7 +180,7 @@ namespace MotionMatching
                         // --- Read JointLocalRotations ---
                         reader.Read(quaternionBuffer, 0, quaternionBufferSize);
                         Span<float> rotationsSpan = MemoryMarshal.Cast<byte, float>(quaternionBuffer);
-                        pose.JointLocalRotations = new Quaternion[nJoints];
+                        pose.JointLocalRotations = new quaternion[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
                             pose.JointLocalRotations[j] = new quaternion(
@@ -195,10 +194,10 @@ namespace MotionMatching
                         // --- Read JointLocalVelocities ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> velocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalVelocities = new Vector3[nJoints];
+                        pose.JointLocalVelocities = new float3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalVelocities[j] = new Vector3(
+                            pose.JointLocalVelocities[j] = new float3(
                                 velocitiesSpan[j * 3],
                                 velocitiesSpan[j * 3 + 1],
                                 velocitiesSpan[j * 3 + 2]
@@ -208,10 +207,10 @@ namespace MotionMatching
                         // --- Read JointLocalAngularVelocities ---
                         reader.Read(float3Buffer, 0, float3BufferSize);
                         Span<float> angularVelocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                        pose.JointLocalAngularVelocities = new Vector3[nJoints];
+                        pose.JointLocalAngularVelocities = new float3[nJoints];
                         for (int j = 0; j < nJoints; j++)
                         {
-                            pose.JointLocalAngularVelocities[j] = new Vector3(
+                            pose.JointLocalAngularVelocities[j] = new float3(
                                 angularVelocitiesSpan[j * 3],
                                 angularVelocitiesSpan[j * 3 + 1],
                                 angularVelocitiesSpan[j * 3 + 2]

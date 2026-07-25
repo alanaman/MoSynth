@@ -265,7 +265,7 @@ public class PoseSet
     /// worldJoints has size Skeleton.Joints.Count
     /// </summary>
     public NativeArray<float3> GetWorldPositions(PoseVector pose, quaternion inverseRotAnimationSpace,
-        Vector3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
+        float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
     {
 
         // animation space to local space

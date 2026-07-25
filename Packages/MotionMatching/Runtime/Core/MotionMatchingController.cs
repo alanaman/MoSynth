@@ -62,7 +62,7 @@ public class MotionMatchingController : MonoBehaviour
     /// </summary>
     public Transform[] SkeletonTransforms { get; private set; }
 
-    public NativeArray<float> QueryFeature => _queryFeature;
+    internal ReadOnlySpan<float> QueryFeature => _queryFeature;
 
     public NativeArray<float> FeaturesWeightsNativeArray { get; private set; }
     
@@ -76,18 +76,18 @@ public class MotionMatchingController : MonoBehaviour
     public int LastMmSearchFrame { get; private set; } 
     public NativeArray<bool> TagMask { get; private set; }
 
-    private Vector3 _animationSpaceOriginPos;
-    private Quaternion _animationSpaceOriginRot;
-    private Quaternion _inverseAnimationSpaceOriginRot;
+    private float3 _animationSpaceOriginPos;
+    private quaternion _animationSpaceOriginRot;
+    private quaternion _inverseAnimationSpaceOriginRot;
     
     /// <summary>
     /// Position of the transform right after motion matching search
     /// </summary>
-    private Vector3 _mmTransformOriginPos;
+    private float3 _mmTransformOriginPos;
     /// <summary>
     /// Rotation of the transform right after motion matching search
     /// </summary>
-    private Quaternion _mmTransformOriginRot; 
+    private quaternion _mmTransformOriginRot; 
     /// <summary>
     /// Current frame index as float to keep track of variable frame rate
     /// </summary>
@@ -293,9 +293,15 @@ public class MotionMatchingController : MonoBehaviour
         UpdateAndGetFeatureWeights();
 
         // Init Query Vector
-        // TODO: here we are using using the features of the current motion-matched frame.
+        // TODO:
+        // here we are using using the features of the current motion-matched frame.
         // should we use the current character skeleton pose instead?
-        FeatureSet.GetFeature(QueryFeature, CurrentFrame);
+        // The currentPose of the character could be quite different from the 
+        // one poses stored in mmData due to retargeting. 
+        // We can use the currentPose if we implement a backpropagation
+        // that can inverse the retargeting.
+        
+        FeatureSet.GetFeature(_queryFeature, CurrentFrame);
         FillQueryVector();
 
         // Get next feature vector (when doing motion-matching search, they need less error than this)
@@ -307,7 +313,7 @@ public class MotionMatchingController : MonoBehaviour
             // the pose is the same... the distance is only the trajectory
             for (var j = 0; j < FeatureSet.PoseOffset; j++)
             {
-                var diff = FeatureSet.GetFeatures()[CurrentFrame * FeatureSet.FeatureSize + j] - QueryFeature[j];
+                var diff = FeatureSet.GetFeatures()[CurrentFrame * FeatureSet.FeatureSize + j] - _queryFeature[j];
                 currentDistance += diff * diff * FeaturesWeightsNativeArray[j];
             }
         }
@@ -337,7 +343,7 @@ public class MotionMatchingController : MonoBehaviour
         }
 
         // Normalize (only trajectory... because current FeatureVector is already normalized)
-        FeatureSet.NormalizeTrajectory(QueryFeature);
+        FeatureSet.NormalizeTrajectory(_queryFeature);
 
         if (FeatureSet.EnvironmentOffset.Length > 0)
         {
@@ -375,13 +381,13 @@ public class MotionMatchingController : MonoBehaviour
         float3 previousPosition = SkeletonTransforms[0].position;
         quaternion previousRotation = SkeletonTransforms[0].rotation;
         // animation space to local space
-        var localSpacePos = _inverseAnimationSpaceOriginRot * 
-                            (pose.JointLocalPositions[0] - _animationSpaceOriginPos);
-        var localSpaceRot = _inverseAnimationSpaceOriginRot * pose.JointLocalRotations[0];
+        var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot, 
+                            (pose.JointLocalPositions[0] - _animationSpaceOriginPos));
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.JointLocalRotations[0]);
         
         // local space to world space
         SkeletonTransforms[0].SetPositionAndRotation(
-            _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos,
+            math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos,
             math.mul(_mmTransformOriginRot, localSpaceRot));
         // update velocity and angular velocity
         Velocity = ((float3)SkeletonTransforms[0].position - previousPosition) / Time.deltaTime;
@@ -417,8 +423,8 @@ public class MotionMatchingController : MonoBehaviour
         float3 currentLeftToesPosition = SkeletonTransforms[LeftToesIndex].position;
         float3 currentRightToesPosition = SkeletonTransforms[RightToesIndex].position;
         // Compute input contact position velocity
-        var currentLeftToesVelocity = (currentLeftToesPosition - (float3)LeftToesContactTarget) / Time.deltaTime;
-        var currentRightToesVelocity = (currentRightToesPosition - (float3)RightToesContactTarget) / Time.deltaTime;
+        var currentLeftToesVelocity = (currentLeftToesPosition - LeftToesContactTarget) / Time.deltaTime;
+        var currentRightToesVelocity = (currentRightToesPosition - RightToesContactTarget) / Time.deltaTime;
         LeftToesContactTarget = currentLeftToesPosition;
         RightToesContactTarget = currentRightToesPosition;
 
@@ -567,8 +573,8 @@ public class MotionMatchingController : MonoBehaviour
         float3 currentPos = SkeletonTransforms[0].position;
         quaternion currentRot = SkeletonTransforms[0].rotation;
         // local space to world space
-        var newPos = _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos;
-        var newRot = _mmTransformOriginRot * localSpaceRot;
+        var newPos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
+        var newRot = math.mul(_mmTransformOriginRot, localSpaceRot);
 
         Velocity = ((float3)SkeletonTransforms[0].position - currentPos) / Time.deltaTime;
         AngularVelocity = MathExtensions.AngularVelocity(
@@ -638,7 +644,7 @@ public class MotionMatchingController : MonoBehaviour
     /// Adds an offset to the current transform space (useful to move the character to a different position)
     /// Simply changing the transform won't work because motion matching applies root motion based on the current motion matching search space
     /// </summary>
-    public void SetPosAdjustment(Vector3 posAdjustment)
+    public void SetPosAdjustment(float3 posAdjustment)
     {
         _mmTransformOriginPos += posAdjustment;
     }
@@ -769,7 +775,7 @@ public class MotionMatchingController : MonoBehaviour
         _isDestroyed = true;
         mmData.Dispose();
         mmSearch.Dispose();
-        if (QueryFeature.IsCreated) QueryFeature.Dispose();
+        if (_queryFeature.IsCreated) _queryFeature.Dispose();
         if (FeaturesWeightsNativeArray.IsCreated) FeaturesWeightsNativeArray.Dispose();
         if (TagMask.IsCreated) TagMask.Dispose();
     }
@@ -788,7 +794,7 @@ public class MotionMatchingController : MonoBehaviour
             futurePose.JointLocalPositions[0] - _animationSpaceOriginPos);
         var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.JointLocalRotations[0]);
         // local space to world space
-        var simulationBonePos = _mmTransformOriginRot * localSpacePos + _mmTransformOriginPos;
+        var simulationBonePos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
         var simulationBoneRot = math.mul(_mmTransformOriginRot, localSpaceRot);
 
         var simulationBoneTransform = Matrix4x4.TRS(simulationBonePos, simulationBoneRot, Vector3.one);

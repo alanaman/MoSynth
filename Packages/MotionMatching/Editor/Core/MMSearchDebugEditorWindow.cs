@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -34,16 +35,16 @@ namespace MotionMatching
                 EditorGUILayout.HelpBox("Please select a MotionMatchingController.", MessageType.Info);
                 return;
             }
-            MotionMatchingData mmData = mmController.mmData;
-            FeatureSet featureSet = mmController.FeatureSet;
+            var mmData = mmController.mmData;
+            var featureSet = mmController.FeatureSet;
 
             GUI.enabled = false;
             EditorGUILayout.IntField("Last Frame", mmController.LastMmSearchFrame);
             GUI.enabled = true;
-            int currentFrame = EditorGUILayout.IntField("Current Frame", mmController.CurrentFrame);
+            var currentFrame = EditorGUILayout.IntField("Current Frame", mmController.CurrentFrame);
             if (currentFrame != mmController.CurrentFrame) mmController.SetCurrentFrame(currentFrame);
 
-            NativeArray<float> currentFeature = new NativeArray<float>(featureSet.FeatureSize, Allocator.Temp);
+            var currentFeature = new NativeArray<float>(featureSet.FeatureSize, Allocator.Temp);
             featureSet.GetFeature(currentFeature, currentFrame);
 
             GroupCurrent = EditorGUILayout.BeginFoldoutHeaderGroup(GroupCurrent, "Current");
@@ -53,7 +54,7 @@ namespace MotionMatching
             }
             EditorGUILayout.EndFoldoutHeaderGroup();
 
-            NativeArray<float> queryFeature = mmController.QueryFeature;
+            var queryFeature = mmController.QueryFeature;
             GroupQuery = EditorGUILayout.BeginFoldoutHeaderGroup(GroupQuery, "Query");
             if (GroupQuery)
             {
@@ -64,11 +65,11 @@ namespace MotionMatching
             GroupDiff = EditorGUILayout.BeginFoldoutHeaderGroup(GroupDiff, "Diff");
             if (GroupDiff)
             {
-                NativeArray<float> featureWeights = mmController.UpdateAndGetFeatureWeights();
-                float sqrDistance = 0.0f;
-                for (int i = 0; i < featureSet.FeatureSize; ++i)
+                var featureWeights = mmController.UpdateAndGetFeatureWeights();
+                var sqrDistance = 0.0f;
+                for (var i = 0; i < featureSet.FeatureSize; ++i)
                 {
-                    float diff = currentFeature[i] - queryFeature[i];
+                    var diff = currentFeature[i] - queryFeature[i];
                     sqrDistance += diff * diff * featureWeights[i];
                     currentFeature[i] = diff * diff * featureWeights[i];
                 }
@@ -80,7 +81,7 @@ namespace MotionMatching
             currentFeature.Dispose();
         }
 
-        private void DisplayFeatureVector(NativeArray<float> vector, string name, MotionMatchingData mmData)
+        private void DisplayFeatureVector(ReadOnlySpan<float> vector, string name, MotionMatchingData mmData)
         {
             var style = new GUIStyle(GUI.skin.textField) { alignment = TextAnchor.MiddleLeft };
             GUILayout.ExpandWidth(false);

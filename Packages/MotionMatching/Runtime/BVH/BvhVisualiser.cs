@@ -1,4 +1,5 @@
 using System;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -12,26 +13,16 @@ public class BvhVisualiser : MonoBehaviour
     [FormerlySerializedAs("_animation")] public BvhAnimation bvhAnimation;
     public bool play;
     public float spheresRadius = 0.1f;
-    public bool lockFPS = true;
 
     private Transform[] _skeletonBoneTransforms;
     private Transform _skeletonRoot;
     private int _currentFrame;
+    private float _currentFrameTime;
 
     private void Awake()
     {
         if (!bvhAnimation) return;
         SetupSkeleton();
-
-        if (lockFPS)
-        {
-            Application.targetFrameRate = (int)(1.0f / bvhAnimation.FrameTime);
-            Debug.Log("[BVHDebug] Updated Target FPS: " + Application.targetFrameRate);
-        }
-        else
-        {
-            Application.targetFrameRate = -1;
-        }
     }
 
     private void SetupSkeleton()
@@ -46,24 +37,23 @@ public class BvhVisualiser : MonoBehaviour
     private void Update()
     {
         if (bvhAnimation == null) return;
-        if (play)
-        {
-            BvhAnimation.Frame frame = bvhAnimation.Frames[_currentFrame];
-            _skeletonBoneTransforms[0].localPosition = frame.rootMotion;
-            for (int i = 0; i < frame.localRotations.Length; i++)
-            {
-                _skeletonBoneTransforms[i].localRotation = frame.localRotations[i];
-            }
-            _currentFrame = (_currentFrame + 1) % bvhAnimation.Frames.Length;
-        }
-        else
+
+        if (!play) return;
+        
+        _currentFrameTime = _currentFrame + math.frac(_currentFrameTime);
+        _currentFrameTime += Time.deltaTime / bvhAnimation.FrameTime;
+        _currentFrame = (int)math.floor(_currentFrameTime);
+            
+        if (_currentFrame >= bvhAnimation.Frames.Length)
         {
             _currentFrame = 0;
-            _skeletonBoneTransforms[0].localPosition = Vector3.zero;
-            foreach (var t in _skeletonBoneTransforms)
-            {   
-                t.localRotation = Quaternion.identity;
-            }
+        }
+            
+        var frame = bvhAnimation.Frames[_currentFrame];
+        _skeletonBoneTransforms[0].localPosition = frame.rootMotion;
+        for (int i = 0; i < frame.localRotations.Length; i++)
+        {
+            _skeletonBoneTransforms[i].localRotation = frame.localRotations[i];
         }
     }
 
@@ -71,16 +61,6 @@ public class BvhVisualiser : MonoBehaviour
     {
         if(bvhAnimation == null) return;
         SetupSkeleton();
-        
-        if (lockFPS)
-        {
-            Application.targetFrameRate = (int)(1.0f / bvhAnimation.FrameTime);
-            Debug.Log("[BVHDebug] Updated Target FPS: " + Application.targetFrameRate);
-        }
-        else
-        {
-            Application.targetFrameRate = -1;
-        }
     }
     
     /// <summary>

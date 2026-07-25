@@ -71,10 +71,10 @@ public class Skeleton
         public string name;
         public int index;
         public int parentIndex; // The Root has ParentIndex = -1
-        public Vector3 localOffset;
+        public float3 localOffset;
         public HumanBodyBones type;
 
-        public Joint(string name, int index, int parentIndex, Vector3 localOffset)
+        public Joint(string name, int index, int parentIndex, float3 localOffset)
         {
             this.name = name;
             this.index = index;
@@ -83,7 +83,7 @@ public class Skeleton
             type = HumanBodyBones.LastBone;
         }
 
-        public Joint(string name, int index, int parentIndex, Vector3 localOffset, HumanBodyBones type)
+        public Joint(string name, int index, int parentIndex, float3 localOffset, HumanBodyBones type)
         {
             this.name = name;
             this.index = index;
@@ -95,7 +95,7 @@ public class Skeleton
         public bool Equals(Joint other)
         {
             return name == other.name && index == other.index && parentIndex == other.parentIndex &&
-                   localOffset == other.localOffset && type == other.type;
+                   localOffset.Equals(other.localOffset) && type == other.type;
         }
     }
 }
