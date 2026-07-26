@@ -270,13 +270,6 @@ public class MotionMatchingStage : MoSynthStage
         return sqrDistance;
     }
     
-    private void SetNormalizedPoseFeature(Span<float> queryFeatureSpan, float3 feature, int featureOffset, FeatureSet featureSet)
-    {
-        queryFeatureSpan[featureOffset + 0] = (feature.x - featureSet.GetMean(featureOffset + 0)) / featureSet.GetStandardDeviation(featureOffset + 0);
-        queryFeatureSpan[featureOffset + 1] = (feature.y - featureSet.GetMean(featureOffset + 1)) / featureSet.GetStandardDeviation(featureOffset + 1);
-        queryFeatureSpan[featureOffset + 2] = (feature.z - featureSet.GetMean(featureOffset + 2)) / featureSet.GetStandardDeviation(featureOffset + 2);
-    }
-
     public void FillQueryVector()
     {
         var simulationBone = _owner.skeletonTransforms[0];
@@ -319,12 +312,16 @@ public class MotionMatchingStage : MoSynthStage
             if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
             {
                 var feature = currPose.GetRootSpacePosition(skeleton, joint);
-                SetNormalizedPoseFeature(queryFeatureSpan, feature, featureOffset, featureSet);
+                queryFeatureSpan[featureOffset + 0] = feature.x;
+                queryFeatureSpan[featureOffset + 1] = feature.y;
+                queryFeatureSpan[featureOffset + 2] = feature.z;
             }
             else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
             {
                 var feature = currPose.GetRootSpaceVelocity(skeleton, joint);
-                SetNormalizedPoseFeature(queryFeatureSpan, feature, featureOffset, featureSet);
+                queryFeatureSpan[featureOffset + 0] = feature.x;
+                queryFeatureSpan[featureOffset + 1] = feature.y;
+                queryFeatureSpan[featureOffset + 2] = feature.z;
             }
             else
             {
@@ -332,6 +329,8 @@ public class MotionMatchingStage : MoSynthStage
             }
         }
         
+        featureSet.NormalizePose(queryFeatureSpan);
+
         // Environment features
         if (featureSet.EnvironmentOffset.Length > 0)
         {
