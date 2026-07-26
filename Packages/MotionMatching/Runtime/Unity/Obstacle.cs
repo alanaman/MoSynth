@@ -11,18 +11,18 @@ namespace MotionMatching
         public bool IsStatic = false;
         public float2 Height = new(0, 1); // Height in Y axis (min, max)
         // Used for steering coordination, can be left null if not used
-        private CrowdSplineCharacterController CrowdSplineCharacterController;
-        private CrowdCharacterController CrowdCharacter;
+        private CrowdSplineControlInput _crowdSplineControlInput;
+        private CrowdControlInput CrowdCharacter;
 
         private void Awake()
         {
             if (!IsStatic)
             {
-                CrowdSplineCharacterController = transform.parent.GetComponentInChildren<CrowdSplineCharacterController>();
-                CrowdCharacter = transform.parent.GetComponentInChildren<CrowdCharacterController>();
+                _crowdSplineControlInput = transform.parent.GetComponentInChildren<CrowdSplineControlInput>();
+                CrowdCharacter = transform.parent.GetComponentInChildren<CrowdControlInput>();
             }
 
-            Debug.Assert(IsStatic || (CrowdSplineCharacterController != null || CrowdCharacter != null),
+            Debug.Assert(IsStatic || (_crowdSplineControlInput != null || CrowdCharacter != null),
                          "Obstacle is not static but no CrowdSplineCharacterController or CrowdCharacterController is assigned. Please make sure a CharacterController is a component in any of the children of this component's parent transform.");
         }
 
@@ -38,9 +38,9 @@ namespace MotionMatching
 
         public virtual bool GetCurrentSteering(out float2 steering)
         {
-            if (CrowdSplineCharacterController != null)
+            if (_crowdSplineControlInput != null)
             {
-                steering = CrowdSplineCharacterController.Steering;
+                steering = _crowdSplineControlInput.Steering;
                 return true;
             }
             else if (CrowdCharacter != null)
@@ -60,17 +60,17 @@ namespace MotionMatching
             }
             else
             {
-                if (CrowdSplineCharacterController != null)
+                if (_crowdSplineControlInput != null)
                 {
-                    return (CrowdSplineCharacterController.MotionMatching.GetMainPositionFeature(trajectoryIndex),
+                    return (_crowdSplineControlInput.motionSynthesizer.GetMainPositionFeature(trajectoryIndex),
                             true,
-                            CrowdSplineCharacterController.MotionMatching.GetEnvironmentFeature(EllipsesFeatureName, trajectoryIndex));
+                            _crowdSplineControlInput.motionSynthesizer.GetEnvironmentFeature(EllipsesFeatureName, trajectoryIndex));
                 }
                 else
                 {
-                    return (CrowdCharacter.MotionMatching.GetMainPositionFeature(trajectoryIndex),
+                    return (CrowdCharacter.motionSynthesizer.GetMainPositionFeature(trajectoryIndex),
                             true,
-                            CrowdCharacter.MotionMatching.GetEnvironmentFeature(EllipsesFeatureName, trajectoryIndex));
+                            CrowdCharacter.motionSynthesizer.GetEnvironmentFeature(EllipsesFeatureName, trajectoryIndex));
                 }
             }
         }

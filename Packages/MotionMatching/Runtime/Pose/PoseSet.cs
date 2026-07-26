@@ -402,8 +402,8 @@ public class PoseSet
 
         public void ConvertToNativeArray()
         {
-            _startRanges = new NativeArray<int>(_startRangesList.ToArray(), Allocator.Persistent);
-            _endRanges = new NativeArray<int>(_endRangesList.ToArray(), Allocator.Persistent);
+            _startRanges = new NativeArray<int>(_startRangesList.ToArray(), Allocator.Domain);
+            _endRanges = new NativeArray<int>(_endRangesList.ToArray(), Allocator.Domain);
 
             _startRangesList = null;
             _endRangesList = null;

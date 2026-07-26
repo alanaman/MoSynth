@@ -7,7 +7,7 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
-    public class PathCharacterController : MotionMatchingCharacterController
+    public class PathControlInput : MoSynthControlInput
     {
         public string TrajectoryPositionFeatureName = "FuturePosition";
         public string TrajectoryDirectionFeatureName = "FutureDirection";
@@ -36,16 +36,16 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (int i = 0; i < MotionMatching.mmData.TrajectoryFeatures.Count; ++i)
+            for (int i = 0; i < motionSynthesizer.MmData.TrajectoryFeatures.Count; ++i)
             {
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
-            TrajectoryRotPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
+            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
             // TODO: generalize this, allow for different number of prediction frames
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for PathCharacterController");
             for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
@@ -176,7 +176,7 @@ namespace MotionMatching
             return TargetVelocity;
         }
 
-        [System.Serializable]
+        [Serializable]
         public struct KeyPoint
         {
             public float2 Position;

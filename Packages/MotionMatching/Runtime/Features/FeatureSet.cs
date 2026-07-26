@@ -281,10 +281,10 @@ namespace MotionMatching
                 var nFrames = GetFeatures().Length / FeatureSize;
                 var numberBoundingBoxLarge = (nFrames + BVHConsts.LargeBVHSize - 1) / BVHConsts.LargeBVHSize;
                 var numberBoundingBoxSmall = (nFrames + BVHConsts.SmallBVHSize - 1) / BVHConsts.SmallBVHSize;
-                LargeBoundingBoxMin = new NativeArray<float>(numberBoundingBoxLarge * FeatureStaticSize, Allocator.Persistent);
-                LargeBoundingBoxMax = new NativeArray<float>(numberBoundingBoxLarge * FeatureStaticSize, Allocator.Persistent);
-                SmallBoundingBoxMin = new NativeArray<float>(numberBoundingBoxSmall * FeatureStaticSize, Allocator.Persistent);
-                SmallBoundingBoxMax = new NativeArray<float>(numberBoundingBoxSmall * FeatureStaticSize, Allocator.Persistent);
+                LargeBoundingBoxMin = new NativeArray<float>(numberBoundingBoxLarge * FeatureStaticSize, Allocator.Domain);
+                LargeBoundingBoxMax = new NativeArray<float>(numberBoundingBoxLarge * FeatureStaticSize, Allocator.Domain);
+                SmallBoundingBoxMin = new NativeArray<float>(numberBoundingBoxSmall * FeatureStaticSize, Allocator.Domain);
+                SmallBoundingBoxMax = new NativeArray<float>(numberBoundingBoxSmall * FeatureStaticSize, Allocator.Domain);
                 var job = new BVHMotionMatchingComputeBounds
                 {
                     Features = GetFeatures(),
@@ -311,7 +311,7 @@ namespace MotionMatching
             if (AdaptativeFeaturesIndices == null || !AdaptativeFeaturesIndices.IsCreated)
             {
                 // Build Environment Acceleration Structure
-                NativeList<int> adaptativeIndices = new(Allocator.Persistent);
+                NativeList<int> adaptativeIndices = new(Allocator.Domain);
                 var job = new EnvironmentAccelerationComputeAdaptativeIndices
                 {
                     Features = GetFeatures(),
@@ -522,8 +522,8 @@ namespace MotionMatching
         {
             // Init
             var nPoses = poseSet.NumberPoses;
-            Valid = new NativeArray<bool>(nPoses, Allocator.Persistent);
-            Features = new NativeArray<float>(nPoses * FeatureSize, Allocator.Persistent);
+            Valid = new NativeArray<bool>(nPoses, Allocator.Domain);
+            Features = new NativeArray<float>(nPoses * FeatureSize, Allocator.Domain);
             // Check skeleton has all needed joints
             var jointsTrajectory = new Joint[NumberTrajectoryFeatures];
             var i = 0;

@@ -38,8 +38,6 @@ namespace MotionMatching
             var mmData = mmController.mmData;
             var featureSet = mmController.FeatureSet;
 
-            GUI.enabled = false;
-            EditorGUILayout.IntField("Last Frame", mmController.LastMmSearchFrame);
             GUI.enabled = true;
             var currentFrame = EditorGUILayout.IntField("Current Frame", mmController.CurrentFrame);
             if (currentFrame != mmController.CurrentFrame) mmController.SetCurrentFrame(currentFrame);

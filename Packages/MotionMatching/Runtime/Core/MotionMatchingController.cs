@@ -9,15 +9,15 @@ namespace MotionMatching
 {
 
 // Simulation bone is the transform
-public class MotionMatchingController : MonoBehaviour
+public class MotionMatchingController : MotionSynthesizer
 {
     public event Action OnSkeletonTransformUpdated;
 
-    [Header("General")] 
+    [FormerlySerializedAs("characterController")] [Header("General")] 
     
-    public MotionMatchingCharacterController characterController;
+    public MoSynthControlInput controlInput;
     public MotionMatchingData mmData;
-
+    
     [SerializeReference] [SubclassSelector]
     public MotionMatchingSearch mmSearch = new BvhMotionMatchingSearch();
 
@@ -47,11 +47,16 @@ public class MotionMatchingController : MonoBehaviour
 
     [HideInInspector]
     public float[] featureWeights;
+    
+    
+    public override MotionMatchingData MmData => mmData;
 
+    public override float3 RootVelocity { get; protected set; }
 
-    public float3 Velocity { get; private set; }
-    public float3 AngularVelocity { get; private set; }
-    public float DatabaseFrameTime { get; private set; }
+    public override float3 RootAngularVelocity { get; protected set; }
+    public override float3 RootPosition { get; protected set; }
+    public override quaternion RootRotation { get; protected set; } = quaternion.identity;
+
     private int _databaseFrameRate;
     public PoseSet PoseSet { get; private set; }
     public FeatureSet FeatureSet { get; private set; }
@@ -64,8 +69,12 @@ public class MotionMatchingController : MonoBehaviour
 
     internal ReadOnlySpan<float> QueryFeature => _queryFeature;
 
-    public NativeArray<float> FeaturesWeightsNativeArray { get; private set; }
-    
+    public NativeArray<float> FeaturesWeightsNativeArray
+    {
+        get => _featuresWeightsNativeArray;
+        private set => _featuresWeightsNativeArray = value;
+    }
+
     /// <summary>
     /// Current frame index in the pose/feature set
     /// </summary>
@@ -73,7 +82,6 @@ public class MotionMatchingController : MonoBehaviour
     /// <summary>
     /// Frame before the last Motion Matching Search
     /// </summary>
-    public int LastMmSearchFrame { get; private set; } 
     public NativeArray<bool> TagMask { get; private set; }
 
     private float3 _animationSpaceOriginPos;
@@ -119,6 +127,11 @@ public class MotionMatchingController : MonoBehaviour
     // Other
     private bool _isDestroyed;
     private NativeArray<float> _queryFeature;
+    
+    [SerializeField]
+    private int minFrameSwitchDistance = 20;
+
+    private NativeArray<float> _featuresWeightsNativeArray;
 
     private void Awake()
     {
@@ -143,19 +156,18 @@ public class MotionMatchingController : MonoBehaviour
         _inertialization = new Inertialization(PoseSet.Skeleton);
 
         // FPS
-        DatabaseFrameTime = PoseSet.FrameTime;
         _databaseFrameRate = Mathf.RoundToInt(1.0f / DatabaseFrameTime);
-        if (lockFPS)
-        {
-            Application.targetFrameRate = _databaseFrameRate;
-            Debug.Log("[Motion Matching] Updated Target FPS: " + Application.targetFrameRate);
-        }
-        else
-        {
-            Application.targetFrameRate = -1;
-            Debug.LogWarning(
-                "[Motion Matching] LockFPS is not set. Motion Matching will malfunction if the application frame rate is higher than the animation database.");
-        }
+        // if (lockFPS)
+        // {
+        //     Application.targetFrameRate = _databaseFrameRate;
+        //     Debug.Log("[Motion Matching] Updated Target FPS: " + Application.targetFrameRate);
+        // }
+        // else
+        // {
+        //     Application.targetFrameRate = -1;
+        //     Debug.LogWarning(
+        //         "[Motion Matching] LockFPS is not set. Motion Matching will malfunction if the application frame rate is higher than the animation database.");
+        // }
 
         // Other initialization
         var numberFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count +
@@ -169,11 +181,11 @@ public class MotionMatchingController : MonoBehaviour
             featureWeights = newWeights;
         }
 
-        FeaturesWeightsNativeArray = new NativeArray<float>(FeatureSet.FeatureSize, Allocator.Persistent);
-        _queryFeature = new NativeArray<float>(FeatureSet.FeatureSize, Allocator.Persistent);
+        _featuresWeightsNativeArray = new NativeArray<float>(FeatureSet.FeatureSize, Allocator.Domain);
+        _queryFeature = new NativeArray<float>(FeatureSet.FeatureSize, Allocator.Domain);
 
         // Tags
-        TagMask = new NativeArray<bool>(FeatureSet.NumberFeatureVectors, Allocator.Persistent);
+        TagMask = new NativeArray<bool>(FeatureSet.NumberFeatureVectors, Allocator.Domain);
         DisableQueryTag();
 
         // Foot Lock
@@ -190,15 +202,14 @@ public class MotionMatchingController : MonoBehaviour
         _rightLowerLegLocalForward = mmData.GetLocalForward(_rightLowerLegIndex);
 
         // Init Pose
-        SkeletonTransforms[0].SetPositionAndRotation(characterController.GetWorldInitPosition(),
-            quaternion.LookRotation(characterController.GetWorldInitDirection(), Vector3.up));
+        SkeletonTransforms[0].SetPositionAndRotation(controlInput.GetWorldInitPosition(),
+            quaternion.LookRotation(controlInput.GetWorldInitDirection(), Vector3.up));
 
         // Search first Frame valid (to start with a valid pose)
         for (var i = 0; i < FeatureSet.NumberFeatureVectors; i++)
         {
             if (FeatureSet.IsValidFeature(i) && TagMask[i])
             {
-                LastMmSearchFrame = i;
                 CurrentFrame = i;
                 UpdateAnimationSpaceOrigin();
                 break;
@@ -213,15 +224,20 @@ public class MotionMatchingController : MonoBehaviour
 
     private void OnEnable()
     {
-        characterController.OnUpdated += OnCharacterControllerUpdated;
-        characterController.OnInputChangedQuickly += OnInputChangedQuickly;
+        controlInput.OnUpdated += OnCharacterControllerUpdated;
+        controlInput.OnHighInputChange += OnInputChangedQuickly;
     }
 
     private void OnDisable()
     {
-        characterController.OnUpdated -= OnCharacterControllerUpdated;
-        characterController.OnInputChangedQuickly -= OnInputChangedQuickly;
+        controlInput.OnUpdated -= OnCharacterControllerUpdated;
+        controlInput.OnHighInputChange -= OnInputChangedQuickly;
     }
+
+    // private void LateUpdate()
+    // {
+    //     OnCharacterControllerUpdated(Time.deltaTime);
+    // }
 
     private void OnCharacterControllerUpdated(float deltaTime)
     {
@@ -237,8 +253,8 @@ public class MotionMatchingController : MonoBehaviour
             if (isCurrentValid && bestFrame == -1) bestFrame = CurrentFrame;
             Debug.Assert(bestFrame != -1,
                 "Motion Matching is not able to find any valid pose. Maybe the motion database is empty or the query tag used produces an empty set of poses?");
-            const int ignoreSurrounding = 20; // ignore near frames
-            if (math.abs(bestFrame - CurrentFrame) > ignoreSurrounding)
+            
+            if (math.abs(bestFrame - CurrentFrame) > minFrameSwitchDistance)
             {
                 // Inertialize
                 if (inertialize)
@@ -246,7 +262,6 @@ public class MotionMatchingController : MonoBehaviour
                     _inertialization.PoseTransition(PoseSet, CurrentFrame, bestFrame);
                 }
 
-                LastMmSearchFrame = CurrentFrame;
                 _currentFrameTime =
                     bestFrame + math.frac(
                         _currentFrameTime); // the fractional part is the error accumulated, add it to the current to avoid drifting
@@ -332,7 +347,7 @@ public class MotionMatchingController : MonoBehaviour
                 var featureSize = feature.GetSize();
                 Debug.Assert(featureSize > 0, "Trajectory feature size must be larger than 0");
                 NativeArray<float> featureVector = new(featureSize, Allocator.Temp);
-                characterController.GetTrajectoryFeature(feature, p, SkeletonTransforms[0], featureVector);
+                controlInput.GetTrajectoryFeature(feature, p, SkeletonTransforms[0], featureVector);
                 for (var j = 0; j < featureSize; j++)
                 {
                     _queryFeature[offset + j] = featureVector[j];
@@ -356,7 +371,7 @@ public class MotionMatchingController : MonoBehaviour
                     var featureSize = feature.GetSize();
                     Debug.Assert(featureSize > 0, "Environment feature size must be larger than 0");
                     NativeArray<float> featureVector = new(featureSize, Allocator.Temp);
-                    characterController.GetEnvironmentFeature(feature, p, SkeletonTransforms[0], featureVector);
+                    controlInput.GetEnvironmentFeature(feature, p, SkeletonTransforms[0], featureVector);
                     for (var j = 0; j < featureSize; j++)
                     {
                         _queryFeature[offset + j] = featureVector[j];
@@ -390,8 +405,8 @@ public class MotionMatchingController : MonoBehaviour
             math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos,
             math.mul(_mmTransformOriginRot, localSpaceRot));
         // update velocity and angular velocity
-        Velocity = ((float3)SkeletonTransforms[0].position - previousPosition) / Time.deltaTime;
-        AngularVelocity =
+        RootVelocity = ((float3)SkeletonTransforms[0].position - previousPosition) / Time.deltaTime;
+        RootAngularVelocity =
             MathExtensions.AngularVelocity(previousRotation, SkeletonTransforms[0].rotation, Time.deltaTime);
         // Joints
         if (inertialize)
@@ -576,8 +591,8 @@ public class MotionMatchingController : MonoBehaviour
         var newPos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
         var newRot = math.mul(_mmTransformOriginRot, localSpaceRot);
 
-        Velocity = ((float3)SkeletonTransforms[0].position - currentPos) / Time.deltaTime;
-        AngularVelocity = MathExtensions.AngularVelocity(
+        RootVelocity = ((float3)SkeletonTransforms[0].position - currentPos) / Time.deltaTime;
+        RootAngularVelocity = MathExtensions.AngularVelocity(
             currentRot, SkeletonTransforms[0].rotation, Time.deltaTime);
         
         SkeletonTransforms[0].SetPositionAndRotation(newPos,newRot);
@@ -644,7 +659,7 @@ public class MotionMatchingController : MonoBehaviour
     /// Adds an offset to the current transform space (useful to move the character to a different position)
     /// Simply changing the transform won't work because motion matching applies root motion based on the current motion matching search space
     /// </summary>
-    public void SetPosAdjustment(float3 posAdjustment)
+    public override void SetPosAdjustment(float3 posAdjustment)
     {
         _mmTransformOriginPos += posAdjustment;
     }
@@ -653,9 +668,9 @@ public class MotionMatchingController : MonoBehaviour
     /// Adds a rot offset to the current transform space (useful to rotate the character to a different direction)
     /// Simply changing the transform won't work because motion matching applies root motion based on the current motion matching search space
     /// </summary>
-    public void SetRotAdjustment(Quaternion rotAdjustment)
+    public override void SetRotAdjustment(quaternion rotAdjustment)
     {
-        _mmTransformOriginRot = rotAdjustment * _mmTransformOriginRot;
+        _mmTransformOriginRot = math.mul(rotAdjustment, _mmTransformOriginRot);
     }
 
     public void SetCurrentFrame(int frame)
@@ -665,7 +680,6 @@ public class MotionMatchingController : MonoBehaviour
 
     public NativeArray<float> UpdateAndGetFeatureWeights()
     {
-        var featuresWeightsNativeArray = FeaturesWeightsNativeArray;
         var offset = 0;
         for (var i = 0; i < mmData.TrajectoryFeatures.Count; i++)
         {
@@ -676,7 +690,7 @@ public class MotionMatchingController : MonoBehaviour
             {
                 for (var f = 0; f < featureSize; f++)
                 {
-                    featuresWeightsNativeArray[offset + f] = weight;
+                    _featuresWeightsNativeArray[offset + f] = weight;
                 }
 
                 offset += featureSize;
@@ -686,9 +700,9 @@ public class MotionMatchingController : MonoBehaviour
         for (var i = 0; i < mmData.PoseFeatures.Count; i++)
         {
             var weight = featureWeights[i + mmData.TrajectoryFeatures.Count] * quality;
-            featuresWeightsNativeArray[offset + 0] = weight;
-            featuresWeightsNativeArray[offset + 1] = weight;
-            featuresWeightsNativeArray[offset + 2] = weight;
+            _featuresWeightsNativeArray[offset + 0] = weight;
+            _featuresWeightsNativeArray[offset + 1] = weight;
+            _featuresWeightsNativeArray[offset + 2] = weight;
             offset += 3;
         }
 
@@ -701,17 +715,17 @@ public class MotionMatchingController : MonoBehaviour
             {
                 for (var f = 0; f < featureSize; f++)
                 {
-                    featuresWeightsNativeArray[offset + f] = baseWeight;
+                    _featuresWeightsNativeArray[offset + f] = baseWeight;
                 }
 
                 offset += featureSize;
             }
         }
 
-        return featuresWeightsNativeArray;
+        return _featuresWeightsNativeArray;
     }
 
-    public float3 GetMainPositionFeature(int trajectoryIndex)
+    public override float3 GetMainPositionFeature(int trajectoryIndex)
     {
         float3 characterOrigin = SkeletonTransforms[0].position;
         float3 characterForward = SkeletonTransforms[0].forward;
@@ -739,7 +753,7 @@ public class MotionMatchingController : MonoBehaviour
         return value;
     }
 
-    public float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
+    public override float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
     {
         float3 characterForward = SkeletonTransforms[0].forward;
         var characterRot = quaternion.LookRotation(characterForward, math.up());

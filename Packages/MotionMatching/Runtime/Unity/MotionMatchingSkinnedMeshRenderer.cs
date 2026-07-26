@@ -3,14 +3,15 @@ using UnityEngine;
 using Unity.Mathematics;
 using System;
 using System.Linq;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
 [RequireComponent(typeof(Animator))]
 public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 {
-    [Header("General")] 
-    public MotionMatchingController motionMatching;
+    [FormerlySerializedAs("motionMatching")] [Header("General")] 
+    public MotionMatchingController motionSynthesizer;
 
     [Header("Animator Integration")]
     
@@ -79,14 +80,14 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
     private void OnEnable()
     {
-        motionMatching.OnSkeletonTransformUpdated += OnSkeletonTransformUpdated;
+        motionSynthesizer.OnSkeletonTransformUpdated += OnSkeletonTransformUpdated;
 
         UpdatePreviousInertialization();
     }
 
     private void OnDisable()
     {
-        motionMatching.OnSkeletonTransformUpdated -= OnSkeletonTransformUpdated;
+        motionSynthesizer.OnSkeletonTransformUpdated -= OnSkeletonTransformUpdated;
     }
 
     private void Start()
@@ -101,7 +102,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
 
     private void InitRetargeting()
     {
-        var mmData = motionMatching.mmData;
+        var mmData = motionSynthesizer.mmData;
         _animationTPose = new Quaternion[BodyJoints.Length];
         _characterTPose = new Quaternion[BodyJoints.Length];
         _sourceBones = new Transform[BodyJoints.Length];
@@ -175,7 +176,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
         _hipsCorrection = math.mul(sourceLookAt, math.inverse(targetLookAt));
         // Store Transforms
-        var mmBones = motionMatching.SkeletonTransforms;
+        var mmBones = motionSynthesizer.SkeletonTransforms;
 
         // Source
         for (var i = 0; i < BodyJoints.Length; i++)
@@ -199,12 +200,12 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         if (rootPositionsMask)
         {
             // Motion Matching Root Motion + Floor Height
-            var simulationBone = motionMatching.transform.position;
+            var simulationBone = motionSynthesizer.transform.position;
             simulationBone.y = _floorHeight;
             transform.position = simulationBone;
         }
 
-        motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
+        motionSynthesizer.SetPosAdjustment(transform.position - motionSynthesizer.transform.position);
 
         // Retargeting
         for (var i = 0; i < BodyJoints.Length; i++)
@@ -269,7 +270,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         float3 targetHipsPosition = _targetBones[0].position;
         if (rootPositionsMask)
         {
-            targetHipsPosition = motionMatching.SkeletonTransforms[1].position;
+            targetHipsPosition = motionSynthesizer.SkeletonTransforms[1].position;
         }
 
         if (blendPoses && _previousHipsPositionMask != rootPositionsMask)

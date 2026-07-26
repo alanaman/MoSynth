@@ -9,7 +9,7 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
-    public class CrowdSplineCharacterController : MotionMatchingCharacterController, IObstacleAwareCharacterControler
+    public class CrowdSplineControlInput : MoSynthControlInput, IObstacleAwareCharacterControler
     {
         public string TrajectoryPositionFeatureName = "FuturePosition";
         public string TrajectoryDirectionFeatureName = "FutureDirection";
@@ -66,16 +66,16 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (int i = 0; i < MotionMatching.mmData.TrajectoryFeatures.Count; ++i)
+            for (int i = 0; i < motionSynthesizer.MmData.TrajectoryFeatures.Count; ++i)
             {
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
-            TrajectoryRotPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
+            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
             // TODO: generalize this, allow for different number of prediction frames
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for PathCharacterController");
             for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
@@ -160,7 +160,7 @@ namespace MotionMatching
 
             if (UpdateOnlyWhenCharacterMoving)
             {
-                float2 characterPos = new(MotionMatching.transform.position.x, MotionMatching.transform.position.z);
+                float2 characterPos = new(motionSynthesizer.RootPosition.x, motionSynthesizer.RootPosition.z);
                 float distance = math.length(new float2(nextPos.x - characterPos.x, nextPos.z - characterPos.y));
                 float3 deltaPos = SplineContainer.EvaluatePosition(getTDelta(T, TrajectoryPosPredictionFrames[^1] * speed * DatabaseDeltaTime));
                 float distanceDelta = math.length(new float2(deltaPos.x - characterPos.x, deltaPos.z - characterPos.y));
@@ -196,8 +196,8 @@ namespace MotionMatching
                     }
                 }
 
-                float2 steeringPos = new(MotionMatching.transform.position.x, MotionMatching.transform.position.z);
-                float2 targetSteering = CrowdCharacterController.ComputeSteering(steeringPos, new Vector3(CurrentDirection.x, 0.0f, CurrentDirection.y),
+                float2 steeringPos = new(motionSynthesizer.RootPosition.x, motionSynthesizer.RootPosition.z);
+                float2 targetSteering = CrowdControlInput.ComputeSteering(steeringPos, new Vector3(CurrentDirection.x, 0.0f, CurrentDirection.y),
                                                                                  Obstacles, SteeringLookAhead, SteeringForce, debug: DebugSteering);
                 targetSteering += -SteeringOffset * SteeringSplineForce;
                 Steering = math.lerp(Steering, targetSteering, Time.deltaTime * SteeringChangeFactor);
@@ -274,7 +274,7 @@ namespace MotionMatching
             float candidateThreshold = MaximumEllipseLength + obstacleDistanceThreshold;
             for (int p = 0; p < PredictedPositions.Length; p++)
             {
-                float3 predPos = MotionMatching.GetMainPositionFeature(p);
+                float3 predPos = motionSynthesizer.GetMainPositionFeature(p);
                 for (int i = 0; i < Obstacles.Length; i++)
                 {
                     Obstacle obs = Obstacles[i];
@@ -441,7 +441,7 @@ namespace MotionMatching
             if (DoSteering && math.lengthsq(Steering) > 0.0001f)
             {
                 Gizmos.color = new Color(0.1f, 0.8f, 0.1f, 1.0f);
-                GizmosExtensions.DrawLine(MotionMatching.transform.position, MotionMatching.transform.position + new Vector3(Steering.x, 0.0f, Steering.y) / SteeringForce, 3);
+                GizmosExtensions.DrawLine(motionSynthesizer.RootPosition, motionSynthesizer.RootPosition + new float3(Steering.x, 0.0f, Steering.y) / SteeringForce, 3);
             }
         }
 #endif

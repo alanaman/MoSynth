@@ -210,8 +210,8 @@ namespace MotionMatching
                         }
 
                         // Deserialize Feature Vectors
-                        NativeArray<bool> valid = new NativeArray<bool>((int)numberFeatureVectors, Allocator.Persistent);
-                        NativeArray<float> features = new NativeArray<float>((int)(numberFeatureVectors * featuresDimension), Allocator.Persistent);
+                        NativeArray<bool> valid = new NativeArray<bool>((int)numberFeatureVectors, Allocator.Domain);
+                        NativeArray<float> features = new NativeArray<float>((int)(numberFeatureVectors * featuresDimension), Allocator.Domain);
                         for (int i = 0; i < numberFeatureVectors; ++i)
                         {
                             int featureIndex = i * (int)featuresDimension;

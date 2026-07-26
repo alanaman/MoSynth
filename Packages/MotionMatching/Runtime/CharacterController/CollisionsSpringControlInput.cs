@@ -1,7 +1,6 @@
 using System;
 using UnityEngine;
 using Unity.Mathematics;
-using Unity.Collections;
 
 namespace MotionMatching
 {
@@ -10,7 +9,7 @@ namespace MotionMatching
     // Adjustment between Character Controller and Motion Matching Character Entity
     /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-    public class CollisionsSpringCharacterController : MotionMatchingCharacterController, IPlayerInputCharacterController
+    public class CollisionsSpringControlInput : MoSynthControlInput, IPlayerInputCharacterController
     {
         public MotionMatchingSkinnedMeshRenderer MMSkinnedMeshRenderer;
 
@@ -75,19 +74,19 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (int i = 0; i < MotionMatching.mmData.TrajectoryFeatures.Count; ++i)
+            for (var i = 0; i < motionSynthesizer.MmData.TrajectoryFeatures.Count; ++i)
             {
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (MotionMatching.mmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
-            TrajectoryRotPredictionFrames = MotionMatching.mmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
+            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
             // TODO: generalize this... allow different number of prediction frames for different features
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
-            for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
+            for (var i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
             {
                 Debug.Assert(TrajectoryPosPredictionFrames[i] == TrajectoryRotPredictionFrames[i], "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
             }
@@ -103,12 +102,12 @@ namespace MotionMatching
         // Input a change in the movement direction
         public void SetMovementDirection(float2 movementDirection)
         {
-            float2 prevInputMovement = InputMovement;
+            var prevInputMovement = InputMovement;
             InputMovement = movementDirection;
             // Desired Rotation
             if (!OrientationFixed && math.length(movementDirection) > 0.0001f)
             {
-                float2 desiredDirection = math.normalize(movementDirection);
+                var desiredDirection = math.normalize(movementDirection);
                 DesiredRotation = quaternion.LookRotation(new float3(desiredDirection.x, 0.0f, desiredDirection.y), transform.up);
             }
             // Input Changed Quickly
@@ -129,15 +128,15 @@ namespace MotionMatching
             quaternion currentRotation = transform.rotation;
             PredictRotations(currentRotation, DatabaseDeltaTime);
             // Update Current Rotation
-            quaternion newRot = ComputeNewRot(currentRotation);
+            var newRot = ComputeNewRot(currentRotation);
 
             // Positions
-            float2 desiredSpeed = InputMovement * MaxSpeed;
-            float2 currentPos = new float2(transform.position.x, transform.position.z);
+            var desiredSpeed = InputMovement * MaxSpeed;
+            var currentPos = new float2(transform.position.x, transform.position.z);
             // Predict
             PredictPositions(currentPos, desiredSpeed, DatabaseDeltaTime);
             // Update Current Position
-            float2 newPos = ComputeNewPos(currentPos, desiredSpeed);
+            var newPos = ComputeNewPos(currentPos, desiredSpeed);
 
             // Update Character Controller
             if (math.lengthsq(Velocity) > MinimumVelocityClamp * MinimumVelocityClamp)
@@ -159,13 +158,13 @@ namespace MotionMatching
         // Return the adjusted nextPos to the nearest obstacle in the line starting at currentPos and finishing at nextPos
         private float2 CheckCollision(float2 nextPos, float2 currentPos)
         {
-            float height = transform.position.y + ApproximatedPlayerHeight * 0.1f;
-            Vector3 nPos = new Vector3(nextPos.x, height, nextPos.y);
-            Vector3 cPos = new Vector3(currentPos.x, height, currentPos.y);
-            Vector3 dir = nPos - cPos;
-            float mag = dir.magnitude;
+            var height = transform.position.y + ApproximatedPlayerHeight * 0.1f;
+            var nPos = new Vector3(nextPos.x, height, nextPos.y);
+            var cPos = new Vector3(currentPos.x, height, currentPos.y);
+            var dir = nPos - cPos;
+            var mag = dir.magnitude;
             dir.Normalize();
-            if (Physics.Raycast(cPos - dir * mag, dir, out RaycastHit hit, mag * 2 + CollisionClearance) &&
+            if (Physics.Raycast(cPos - dir * mag, dir, out var hit, mag * 2 + CollisionClearance) &&
                 Vector3.Dot(hit.normal, Vector3.up) < 0.5f)
             {
                 nextPos = new float2(hit.point.x, hit.point.z) - math.normalize(nextPos - currentPos) * CollisionClearance;
@@ -175,13 +174,13 @@ namespace MotionMatching
 
         private void UpdateHeight()
         {
-            float floorY = 0.0f;
-            Vector3 origin = transform.position + Vector3.up * ApproximatedPlayerHeight * 0.5f;
-            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, ApproximatedPlayerHeight * 0.55f))
+            var floorY = 0.0f;
+            var origin = transform.position + Vector3.up * (ApproximatedPlayerHeight * 0.5f);
+            if (Physics.Raycast(origin, Vector3.down, out var hit, ApproximatedPlayerHeight * 0.55f))
             {
                 floorY = hit.point.y;
             }
-            Vector3 pos = transform.position;
+            var pos = transform.position;
             pos.y = floorY;
             transform.position = pos;
             MMSkinnedMeshRenderer.SetFloorHeight(floorY);
@@ -189,7 +188,7 @@ namespace MotionMatching
 
         private void PredictRotations(quaternion currentRotation, float averagedDeltaTime)
         {
-            for (int i = 0; i < NumberPredictionRot; i++)
+            for (var i = 0; i < NumberPredictionRot; i++)
             {
                 // Init Predicted values
                 PredictedRotations[i] = currentRotation;
@@ -203,8 +202,8 @@ namespace MotionMatching
         /* https://theorangeduck.com/page/spring-roll-call#controllers */
         private void PredictPositions(float2 currentPos, float2 desiredSpeed, float averagedDeltaTime)
         {
-            int lastPredictionFrames = 0;
-            for (int i = 0; i < NumberPredictionPos; ++i)
+            var lastPredictionFrames = 0;
+            for (var i = 0; i < NumberPredictionPos; ++i)
             {
                 if (i == 0)
                 {
@@ -218,14 +217,14 @@ namespace MotionMatching
                     PredictedVelocity[i] = PredictedVelocity[i - 1];
                     PredictedAcceleration[i] = PredictedAcceleration[i - 1];
                 }
-                int diffPredictionFrames = TrajectoryPosPredictionFrames[i] - lastPredictionFrames;
+                var diffPredictionFrames = TrajectoryPosPredictionFrames[i] - lastPredictionFrames;
                 lastPredictionFrames = TrajectoryPosPredictionFrames[i];
                 Spring.CharacterPositionUpdate(ref PredictedPosition[i], ref PredictedVelocity[i], ref PredictedAcceleration[i],
                                                desiredSpeed, 1.0f - ResponsivenessPositions, diffPredictionFrames * averagedDeltaTime);
             }
             // Check collisions
-            float2 prev = currentPos;
-            for (int i = 0; i < NumberPredictionPos; ++i)
+            var prev = currentPos;
+            for (var i = 0; i < NumberPredictionPos; ++i)
             {
                 PredictedPosition[i] = CheckCollision(PredictedPosition[i], prev);
                 prev = PredictedPosition[i];
@@ -234,14 +233,14 @@ namespace MotionMatching
 
         private quaternion ComputeNewRot(quaternion currentRotation)
         {
-            quaternion newRotation = currentRotation;
+            var newRotation = currentRotation;
             Spring.SimpleSpringDamperImplicit(ref newRotation, ref AngularVelocity, DesiredRotation, 1.0f - ResponsivenessDirections, Time.deltaTime);
             return newRotation;
         }
 
         private float2 ComputeNewPos(float2 currentPos, float2 desiredSpeed)
         {
-            float2 newPos = currentPos;
+            var newPos = currentPos;
             Spring.CharacterPositionUpdate(ref newPos, ref Velocity, ref Acceleration, desiredSpeed, 1.0f - ResponsivenessPositions, Time.deltaTime);
             return newPos;
         }
@@ -256,50 +255,50 @@ namespace MotionMatching
         {
             // Clamp Position
             float3 characterController = transform.position;
-            float3 motionMatching = MotionMatching.transform.position;
-            if (math.distance(characterController, motionMatching) > MaxDistanceMMAndCharacterController)
+            var mmPos = motionSynthesizer.RootPosition;
+            if (math.distance(characterController, mmPos) > MaxDistanceMMAndCharacterController)
             {
-                float3 newMotionMatchingPos = MaxDistanceMMAndCharacterController * math.normalize(motionMatching - characterController) + characterController;
-                MotionMatching.SetPosAdjustment(newMotionMatchingPos - motionMatching);
+                var newMotionMatchingPos = MaxDistanceMMAndCharacterController * math.normalize(mmPos - characterController) + characterController;
+                motionSynthesizer.SetPosAdjustment(newMotionMatchingPos - mmPos);
             }
         }
 
         private void AdjustCharacterPosition()
         {
             float3 characterController = transform.position;
-            float3 motionMatching = MotionMatching.transform.position;
-            float3 differencePosition = characterController - motionMatching;
+            var mmRot = motionSynthesizer.RootPosition;
+            var differencePosition = characterController - mmRot;
             // Damp the difference using the adjustment halflife and dt
-            float3 adjustmentPosition = Spring.DampAdjustmentImplicit(differencePosition, PositionAdjustmentHalflife, Time.deltaTime);
+            var adjustmentPosition = Spring.DampAdjustmentImplicit(differencePosition, PositionAdjustmentHalflife, Time.deltaTime);
             // Clamp adjustment if the length is greater than the character velocity
             // multiplied by the ratio
-            float maxLength = PosMaximumAdjustmentRatio * math.length(MotionMatching.Velocity) * Time.deltaTime;
+            var maxLength = PosMaximumAdjustmentRatio * math.length(motionSynthesizer.RootVelocity) * Time.deltaTime;
             if (math.length(adjustmentPosition) > maxLength)
             {
                 adjustmentPosition = maxLength * math.normalize(adjustmentPosition);
             }
             // Move the simulation bone towards the simulation object
-            MotionMatching.SetPosAdjustment(adjustmentPosition);
+            motionSynthesizer.SetPosAdjustment(adjustmentPosition);
         }
 
         private void AdjustCharacterRotation()
         {
             quaternion characterController = transform.rotation;
-            quaternion motionMatching = MotionMatching.transform.rotation;
+            var mmRot = motionSynthesizer.RootRotation;
             // Find the difference in rotation (from character to simulation object)
             // Note: if numerically unstable, try quaternion.Normalize(quaternion.Inverse(characterController) * motionMatching)
-            quaternion differenceRotation = math.mul(math.inverse(motionMatching), characterController);
+            var differenceRotation = math.mul(math.inverse(mmRot), characterController);
             // Damp the difference using the adjustment halflife and dt
-            quaternion adjustmentRotation = Spring.DampAdjustmentImplicit(differenceRotation, RotationAdjustmentHalflife, Time.deltaTime);
+            var adjustmentRotation = Spring.DampAdjustmentImplicit(differenceRotation, RotationAdjustmentHalflife, Time.deltaTime);
             // Clamp adjustment if the length is greater than the character angular velocity
             // multiplied by the ratio
-            float maxLength = RotMaximumAdjustmentRatio * math.length(MotionMatching.AngularVelocity) * Time.deltaTime;
+            var maxLength = RotMaximumAdjustmentRatio * math.length(motionSynthesizer.RootAngularVelocity) * Time.deltaTime;
             if (math.length(MathExtensions.QuaternionToScaledAngleAxis(adjustmentRotation)) > maxLength)
             {
                 adjustmentRotation = MathExtensions.QuaternionFromScaledAngleAxis(maxLength * math.normalize(MathExtensions.QuaternionToScaledAngleAxis(adjustmentRotation)));
             }
             // Rotate the simulation bone towards the simulation object
-            MotionMatching.SetRotAdjustment(adjustmentRotation);
+            motionSynthesizer.SetRotAdjustment(adjustmentRotation);
         }
 
         public quaternion GetCurrentRotation()
@@ -313,13 +312,13 @@ namespace MotionMatching
             switch (feature.FeatureType)
             {
                 case TrajectoryFeature.Type.Position:
-                    float2 world = PredictedPosition[index];
+                    var world = PredictedPosition[index];
                     float3 local = character.InverseTransformPoint(new float3(world.x, 0.0f, world.y));
                     span[0] = local.x;
                     span[1] = local.z;
                     break;
                 case TrajectoryFeature.Type.Direction:
-                    float2 dirProjected = GetWorldSpaceDirectionPrediction(index);
+                    var dirProjected = GetWorldSpaceDirectionPrediction(index);
                     float3 localDir = character.InverseTransformDirection(new Vector3(dirProjected.x, 0.0f, dirProjected.y));
                     span[0] = localDir.x;
                     span[1] = localDir.z;
@@ -332,7 +331,7 @@ namespace MotionMatching
 
         private float2 GetWorldSpaceDirectionPrediction(int index)
         {
-            float3 dir = math.mul(PredictedRotations[index], new float3(0, 0, 1));
+            var dir = math.mul(PredictedRotations[index], new float3(0, 0, 1));
             return math.normalize(new float2(dir.x, dir.z));
         }
 
@@ -360,7 +359,7 @@ namespace MotionMatching
             const float radius = 0.05f;
             const float vectorReduction = 0.5f;
             const float verticalOffset = 0.05f;
-            Vector3 transformPos = (Vector3)GetPosition() + Vector3.up * verticalOffset;
+            var transformPos = (Vector3)GetPosition() + Vector3.up * verticalOffset;
             if (DebugCurrent)
             {
                 // Draw Current Position & Velocity
@@ -375,11 +374,11 @@ namespace MotionMatching
             {
                 // Draw Predicted Position & Velocity
                 Gizmos.color = new Color(0.6f, 0.3f, 0.8f, 1.0f);
-                for (int i = 0; i < PredictedPosition.Length; ++i)
+                for (var i = 0; i < PredictedPosition.Length; ++i)
                 {
-                    float3 predictedPos = new float3(PredictedPosition[i].x, transformPos.y, PredictedPosition[i].y);
-                    float2 predictedDir = GetWorldSpaceDirectionPrediction(i);
-                    float3 predictedDir3D = new float3(predictedDir.x, 0.0f, predictedDir.y);
+                    var predictedPos = new float3(PredictedPosition[i].x, transformPos.y, PredictedPosition[i].y);
+                    var predictedDir = GetWorldSpaceDirectionPrediction(i);
+                    var predictedDir3D = new float3(predictedDir.x, 0.0f, predictedDir.y);
                     Gizmos.DrawSphere(predictedPos, radius);
                     GizmosExtensions.DrawLine(predictedPos, predictedPos + predictedDir3D * vectorReduction, 3);
                 }

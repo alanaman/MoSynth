@@ -13,11 +13,11 @@ namespace MotionMatching
     [DefaultExecutionOrder(-100)]
     public class SimpleMMController : MonoBehaviour
     {
-        private SpringCharacterController _characterController;
+        private SpringControlInput _controlInput;
 
         private void Awake()
         {
-            _characterController = GetComponentInChildren<SpringCharacterController>();
+            _controlInput = GetComponentInChildren<SpringControlInput>();
         }
 
         /// <summary>
@@ -26,7 +26,7 @@ namespace MotionMatching
         /// <param name="velocity">The desired direction and speed of the character.</param>
         public void SetVelocity(Vector2 velocity)
         {
-            _characterController.SetMovementDirection(velocity);
+            _controlInput.SetMovementDirection(velocity);
         }
     }
 }

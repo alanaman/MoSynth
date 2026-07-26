@@ -25,7 +25,7 @@ public class BvhMotionMatchingSearch : MotionMatchingSearch
             out _largeBoundingBoxMax,
             out _smallBoundingBoxMin,
             out _smallBoundingBoxMax);
-        SearchResult = new NativeArray<int>(2, Allocator.Persistent);
+        SearchResult = new NativeArray<int>(2, Allocator.Domain);
         SearchResult[0] = 0;
         SearchResult[1] = 0;
     }

@@ -6,6 +6,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Assertions;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
@@ -14,7 +15,7 @@ public class MotionMatchingStage : MoSynthStage
 {
     private MotionSynthesisComponent _owner;
     
-    public MotionMatchingCharacterController characterController;
+    [FormerlySerializedAs("characterController")] public MoSynthControlInput controlInput;
     
     
     public MotionMatchingData mmData;
@@ -42,6 +43,9 @@ public class MotionMatchingStage : MoSynthStage
     [Tooltip("How important is the current pose")] [UnityEngine.Range(0.0f, 1.0f)]
     public float quality = 1.0f;
 
+    [SerializeField]
+    private int minFrameSwitchDistance = 20;
+
     
     // TODO: editor inspector for feature weights
     [SerializeField]
@@ -57,11 +61,6 @@ public class MotionMatchingStage : MoSynthStage
     /// Current frame index in the pose/feature set
     /// </summary>
     public int CurrentFrame { get; private set; }
-
-    /// <summary>
-    /// Frame before the last Motion Matching Search
-    /// </summary>
-    public int LastMmSearchFrame { get; private set; }
 
     private NativeArray<bool> _tagMask;
 
@@ -103,20 +102,14 @@ public class MotionMatchingStage : MoSynthStage
         _poseSet = mmData.GetOrImportPoseSet();
         var featureSet = mmData.GetOrImportFeatureSet();
 
+        Assert.IsTrue(controlInput, "mmCharacterController not set");
+        // Force search on significant input change
+        controlInput.OnHighInputChange += () => { _searchTimeLeft = 0; };
+        
         Assert.IsTrue(
             motionSynthesisComponent.skeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
-        
-        // FPS
-        var databaseFrameTime = _poseSet.FrameTime;
-
-        var numberFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count + mmData.EnvironmentFeatures.Count;
-        
-        Assert.IsTrue(
-            _featureWeights.Length == numberFeatures, 
-            "Feature weights length does not match the number of features.");
-        
         
         _featureWeights = new NativeArray<float>(featureSet.FeatureSize, Allocator.Domain);
         // copy serialized weights
@@ -137,7 +130,6 @@ public class MotionMatchingStage : MoSynthStage
         {
             if (featureSet.IsValidFeature(i))
             {
-                LastMmSearchFrame = i;
                 CurrentFrame = i;
                 _poseSet.GetPose(i, out var pose);
                 _animationSpaceOriginPos = pose.JointLocalPositions[0];
@@ -202,7 +194,7 @@ public class MotionMatchingStage : MoSynthStage
 
     public override void Apply(PoseVector pose, float deltaTime)
     {
-        _searchTimeLeft -= deltaTime;
+        // _searchTimeLeft -= deltaTime;
         if (_searchTimeLeft <= 0)
         {
             FillQueryVector();
@@ -220,15 +212,18 @@ public class MotionMatchingStage : MoSynthStage
             
             if(isCurrentFrameValid && bestFrame == -1) bestFrame = CurrentFrame;
             Debug.Assert(bestFrame != -1, "Motion Matching is not able to find any valid pose. Maybe the motion database is empty or the query tag used produces an empty set of poses?");
-
-            if (bestFrame != CurrentFrame)
+            
+            if(math.abs(CurrentFrame - bestFrame) > minFrameSwitchDistance)
             {
                 _hasSwitchedFrames = true;
+                CurrentFrame = bestFrame;
             }
             
-            CurrentFrame = bestFrame;
-            
             _searchTimeLeft = searchInterval;
+        }
+        else
+        {
+            _searchTimeLeft -= deltaTime;
         }
         
         // Advance frames with time
@@ -283,7 +278,7 @@ public class MotionMatchingStage : MoSynthStage
             for (var p = 0; p < featureDef.FramesPrediction.Length; ++p)
             {
                 var feature = queryFeatureSpan.Slice(offset, featureSize);
-                characterController.GetTrajectoryFeature(featureDef, p, simulationBone, feature);
+                controlInput.GetTrajectoryFeature(featureDef, p, simulationBone, feature);
                 offset += featureSize;
             }
         }
@@ -338,7 +333,7 @@ public class MotionMatchingStage : MoSynthStage
                 {
                     var featureSize = featureDef.GetSize();
                     var feature = queryFeatureSpan.Slice(offset, featureSize);
-                    characterController.GetEnvironmentFeature(featureDef, p, simulationBone, feature);
+                    controlInput.GetEnvironmentFeature(featureDef, p, simulationBone, feature);
                     offset += featureSize;
                 }
             }
@@ -413,29 +408,54 @@ public class MotionMatchingStage : MoSynthStage
     public override void OnValidate()
     {
         if(mmData == null) return;
-        var numFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count + mmData.EnvironmentFeatures.Count;
-        
-        if(featureWeights.Count < numFeatures)
+        var featureSize = mmData.GetOrImportFeatureSet().FeatureSize;
+        if(featureWeights.Count < featureSize)
         {
-            for (var i = featureWeights.Count; i < numFeatures; i++)
+            for (var i = featureWeights.Count; i < featureSize; i++)
             {
                 featureWeights.Add(1.0f);
             }
         }
-        else if(featureWeights.Count > numFeatures)
+        else if(featureWeights.Count > featureSize)
         {
-            featureWeights.RemoveRange(numFeatures, featureWeights.Count - numFeatures);
+            featureWeights.RemoveRange(featureSize, featureWeights.Count - featureSize);
         }
 
-        if (_featureWeights.Length != numFeatures)
+        if (_featureWeights.Length != featureSize)
         {
-            _featureWeights = new NativeArray<float>(numFeatures, Allocator.Domain);
+            _featureWeights = new NativeArray<float>(featureSize, Allocator.Domain);
         }
 
         for (int i = 0; i < featureWeights.Count; i++)
         {
             _featureWeights[i] = featureWeights[i];
         }
+    }
+
+    public MotionMatchingData MmData => mmData;
+    public float DatabaseFrameTime => mmData.GetOrImportPoseSet().FrameTime;
+    public float3 RootVelocity { get; }
+    public float3 RootAngularVelocity { get; }
+    public float3 RootPosition { get; }
+    public quaternion RootRotation { get; }
+    public void SetRotAdjustment(quaternion adjustmentRotation)
+    {
+        throw new NotImplementedException();
+    }
+
+    public void SetPosAdjustment(float3 adjustmentPosition)
+    {
+        throw new NotImplementedException();
+    }
+
+    public float3 GetMainPositionFeature(int trajectoryIndex)
+    {
+        throw new NotImplementedException();
+    }
+
+    public float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
+    {
+        throw new NotImplementedException();
     }
 }
 }

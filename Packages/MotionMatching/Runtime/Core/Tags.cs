@@ -164,8 +164,8 @@ namespace MotionMatching
                 int g = graph.Dequeue();
                 if (GetRangesFromGraphIndex(g, out NativeArray<int> start, out NativeArray<int> end))
                 {
-                    StartRanges = new NativeArray<int>(start, Allocator.Persistent);
-                    EndRanges = new NativeArray<int>(end, Allocator.Persistent);
+                    StartRanges = new NativeArray<int>(start, Allocator.Domain);
+                    EndRanges = new NativeArray<int>(end, Allocator.Domain);
                 }
             }
             

@@ -4,28 +4,30 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
     // TODO: rename: MM shouldn't be in the name?
-    public abstract class MotionMatchingCharacterController : MonoBehaviour
+    public abstract class MoSynthControlInput : MonoBehaviour
     {
         // TODO: Create a OnValidate() (other name because it will collide with Unity's
         //       that validates if the current MMData has the necessary trajectories requeried
         //       by the current controller (eg. simulation bone pos + dir, or HMD + L/R controllers pos + dir)
 
         public event Action<float> OnUpdated;
-        public UnityAction OnInputChangedQuickly;
+        public UnityAction OnHighInputChange;
 
-        public MotionMatchingController MotionMatching; // MotionMatchingController's transform is the SimulationBone of the character
+        [FormerlySerializedAs("motionMatching")] [SerializeReference]
+        public MotionSynthesizer motionSynthesizer; // MotionMatchingController's transform is the SimulationBone of the character
 
         public float DatabaseDeltaTime { get; private set; }
 
         private void LateUpdate()
         {
-            DatabaseDeltaTime = MotionMatching.DatabaseFrameTime;
+            DatabaseDeltaTime = motionSynthesizer.DatabaseFrameTime;
             // Update the character
             OnUpdate();
             // Update other components depending on the character controller
@@ -38,7 +40,7 @@ namespace MotionMatching
         /// </summary>
         protected void NotifyInputChangedQuickly()
         {
-            OnInputChangedQuickly?.Invoke();
+            OnHighInputChange?.Invoke();
         }
 
         /// <summary>

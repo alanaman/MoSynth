@@ -15,7 +15,7 @@ public class LinearMotionMatchingSearch : MotionMatchingSearch
         TagMask = tagMask;
         FeatureWeights = featuresWeights;
         
-        SearchResult = new NativeArray<int>(2, Allocator.Persistent);
+        SearchResult = new NativeArray<int>(2, Allocator.Domain);
         SearchResult[0] = 0;
         SearchResult[1] = 0;
     }

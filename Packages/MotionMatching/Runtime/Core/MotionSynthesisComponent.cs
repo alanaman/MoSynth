@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace MotionMatching
 {
-public class MotionSynthesisComponent : MonoBehaviour
+public class MotionSynthesisComponent : MotionSynthesizer
 {
     // TODO: remove. shouldn't be coupled to MotionMatchingData
     public MotionMatchingData mmData;
@@ -35,6 +35,12 @@ public class MotionSynthesisComponent : MonoBehaviour
     [Tooltip("Whether to animate the root position by Motion Matching or not.")]
     // maybe change this to 'root motion'?
     public bool rootPositionsMask = true;
+    
+    public override MotionMatchingData MmData => mmData;
+    public override float3 RootVelocity { get; protected set; }
+    public override float3 RootAngularVelocity { get; protected set; }
+    public override float3 RootPosition { get; protected set; }
+    public override quaternion RootRotation { get; protected set; }
     
     private void Awake()
     {
@@ -106,7 +112,7 @@ public class MotionSynthesisComponent : MonoBehaviour
         return humanDescription.skeleton.First(skeletonBone => skeletonBone.name == targetRigBoneName);
     }
 
-    private void Update()
+    private void LateUpdate()
     {
         ConstructCurrentPoseFromSkeletonTransforms();
         
@@ -249,6 +255,29 @@ public class MotionSynthesisComponent : MonoBehaviour
         {
             stage?.OnValidate();
         }
+    }
+
+
+
+
+    public override void SetRotAdjustment(quaternion adjustmentRotation)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override void SetPosAdjustment(float3 adjustmentPosition)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override float3 GetMainPositionFeature(int trajectoryIndex)
+    {
+        throw new NotImplementedException();
+    }
+
+    public override float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
+    {
+        throw new NotImplementedException();
     }
 }
 }
