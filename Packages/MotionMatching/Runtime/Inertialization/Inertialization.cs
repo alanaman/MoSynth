@@ -60,7 +60,7 @@ namespace MotionMatching
         // TODO: this should be the currently displayed pose
         // (or should it just be an internal inertialization state?)
         private PoseVector _currentPose;
-        private float _halfLife;
+        public float halfLife = 0.1f;
         
         public override void Init(MotionSynthesisComponent motionSynthesisComponent)
         {
@@ -100,10 +100,10 @@ namespace MotionMatching
             float deltaTime
         )
         {
-            var offsetRot = math.mul(targetRot, math.inverse(currentRot));
-            var offsetAngularVel = targetAngularVel - currentAngularVel;
-            Spring.DecaySpringDamperImplicit(ref offsetRot, ref offsetAngularVel, _halfLife, deltaTime);
-            var newRot = math.mul(currentRot, offsetRot);
+            var offsetRot = math.normalizesafe(MathExtensions.Abs(math.mul(math.inverse(targetRot), currentRot)));
+            var offsetAngularVel = currentAngularVel - targetAngularVel;
+            Spring.DecaySpringDamperImplicit(ref offsetRot, ref offsetAngularVel, halfLife, deltaTime);
+            var newRot = math.mul(targetRot, offsetRot);
             var newAngularVel = targetAngularVel + offsetAngularVel;
             return (newRot, newAngularVel);
         }
@@ -111,9 +111,9 @@ namespace MotionMatching
         (float3 newPos, float3 newVel) InertializeJointUpdate(float3 currentPos, float3 currentVel,
             float3 targetPos, float3 targetVel, float deltaTime)
         {
-            var offsetPos = targetPos - currentPos;
-            var offsetVel = targetVel - currentVel;
-            Spring.DecaySpringDamperImplicit(ref offsetPos, ref offsetVel, _halfLife, deltaTime);
+            var offsetPos = currentPos - targetPos;
+            var offsetVel = currentVel - targetVel;
+            Spring.DecaySpringDamperImplicit(ref offsetPos, ref offsetVel, halfLife, deltaTime);
             var newPos = targetPos + offsetPos;
             var newVel = targetVel + offsetVel;
             return (newPos, newVel);
