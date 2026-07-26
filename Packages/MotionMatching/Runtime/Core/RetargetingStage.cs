@@ -97,6 +97,28 @@ public class RetargetingStage : MoSynthStage
     }
 
 
+    public override void Inverse(PoseVector pose)
+    {
+        var animationSkeleton = _owner.Skeleton;
+
+        for (var i = 0; i < animationSkeleton.Joints.Count - 1; i++)
+        {
+            var targetTPoseRotation = _characterTPose[i];
+            var sourceTPoseRotation = _animationTPose[i];
+
+            var targetRot = pose.GetRootSpaceRotation(animationSkeleton, animationSkeleton.Joints[i + 1]);
+
+            var newSourceRot = targetRot * Quaternion.Inverse(targetTPoseRotation) * Quaternion.Inverse(_hipsCorrection) * sourceTPoseRotation;
+
+            var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i+1]);
+            var parentRot = pose.GetRootSpaceRotation(animationSkeleton, parentJoint);
+
+            var newSourceLocalRot = Quaternion.Inverse(parentRot) * newSourceRot;
+
+            pose.JointLocalRotations[i+1] = newSourceLocalRot;
+        }
+    }
+
     public override void Apply(PoseVector pose, float deltaTime)
     {
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);

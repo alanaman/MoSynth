@@ -376,6 +376,21 @@ namespace MotionMatching
         }
 
         /// <summary>
+        /// Normalizes the pose features (trajectory features remain untouched)
+        /// </summary>
+        public void NormalizePose(Span<float> featureVector)
+        {
+            Debug.Assert(Mean != null, "Mean is not initialized");
+            Debug.Assert(StandardDeviation != null, "StandardDeviation is not initialized");
+            Debug.Assert(featureVector.Length == FeatureSize, "Feature vector size does not match");
+
+            for (var i = PoseOffset; i < PoseOffset + PoseFloatCount; i++)
+            {
+                featureVector[i] = (featureVector[i] - Mean[i]) / StandardDeviation[i];
+            }
+        }
+
+        /// <summary>
         /// Normalizes all features (trajectory + pose)
         /// </summary>
         public void NormalizeFeatureVector(NativeArray<float> featureVector)

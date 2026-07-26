@@ -30,5 +30,9 @@ public abstract class MoSynthStage
     }
 
     public abstract void Apply(PoseVector pose, float deltaTime);
+
+    public virtual void Inverse(PoseVector pose)
+    {
+    }
 }
 }
