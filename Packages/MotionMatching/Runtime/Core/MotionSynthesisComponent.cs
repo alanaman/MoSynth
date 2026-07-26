@@ -47,6 +47,8 @@ public class MotionSynthesisComponent : MotionSynthesizer
         _animator = GetComponent<Animator>();
         
         skeleton = null;
+        
+        stages.RemoveAll(stage => stage == null);
         foreach (var stage in stages)
         {
             skeleton = stage.GetSkeleton(skeleton);
