@@ -24,51 +24,51 @@ MonoBehaviour:
     y: 0
     z: 0
   ContactVelocityThreshold: 0.15
-  SkeletonToMecanim:
-  - Name: Hips
-    MecanimBone: 0
-  - Name: LeftUpLeg
-    MecanimBone: 1
-  - Name: LeftLeg
-    MecanimBone: 3
-  - Name: LeftFoot
-    MecanimBone: 5
-  - Name: LeftToe
-    MecanimBone: 19
-  - Name: RightUpLeg
-    MecanimBone: 2
-  - Name: RightLeg
-    MecanimBone: 4
-  - Name: RightFoot
-    MecanimBone: 6
-  - Name: RightToe
-    MecanimBone: 20
-  - Name: Spine
-    MecanimBone: 7
-  - Name: Spine1
-    MecanimBone: 8
-  - Name: Spine2
-    MecanimBone: 54
-  - Name: Neck
-    MecanimBone: 9
-  - Name: Head
-    MecanimBone: 10
-  - Name: LeftShoulder
-    MecanimBone: 11
-  - Name: LeftArm
-    MecanimBone: 13
-  - Name: LeftForeArm
-    MecanimBone: 15
-  - Name: LeftHand
-    MecanimBone: 17
-  - Name: RightShoulder
-    MecanimBone: 12
-  - Name: RightArm
-    MecanimBone: 14
-  - Name: RightForeArm
-    MecanimBone: 16
-  - Name: RightHand
-    MecanimBone: 18
+  animationChannelToMecanim:
+  - name: Hips
+    mecanimBone: 0
+  - name: LeftUpLeg
+    mecanimBone: 1
+  - name: LeftLeg
+    mecanimBone: 3
+  - name: LeftFoot
+    mecanimBone: 5
+  - name: LeftToe
+    mecanimBone: 19
+  - name: RightUpLeg
+    mecanimBone: 2
+  - name: RightLeg
+    mecanimBone: 4
+  - name: RightFoot
+    mecanimBone: 6
+  - name: RightToe
+    mecanimBone: 20
+  - name: Spine
+    mecanimBone: 7
+  - name: Spine1
+    mecanimBone: 8
+  - name: Spine2
+    mecanimBone: 54
+  - name: Neck
+    mecanimBone: 9
+  - name: Head
+    mecanimBone: 10
+  - name: LeftShoulder
+    mecanimBone: 11
+  - name: LeftArm
+    mecanimBone: 13
+  - name: LeftForeArm
+    mecanimBone: 15
+  - name: LeftHand
+    mecanimBone: 17
+  - name: RightShoulder
+    mecanimBone: 12
+  - name: RightArm
+    mecanimBone: 14
+  - name: RightForeArm
+    mecanimBone: 16
+  - name: RightHand
+    mecanimBone: 18
   TrajectoryFeatures:
   - Name: FuturePosition
     FeatureType: 0
@@ -107,7 +107,7 @@ MonoBehaviour:
     FeatureType: 1
     Bone: 0
   EnvironmentFeatures: []
-  JointsLocalForward:
+  jointsLocalForward:
   - x: 0
     y: 0
     z: 1
