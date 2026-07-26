@@ -13,7 +13,7 @@ namespace MotionMatching
 [Serializable]
 public class MotionMatchingStage : MoSynthStage
 {
-    private MotionSynthesisComponent _owner;
+    private MotionSynthesizer _owner;
     
     [FormerlySerializedAs("characterController")] public MoSynthControlInput controlInput;
     
@@ -96,7 +96,7 @@ public class MotionMatchingStage : MoSynthStage
     public bool IsLeftFootContact { get; private set; }
     public bool IsRightFootContact { get; private set; }
 
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();

@@ -4,6 +4,7 @@
     "references": [
         "Unity.Burst",
         "Unity.Mathematics",
+        "Unity.GraphToolkit",
         "Unity.InputSystem",
         "Unity.Splines",
         "Unity.Collections",

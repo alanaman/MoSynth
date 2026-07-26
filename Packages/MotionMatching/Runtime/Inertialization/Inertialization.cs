@@ -62,7 +62,7 @@ namespace MotionMatching
         private PoseVector _currentPose;
         private float _halfLife;
         
-        public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+        public override void Init(MotionSynthesizer motionSynthesisComponent)
         {
             _owner = motionSynthesisComponent;
              _currentPose = new PoseVector(motionSynthesisComponent.CurrentPose);

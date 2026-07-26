@@ -9,7 +9,7 @@ public class RootMotionCorrectionStage : MoSynthStage
 {
     Transform _root;
     
-    MotionSynthesisComponent _owner;
+    MotionSynthesizer _owner;
     
     float3 _rootPosition;
     quaternion _rootRotation;
@@ -20,7 +20,7 @@ public class RootMotionCorrectionStage : MoSynthStage
     private float3 _transformPosAtLastJump;
     private quaternion _transformRotAtLastJump;
 
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _root = motionSynthesisComponent.transform;
