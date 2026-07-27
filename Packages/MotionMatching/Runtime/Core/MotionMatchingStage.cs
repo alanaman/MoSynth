@@ -71,6 +71,8 @@ public class MotionMatchingStage : MoSynthStage
     // add a separate root correction stage and pass a Tag down the pipeline
     // to indicate when to do the correction
     private bool _hasSwitchedFrames;
+
+    public PoseVector? TargetPose { get; set; }
     
     private float3 _animationSpaceOriginPos;
     private quaternion _animationSpaceOriginRot;
@@ -96,7 +98,7 @@ public class MotionMatchingStage : MoSynthStage
     public bool IsLeftFootContact { get; private set; }
     public bool IsRightFootContact { get; private set; }
 
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();
@@ -286,42 +288,35 @@ public class MotionMatchingStage : MoSynthStage
         var featureSet = mmData.GetOrImportFeatureSet();
         featureSet.NormalizeTrajectory(queryFeatureSpan);
 
-        // TODO:
-        // The currentPose of the character could be quite different from the 
-        // one poses stored in mmData due to retargeting. 
-        // We can use the currentPose if we implement a backpropagation
-        // that can inverse the retargeting.
-        
-        // // Pose features
-        // for (int i = 0; i < featureSet.NumberPoseFeatures; i++)
-        // {
-        //     var poseFeatureDef = mmData.PoseFeatures[i];
-        //     var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
-        //     var currPose = _owner.CurrentPose;
-        //     var skeleton = _poseSet.Skeleton;
-        //     var joint = skeleton.Find(poseFeatureDef.Bone);
-        //     if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
-        //     {
-        //         var feature = currPose.GetRootSpacePosition(skeleton, joint);
-        //         
-        //         queryFeatureSpan[featureOffset + 0] = feature.x;
-        //         queryFeatureSpan[featureOffset + 1] = feature.y;
-        //         queryFeatureSpan[featureOffset + 2] = feature.z;
-        //     }
-        //     else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
-        //     {
-        //         var feature = currPose.GetRootSpaceVelocity(skeleton, joint);
-        //         queryFeatureSpan[featureOffset + 0] = feature.x;
-        //         queryFeatureSpan[featureOffset + 1] = feature.y;
-        //         queryFeatureSpan[featureOffset + 2] = feature.z;
-        //     }
-        //     else
-        //     {
-        //         throw new Exception("Unknown PoseFeature.Type: " + poseFeatureDef.FeatureType);
-        //     }
-        // }
-        
-        featureSet.GetPoseFeatures(queryFeatureSpan.Slice(offset, featureSet.PoseFloatCount), CurrentFrame);
+        if (TargetPose.HasValue)
+        {
+            var targetPose = TargetPose.Value;
+            var skeleton = _poseSet.Skeleton;
+            for (int i = 0; i < featureSet.NumberPoseFeatures; i++)
+            {
+                var poseFeatureDef = mmData.PoseFeatures[i];
+                var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
+                var joint = skeleton.Find(poseFeatureDef.Bone);
+                if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
+                {
+                    var feature = targetPose.GetRootSpacePosition(skeleton, joint);
+                    queryFeatureSpan[featureOffset + 0] = feature.x;
+                    queryFeatureSpan[featureOffset + 1] = feature.y;
+                    queryFeatureSpan[featureOffset + 2] = feature.z;
+                }
+                else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
+                {
+                    var feature = targetPose.GetRootSpaceVelocity(skeleton, joint);
+                    queryFeatureSpan[featureOffset + 0] = feature.x;
+                    queryFeatureSpan[featureOffset + 1] = feature.y;
+                    queryFeatureSpan[featureOffset + 2] = feature.z;
+                }
+            }
+        }
+        else
+        {
+            featureSet.GetPoseFeatures(queryFeatureSpan.Slice(offset, featureSet.PoseFloatCount), CurrentFrame);
+        }
         
         // Environment features
         if (featureSet.EnvironmentOffset.Length > 0)
