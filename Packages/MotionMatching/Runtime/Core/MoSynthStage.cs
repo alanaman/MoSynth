@@ -23,7 +23,7 @@ public abstract class MoSynthStage
         return inSkeleton;
     }
     
-    public abstract void Init(MotionSynthesisComponent motionSynthesisComponent);
+    public abstract void Init(MotionSynthesizer motionSynthesisComponent);
 
     public virtual void OnValidate()
     {

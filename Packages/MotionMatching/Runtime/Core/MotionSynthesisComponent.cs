@@ -11,7 +11,8 @@ public class MotionSynthesisComponent : MotionSynthesizer
     // TODO: remove. shouldn't be coupled to MotionMatchingData
     public MotionMatchingData mmData;
     
-    public PoseVector CurrentPose;
+    public override PoseVector CurrentPose => _currentPose;
+    private PoseVector _currentPose;
     
     Skeleton skeleton;
     public Skeleton Skeleton => skeleton;
@@ -118,7 +119,7 @@ public class MotionSynthesisComponent : MotionSynthesizer
     {
         ConstructCurrentPoseFromSkeletonTransforms();
         
-        var pose = new PoseVector(CurrentPose);
+        var pose = new PoseVector(_currentPose);
         foreach (var stage in stages)
         {
             if (stage.isEnabled)
@@ -132,18 +133,18 @@ public class MotionSynthesisComponent : MotionSynthesizer
 
     void InitCurrentPose()
     {
-        CurrentPose = new PoseVector(skeleton.Joints.Count);
+        _currentPose = new PoseVector(skeleton.Joints.Count);
         
         for (var i = 0; i < skeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
-            CurrentPose.JointLocalPositions[i] = skeletonTransforms[i].localPosition;
-            CurrentPose.JointLocalVelocities[i] = float3.zero;
-            CurrentPose.JointLocalAngularVelocities[i] = float3.zero;
+            _currentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
+            _currentPose.JointLocalPositions[i] = skeletonTransforms[i].localPosition;
+            _currentPose.JointLocalVelocities[i] = float3.zero;
+            _currentPose.JointLocalAngularVelocities[i] = float3.zero;
         }
 
-        CurrentPose.LeftFootContact = false;
-        CurrentPose.RightFootContact = false;
+        _currentPose.LeftFootContact = false;
+        _currentPose.RightFootContact = false;
     }
 
     void ConstructCurrentPoseFromSkeletonTransforms()
@@ -161,27 +162,27 @@ public class MotionSynthesisComponent : MotionSynthesizer
         //
         // pose.JointLocalPositions[0] = math.mul(_inverseAnimationSpaceOriginRot, localSpacePos) + _animationSpaceOriginPos;
         
-        for (var i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
+        for (var i = 0; i < _currentPose.JointLocalAngularVelocities.Length; i++)
         {
-            var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
-            CurrentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
-            CurrentPose.JointLocalVelocities[i] = (float3)skeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
+            var inverseLocalRotation = Quaternion.Inverse(_currentPose.JointLocalRotations[i]);
+            _currentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
+            _currentPose.JointLocalVelocities[i] = (float3)skeletonTransforms[i].localPosition - _currentPose.JointLocalPositions[i];
         }
         
-        CurrentPose.JointLocalPositions[0] = skeletonTransforms[0].localPosition;
-        CurrentPose.JointLocalRotations[0] = skeletonTransforms[0].localRotation;
+        _currentPose.JointLocalPositions[0] = skeletonTransforms[0].localPosition;
+        _currentPose.JointLocalRotations[0] = skeletonTransforms[0].localRotation;
         
         for (var i = 1; i < skeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
+            _currentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
         }
 
         // hip
-        CurrentPose.JointLocalPositions[1] = skeletonTransforms[1].localPosition;
+        _currentPose.JointLocalPositions[1] = skeletonTransforms[1].localPosition;
 
         
-        // CurrentPose.LeftFootContact = ?;
-        // CurrentPose.RightFootContact = ?;
+        // _currentPose.LeftFootContact = ?;
+        // _currentPose.RightFootContact = ?;
     }
     
     private void ApplyPoseToSkeletonTransforms(PoseVector pose)

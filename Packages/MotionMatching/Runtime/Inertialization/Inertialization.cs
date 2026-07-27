@@ -72,7 +72,7 @@ public class Inertialization : MoSynthStage
     private bool _isPoseInitialized = false;
     public float halfLife = 0.1f;
 
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _currentPose = new PoseVector(motionSynthesisComponent.CurrentPose);

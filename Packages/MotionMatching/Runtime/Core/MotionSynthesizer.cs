@@ -20,6 +20,7 @@ public abstract class MotionSynthesizer : MonoBehaviour
     
     public abstract float3 RootPosition { get; protected set; }
     public abstract quaternion RootRotation { get; protected set; }
+    public abstract PoseVector CurrentPose { get; }
 
     public abstract void SetRotAdjustment(quaternion adjustmentRotation);
     public abstract void SetPosAdjustment(float3 adjustmentPosition);

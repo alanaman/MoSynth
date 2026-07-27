@@ -20,7 +20,7 @@ public class PoseSetVisualizerStage : MoSynthStage
         return _poseSet.Skeleton;
     }
     
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();

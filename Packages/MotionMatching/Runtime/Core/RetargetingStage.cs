@@ -22,7 +22,7 @@ public class RetargetingStage : MoSynthStage
     
     private quaternion _hipsCorrection;
     
-    public override void Init(MotionSynthesisComponent motionSynthesisComponent)
+    public override void Init(MotionSynthesizer motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _animator = motionSynthesisComponent.GetComponent<Animator>();
