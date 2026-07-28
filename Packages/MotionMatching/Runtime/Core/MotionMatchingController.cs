@@ -4,7 +4,7 @@ using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Jobs;
 using UnityEngine.Serialization;
-
+using System.Linq;
 namespace MotionMatching
 {
 
@@ -13,20 +13,16 @@ public class MotionMatchingController : MotionSynthesizer
 {
     public event Action OnSkeletonTransformUpdated;
 
-    [FormerlySerializedAs("characterController")] [Header("General")] 
-    
     public MoSynthControlInput controlInput;
     public MotionMatchingData mmData;
     
     [SerializeReference] [SubclassSelector]
     public MotionMatchingSearch mmSearch = new BvhMotionMatchingSearch();
 
-    public bool lockFPS = true;
-
     /// <summary>
     /// The interval in seconds between two Motion Matching searches when there are no sudden input changes.
     /// </summary>
-    [FormerlySerializedAs("searchTime")] public float searchInterval = 10.0f / 60.0f;
+    public float searchInterval = 10.0f / 60.0f;
 
 
     public bool inertialize = true; // Should inertialize transitions after a big change of the pose
@@ -57,7 +53,7 @@ public class MotionMatchingController : MotionSynthesizer
     public override float3 RootPosition { get; protected set; }
     public override quaternion RootRotation { get; protected set; } = quaternion.identity;
 
-    private int _databaseFrameRate;
+    private float _databaseFrameRate;
     public PoseSet PoseSet { get; private set; }
     public FeatureSet FeatureSet { get; private set; }
     public float SearchTimeLeft { get; private set; }
@@ -156,7 +152,7 @@ public class MotionMatchingController : MotionSynthesizer
         _inertialization = new Inertialization(PoseSet.Skeleton);
 
         // FPS
-        _databaseFrameRate = Mathf.RoundToInt(1.0f / DatabaseFrameTime);
+        _databaseFrameRate = 1.0f / DatabaseFrameTime;
         // if (lockFPS)
         // {
         //     Application.targetFrameRate = _databaseFrameRate;

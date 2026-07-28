@@ -7,6 +7,7 @@ using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEngine.Serialization;
+using System.Linq;
 
 namespace MotionMatching
 {
@@ -23,8 +24,6 @@ public class MotionMatchingStage : MoSynthStage
     
     [SerializeReference] [SubclassSelector]
     public MotionMatchingSearch mmSearch = new BvhMotionMatchingSearch();
-    
-    public bool lockFPS = true;
     
     /// <summary>
     /// The interval in seconds between two Motion Matching searches when there are no sudden input changes.
@@ -90,6 +89,7 @@ public class MotionMatchingStage : MoSynthStage
     private float _currentFrameTime;
 
     private float4x4 _animToWorld;
+    private float _databaseFrameRate;
 
 
     // Contact TODO: this frame? prev frame ?
@@ -101,7 +101,7 @@ public class MotionMatchingStage : MoSynthStage
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();
         var featureSet = mmData.GetOrImportFeatureSet();
-
+        
         Assert.IsTrue(controlInput, "mmCharacterController not set");
         // Force search on significant input change
         controlInput.OnHighInputChange += () => { _searchTimeLeft = 0; };
@@ -110,6 +110,8 @@ public class MotionMatchingStage : MoSynthStage
             motionSynthesisComponent.skeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
+        
+        _databaseFrameRate = 1f / _poseSet.FrameTime;
         
         _featureWeights = new NativeArray<float>(featureSet.FeatureSize, Allocator.Domain);
         // copy serialized weights
@@ -228,7 +230,7 @@ public class MotionMatchingStage : MoSynthStage
         
         // Advance frames with time
         _currentFrameTime = CurrentFrame + math.frac(_currentFrameTime);
-        _currentFrameTime += deltaTime / _poseSet.FrameTime;
+        _currentFrameTime += deltaTime * _databaseFrameRate;
         CurrentFrame = (int)math.floor(_currentFrameTime);
         
         _poseSet.GetPose(CurrentFrame, out var newPose);

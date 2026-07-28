@@ -201,6 +201,11 @@ public class MotionSynthesisComponent : MotionSynthesizer
         }
 
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
+        
+        // hips
+        skeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
+        
+        // root
         if (rootPositionsMask)
         {
             skeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
