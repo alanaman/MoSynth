@@ -26,6 +26,9 @@ namespace MotionMatching.Editor
         private List<Vector3> lineVertices = new List<Vector3>();
         private List<int> lineIndices = new List<int>();
 
+        private Material gridMaterial;
+        private Mesh gridMesh;
+
         private void OnEnable()
         {
             bvhAnimation = (BvhAnimation)target;
@@ -45,6 +48,52 @@ namespace MotionMatching.Editor
             skeletonMesh = new Mesh();
             skeletonMesh.hideFlags = HideFlags.HideAndDontSave;
             skeletonMesh.MarkDynamic();
+
+            if (shader != null)
+            {
+                gridMaterial = new Material(shader);
+                gridMaterial.hideFlags = HideFlags.HideAndDontSave;
+                gridMaterial.SetInt("_ZWrite", 1);
+                gridMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+                gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+            }
+            CreateGridMesh();
+        }
+
+        private void CreateGridMesh()
+        {
+            gridMesh = new Mesh();
+            gridMesh.hideFlags = HideFlags.HideAndDontSave;
+
+            List<Vector3> verts = new List<Vector3>();
+            List<int> indices = new List<int>();
+            List<Color> colors = new List<Color>();
+
+            int gridSize = 10;
+            float step = 1f;
+            Color darkGray = new Color(0.3f, 0.3f, 0.3f, 1f);
+            Color lightGray = new Color(0.5f, 0.5f, 0.5f, 1f);
+
+            for (int i = -gridSize; i <= gridSize; i++)
+            {
+                verts.Add(new Vector3(i * step, 0, -gridSize * step));
+                verts.Add(new Vector3(i * step, 0, gridSize * step));
+
+                verts.Add(new Vector3(-gridSize * step, 0, i * step));
+                verts.Add(new Vector3(gridSize * step, 0, i * step));
+
+                Color c = (i % 5 == 0) ? lightGray : darkGray;
+                colors.Add(c); colors.Add(c);
+                colors.Add(c); colors.Add(c);
+
+                int count = indices.Count;
+                indices.Add(count); indices.Add(count + 1);
+                indices.Add(count + 2); indices.Add(count + 3);
+            }
+
+            gridMesh.SetVertices(verts);
+            gridMesh.SetColors(colors);
+            gridMesh.SetIndices(indices, MeshTopology.Lines, 0);
         }
 
         private void OnDisable()
@@ -64,6 +113,14 @@ namespace MotionMatching.Editor
             if (skeletonMesh != null)
             {
                 DestroyImmediate(skeletonMesh);
+            }
+            if (gridMaterial != null)
+            {
+                DestroyImmediate(gridMaterial);
+            }
+            if (gridMesh != null)
+            {
+                DestroyImmediate(gridMesh);
             }
         }
 
@@ -134,6 +191,11 @@ namespace MotionMatching.Editor
             HandleCameraControls(r);
 
             previewRenderUtility.BeginPreview(r, background);
+
+            if (gridMaterial != null && gridMesh != null)
+            {
+                previewRenderUtility.DrawMesh(gridMesh, Matrix4x4.identity, gridMaterial, 0);
+            }
 
             DrawSkeleton();
 
