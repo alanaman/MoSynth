@@ -11,59 +11,59 @@ namespace MotionMatching.Editor
     [CustomEditor(typeof(BvhAnimation))]
     public class BvhAnimationEditor : UnityEditor.Editor
     {
-        private PreviewRenderUtility previewRenderUtility;
-        private BvhAnimation bvhAnimation;
-        private bool isPlaying = false;
-        private float currentTime = 0f;
-        private float previousTime = 0f;
+        private PreviewRenderUtility _previewRenderUtility;
+        private BvhAnimation _bvhAnimation;
+        private bool _isPlaying = false;
+        private float _currentTime = 0f;
+        private float _previousTime = 0f;
 
-        private Vector2 drag;
-        private float distance = 5f;
-        private Vector3 targetPos = Vector3.zero;
+        private Vector2 _drag;
+        private float _distance = 5f;
+        private Vector3 _targetPos = Vector3.zero;
 
-        private Material lineMaterial;
-        private Mesh skeletonMesh;
-        private List<Vector3> lineVertices = new List<Vector3>();
-        private List<int> lineIndices = new List<int>();
+        private Material _lineMaterial;
+        private Mesh _skeletonMesh;
+        private List<Vector3> _lineVertices = new List<Vector3>();
+        private List<int> _lineIndices = new List<int>();
 
-        private Material gridMaterial;
-        private Mesh gridMesh;
+        private Material _gridMaterial;
+        private Mesh _gridMesh;
 
         private void OnEnable()
         {
-            bvhAnimation = (BvhAnimation)target;
+            _bvhAnimation = (BvhAnimation)target;
             EditorApplication.update += UpdateSimulation;
-            previousTime = (float)EditorApplication.timeSinceStartup;
+            _previousTime = (float)EditorApplication.timeSinceStartup;
 
             Shader shader = Shader.Find("Hidden/Internal-Colored");
             if (shader != null)
             {
-                lineMaterial = new Material(shader);
-                lineMaterial.hideFlags = HideFlags.HideAndDontSave;
-                lineMaterial.SetInt("_ZWrite", 1);
-                lineMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-                lineMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                _lineMaterial = new Material(shader);
+                _lineMaterial.hideFlags = HideFlags.HideAndDontSave;
+                _lineMaterial.SetInt("_ZWrite", 1);
+                _lineMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+                _lineMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             }
 
-            skeletonMesh = new Mesh();
-            skeletonMesh.hideFlags = HideFlags.HideAndDontSave;
-            skeletonMesh.MarkDynamic();
+            _skeletonMesh = new Mesh();
+            _skeletonMesh.hideFlags = HideFlags.HideAndDontSave;
+            _skeletonMesh.MarkDynamic();
 
             if (shader != null)
             {
-                gridMaterial = new Material(shader);
-                gridMaterial.hideFlags = HideFlags.HideAndDontSave;
-                gridMaterial.SetInt("_ZWrite", 1);
-                gridMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
-                gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+                _gridMaterial = new Material(shader);
+                _gridMaterial.hideFlags = HideFlags.HideAndDontSave;
+                _gridMaterial.SetInt("_ZWrite", 1);
+                _gridMaterial.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.LessEqual);
+                _gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             }
             CreateGridMesh();
         }
 
         private void CreateGridMesh()
         {
-            gridMesh = new Mesh();
-            gridMesh.hideFlags = HideFlags.HideAndDontSave;
+            _gridMesh = new Mesh();
+            _gridMesh.hideFlags = HideFlags.HideAndDontSave;
 
             List<Vector3> verts = new List<Vector3>();
             List<int> indices = new List<int>();
@@ -91,52 +91,52 @@ namespace MotionMatching.Editor
                 indices.Add(count + 2); indices.Add(count + 3);
             }
 
-            gridMesh.SetVertices(verts);
-            gridMesh.SetColors(colors);
-            gridMesh.SetIndices(indices, MeshTopology.Lines, 0);
+            _gridMesh.SetVertices(verts);
+            _gridMesh.SetColors(colors);
+            _gridMesh.SetIndices(indices, MeshTopology.Lines, 0);
         }
 
         private void OnDisable()
         {
             EditorApplication.update -= UpdateSimulation;
 
-            if (previewRenderUtility != null)
+            if (_previewRenderUtility != null)
             {
-                previewRenderUtility.Cleanup();
-                previewRenderUtility = null;
+                _previewRenderUtility.Cleanup();
+                _previewRenderUtility = null;
             }
 
-            if (lineMaterial != null)
+            if (_lineMaterial != null)
             {
-                DestroyImmediate(lineMaterial);
+                DestroyImmediate(_lineMaterial);
             }
-            if (skeletonMesh != null)
+            if (_skeletonMesh != null)
             {
-                DestroyImmediate(skeletonMesh);
+                DestroyImmediate(_skeletonMesh);
             }
-            if (gridMaterial != null)
+            if (_gridMaterial != null)
             {
-                DestroyImmediate(gridMaterial);
+                DestroyImmediate(_gridMaterial);
             }
-            if (gridMesh != null)
+            if (_gridMesh != null)
             {
-                DestroyImmediate(gridMesh);
+                DestroyImmediate(_gridMesh);
             }
         }
 
         private void UpdateSimulation()
         {
             float time = (float)EditorApplication.timeSinceStartup;
-            float deltaTime = time - previousTime;
-            previousTime = time;
+            float deltaTime = time - _previousTime;
+            _previousTime = time;
 
-            if (isPlaying && bvhAnimation != null && bvhAnimation.Frames != null && bvhAnimation.Frames.Length > 0)
+            if (_isPlaying && _bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0)
             {
-                currentTime += deltaTime;
-                float duration = bvhAnimation.Frames.Length * bvhAnimation.FrameTime;
-                if (currentTime >= duration)
+                _currentTime += deltaTime;
+                float duration = _bvhAnimation.Frames.Length * _bvhAnimation.FrameTime;
+                if (_currentTime >= duration)
                 {
-                    currentTime = currentTime % duration;
+                    _currentTime = _currentTime % duration;
                 }
                 Repaint();
             }
@@ -144,7 +144,7 @@ namespace MotionMatching.Editor
 
         public override bool HasPreviewGUI()
         {
-            return bvhAnimation != null && bvhAnimation.Frames != null && bvhAnimation.Frames.Length > 0;
+            return _bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0;
         }
 
         public override GUIContent GetPreviewTitle()
@@ -156,20 +156,20 @@ namespace MotionMatching.Editor
         {
             GUIStyle buttonStyle = new GUIStyle(EditorStyles.toolbarButton);
 
-            if (GUILayout.Button(isPlaying ? "Pause" : "Play", buttonStyle))
+            if (GUILayout.Button(_isPlaying ? "Pause" : "Play", buttonStyle))
             {
-                isPlaying = !isPlaying;
-                if (isPlaying)
+                _isPlaying = !_isPlaying;
+                if (_isPlaying)
                 {
-                    previousTime = (float)EditorApplication.timeSinceStartup;
+                    _previousTime = (float)EditorApplication.timeSinceStartup;
                 }
             }
 
-            if (bvhAnimation != null && bvhAnimation.Frames != null && bvhAnimation.Frames.Length > 0)
+            if (_bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0)
             {
-                float duration = bvhAnimation.Frames.Length * bvhAnimation.FrameTime;
+                float duration = _bvhAnimation.Frames.Length * _bvhAnimation.FrameTime;
                 EditorGUI.BeginChangeCheck();
-                currentTime = GUILayout.HorizontalSlider(currentTime, 0f, duration, GUILayout.Width(150));
+                _currentTime = GUILayout.HorizontalSlider(_currentTime, 0f, duration, GUILayout.Width(150));
                 if (EditorGUI.EndChangeCheck())
                 {
                     // Update preview if scrubbed manually
@@ -180,27 +180,27 @@ namespace MotionMatching.Editor
 
         public override void OnInteractivePreviewGUI(Rect r, GUIStyle background)
         {
-            if (previewRenderUtility == null)
+            if (_previewRenderUtility == null)
             {
-                previewRenderUtility = new PreviewRenderUtility();
-                previewRenderUtility.camera.fieldOfView = 30f;
-                previewRenderUtility.camera.nearClipPlane = 0.01f;
-                previewRenderUtility.camera.farClipPlane = 1000f;
+                _previewRenderUtility = new PreviewRenderUtility();
+                _previewRenderUtility.camera.fieldOfView = 30f;
+                _previewRenderUtility.camera.nearClipPlane = 0.01f;
+                _previewRenderUtility.camera.farClipPlane = 1000f;
             }
 
             HandleCameraControls(r);
 
-            previewRenderUtility.BeginPreview(r, background);
+            _previewRenderUtility.BeginPreview(r, background);
 
-            if (gridMaterial != null && gridMesh != null)
+            if (_gridMaterial != null && _gridMesh != null)
             {
-                previewRenderUtility.DrawMesh(gridMesh, Matrix4x4.identity, gridMaterial, 0);
+                _previewRenderUtility.DrawMesh(_gridMesh, Matrix4x4.identity, _gridMaterial, 0);
             }
 
             DrawSkeleton();
 
-            previewRenderUtility.camera.Render();
-            Texture resultRender = previewRenderUtility.EndPreview();
+            _previewRenderUtility.camera.Render();
+            Texture resultRender = _previewRenderUtility.EndPreview();
             GUI.DrawTexture(r, resultRender, ScaleMode.StretchToFill, false);
         }
 
@@ -212,22 +212,22 @@ namespace MotionMatching.Editor
             {
                 if (e.type == EventType.MouseDrag && e.button == 0)
                 {
-                    drag.x += e.delta.x * 0.5f;
-                    drag.y += e.delta.y * 0.5f;
+                    _drag.x += e.delta.x * 0.5f;
+                    _drag.y += e.delta.y * 0.5f;
                     e.Use();
                 }
                 else if (e.type == EventType.MouseDrag && e.button == 2)
                 {
                     // Pan
-                    Vector3 right = previewRenderUtility.camera.transform.right;
-                    Vector3 up = previewRenderUtility.camera.transform.up;
-                    targetPos -= (right * e.delta.x - up * e.delta.y) * 0.01f * distance;
+                    Vector3 right = _previewRenderUtility.camera.transform.right;
+                    Vector3 up = _previewRenderUtility.camera.transform.up;
+                    _targetPos -= (right * e.delta.x - up * e.delta.y) * (0.01f * _distance);
                     e.Use();
                 }
                 else if (e.type == EventType.ScrollWheel)
                 {
-                    distance += e.delta.y * 0.1f;
-                    distance = Mathf.Max(0.1f, distance);
+                    _distance += e.delta.y * 0.1f;
+                    _distance = Mathf.Max(0.1f, _distance);
                     e.Use();
                 }
             }
@@ -235,13 +235,13 @@ namespace MotionMatching.Editor
 
         private void DrawSkeleton()
         {
-            if (bvhAnimation == null || bvhAnimation.Frames == null || bvhAnimation.Frames.Length == 0) return;
+            if (_bvhAnimation == null || _bvhAnimation.Frames == null || _bvhAnimation.Frames.Length == 0) return;
 
-            int frameIndex = Mathf.FloorToInt(currentTime / bvhAnimation.FrameTime);
-            frameIndex = Mathf.Clamp(frameIndex, 0, bvhAnimation.Frames.Length - 1);
+            int frameIndex = Mathf.FloorToInt(_currentTime / _bvhAnimation.FrameTime);
+            frameIndex = Mathf.Clamp(frameIndex, 0, _bvhAnimation.Frames.Length - 1);
 
-            BvhAnimation.Frame frame = bvhAnimation.Frames[frameIndex];
-            Skeleton skeleton = bvhAnimation.Skeleton;
+            BvhAnimation.Frame frame = _bvhAnimation.Frames[frameIndex];
+            Skeleton skeleton = _bvhAnimation.Skeleton;
 
             if (skeleton == null || skeleton.Joints == null || skeleton.Joints.Count == 0) return;
 
@@ -249,24 +249,22 @@ namespace MotionMatching.Editor
             Quaternion[] jointRotations = new Quaternion[skeleton.Joints.Count];
 
             // Compute global positions and rotations
-            for (int i = 0; i < skeleton.Joints.Count; i++)
+            if (skeleton.Joints.Count > 0)
             {
-                Skeleton.Joint joint = skeleton.Joints[i];
-                if (i == 0) // Root
-                {
-                    jointPositions[0] = frame.rootMotion;
-                    jointRotations[0] = frame.localRotations[0];
-                }
-                else
-                {
-                    int parentIndex = joint.parentIndex;
-                    jointRotations[i] = jointRotations[parentIndex] * frame.localRotations[i];
-                    jointPositions[i] = jointPositions[parentIndex] + jointRotations[parentIndex] * joint.localOffset;
-                }
+                jointPositions[0] = frame.rootMotion;
+                jointRotations[0] = frame.localRotations[0];
             }
 
-            lineVertices.Clear();
-            lineIndices.Clear();
+            for (int i = 1; i < skeleton.Joints.Count; i++)
+            {
+                Skeleton.Joint joint = skeleton.Joints[i];
+                int parentIndex = joint.parentIndex;
+                jointRotations[i] = jointRotations[parentIndex] * frame.localRotations[i];
+                jointPositions[i] = jointPositions[parentIndex] + jointRotations[parentIndex] * joint.localOffset;
+            }
+
+            _lineVertices.Clear();
+            _lineIndices.Clear();
 
             // Root to children
             for (int i = 1; i < skeleton.Joints.Count; i++)
@@ -274,55 +272,55 @@ namespace MotionMatching.Editor
                 Skeleton.Joint joint = skeleton.Joints[i];
                 int parentIndex = joint.parentIndex;
 
-                lineVertices.Add(jointPositions[parentIndex]);
-                lineVertices.Add(jointPositions[i]);
+                _lineVertices.Add(jointPositions[parentIndex]);
+                _lineVertices.Add(jointPositions[i]);
 
-                int indexCount = lineIndices.Count;
-                lineIndices.Add(indexCount);
-                lineIndices.Add(indexCount + 1);
+                int indexCount = _lineIndices.Count;
+                _lineIndices.Add(indexCount);
+                _lineIndices.Add(indexCount + 1);
             }
 
             // End sites
-            if (bvhAnimation.EndSites != null)
+            if (_bvhAnimation.EndSites != null)
             {
-                for (int i = 0; i < bvhAnimation.EndSites.Count; i++)
+                for (int i = 0; i < _bvhAnimation.EndSites.Count; i++)
                 {
-                    BvhAnimation.EndSite endSite = bvhAnimation.EndSites[i];
+                    BvhAnimation.EndSite endSite = _bvhAnimation.EndSites[i];
                     Vector3 endPos = jointPositions[endSite.ParentIndex] + jointRotations[endSite.ParentIndex] * endSite.Offset;
 
-                    lineVertices.Add(jointPositions[endSite.ParentIndex]);
-                    lineVertices.Add(endPos);
+                    _lineVertices.Add(jointPositions[endSite.ParentIndex]);
+                    _lineVertices.Add(endPos);
 
-                    int indexCount = lineIndices.Count;
-                    lineIndices.Add(indexCount);
-                    lineIndices.Add(indexCount + 1);
+                    int indexCount = _lineIndices.Count;
+                    _lineIndices.Add(indexCount);
+                    _lineIndices.Add(indexCount + 1);
                 }
             }
 
-            skeletonMesh.Clear();
-            skeletonMesh.SetVertices(lineVertices);
-            skeletonMesh.SetIndices(lineIndices, MeshTopology.Lines, 0);
+            _skeletonMesh.Clear();
+            _skeletonMesh.SetVertices(_lineVertices);
+            _skeletonMesh.SetIndices(_lineIndices, MeshTopology.Lines, 0);
 
             // Setup Camera
             Vector3 rootPos = jointPositions[0];
 
             // Adjust target if needed, maybe slowly lerp?
-            // For now, center around rootPos + targetPos (pan offset)
-            Vector3 camTarget = rootPos + targetPos;
+            // For now, center around rootPos + _targetPos (pan offset)
+            Vector3 camTarget = rootPos + _targetPos;
 
-            Quaternion camRotation = Quaternion.Euler(drag.y, drag.x, 0);
-            previewRenderUtility.camera.transform.position = camTarget - camRotation * Vector3.forward * distance;
-            previewRenderUtility.camera.transform.rotation = camRotation;
+            Quaternion camRotation = Quaternion.Euler(_drag.y, _drag.x, 0);
+            _previewRenderUtility.camera.transform.position = camTarget - camRotation * Vector3.forward * _distance;
+            _previewRenderUtility.camera.transform.rotation = camRotation;
 
-            Color[] colors = new Color[lineVertices.Count];
+            Color[] colors = new Color[_lineVertices.Count];
             for(int i = 0; i < colors.Length; i++) colors[i] = Color.green;
-            skeletonMesh.SetColors(colors);
+            _skeletonMesh.SetColors(colors);
 
             Matrix4x4 matrix = Matrix4x4.identity;
 
-            if (lineMaterial != null)
+            if (_lineMaterial != null)
             {
-                previewRenderUtility.DrawMesh(skeletonMesh, matrix, lineMaterial, 0);
+                _previewRenderUtility.DrawMesh(_skeletonMesh, matrix, _lineMaterial, 0);
             }
         }
     }
