@@ -1,13 +1,5 @@
-import pickle
-from dataclasses import dataclass, field
-from random import randrange
 import numpy as np
-from ipywidgets import widgets, interact
-from matplotlib import pyplot as plt
 from scipy.spatial.transform import Rotation as Rot
-
-import torch
-import torch.nn as nn
 
 import ipyanimlab as lab
 
@@ -58,11 +50,23 @@ parents = animations[0].parents
 default_skeleton_p = (animations[0].pos[0, ...]).copy()
 default_skeleton_p[0] = 0
 
+from Skeleton import Skeleton, Joint
+
+joints = [Joint(bone_name) for bone_name in bones]
+for joint_idx, joint in enumerate(joints):
+    parent_idx = int(parents[joint_idx])
+    if parent_idx == -1: continue
+    parent_joint = joints[parent_idx]
+    parent_joint.add_child(joint)
+
+assert joints[0].parent() is None, "root bone should be the first bone"
+
+skeleton = Skeleton("char", joints[0])
+# %%
 contacts = []
 for anim in animations:
     _, p = lab.utils.quat_fk(anim.quats, anim.pos, parents)
     contacts.append(lab.utils.extract_feet_contacts(p, bones.index('LeftToe'), bones.index('RightToe'), 0.1))
-
 
 states_x = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
 states_v = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
@@ -78,20 +82,26 @@ def add_states_ex(quats, pos, l_contact, r_contact):
         a = Pose(
             pos[i, 0, :].copy(),
             pos[i, 1, :].copy(),
-            Rot.from_quat(quats[i, ...], scalar_first=True))
+            np.array(
+                Rot.from_quat(quats[i, ...], scalar_first=True).as_quat()
+            ))
         b = Pose(
             pos[i + 1, 0, :].copy(),
             pos[i + 1, 1, :].copy(),
-            Rot.from_quat(quats[i + 1, ...], scalar_first=True))
+            np.array(
+                Rot.from_quat(quats[i + 1, ...], scalar_first=True).as_quat()
+            ))
         c = Pose(
             pos[i + 2, 0, :].copy(),
             pos[i + 2, 1, :].copy(),
-            Rot.from_quat(quats[i + 2, ...], scalar_first=True))
+            np.array(
+                Rot.from_quat(quats[i + 2, ...], scalar_first=True).as_quat()
+            ))
 
         y = c - b
         v = b - a
         a.rootPos[:] = 0
-        a.quats[0, :] = Rot.identity()
+        a.quats[..., 0, :] = np.array(Rot.identity().as_quat())
 
         states_x[states_count, :, :] = a.pack()
         states_v[states_count, :, :] = v.pack()
@@ -134,23 +144,18 @@ metric_velocity_weights = np.array(
 
 
 def build_motion_state(x, v):
-    next_pose = Pose.from_array(x)  # pose_unpack(pose_add(x, v))
-    next_pose.quats[0] = Rot.identity()
+    current_pose = Pose.from_array(x)  # pose_unpack(pose_add(x, v))
+    # next_pose.quats[..., 0, :] = np.array(Rot.identity().as_quat())
 
-    _, p_a = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
+    p_a, _ = skeleton.fk_root_space(current_pose)
+    # _, p_a = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
 
-    next_pose = Pose(next_pose.rootPos, next_pose.hipPos, next_pose.quats) + v
+    next_pose = current_pose + Pose.from_array(v)
 
     # next_pose.quats[0] = [1,0,0,0]
-    _, p_b = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
+    # _, p_b = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
+    p_b, _ = skeleton.fk_root_space(next_pose)
 
-    return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_b - p_a])
+    return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_b - p_a], axis=-2)
 
-
-motion_states = np.zeros([states_count, FEATURE_SHAPE[0], 3], dtype=np.float32)
-for i in range(states_count):
-    motion_states[i, ...] = build_motion_state(states_x[i], states_v[i])
-
-
-##### test till here
-
+motion_states = build_motion_state(states_x, states_v)

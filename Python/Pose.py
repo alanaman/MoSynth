@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
-from typing import List, Tuple, Union
+from typing import List
 
 
 class Pose:
@@ -13,17 +13,17 @@ class Pose:
 
     rootPos: np.ndarray
     hipPos: np.ndarray
-    quats: Rotation
+    quats: np.ndarray
 
-    def __init__(self, root: np.ndarray, hips: np.ndarray, quats: Rotation):
+    def __init__(self, root: np.ndarray, hips: np.ndarray, quats: np.ndarray):
         """
         :param root: Vector3 root position (..., 3)
         :param hips: Vector3 hips position (..., 3)
-        :param quats: Joint rotations SciPy Rotation object (..., num_bones, ).
+        :param quats: Joint rotations quaternions (..., num_bones, 4)
         """
         assert root.shape[-1] == 3, "Root position must be a 3D vector."
         assert hips.shape[-1] == 3, "Hips position must be a 3D vector."
-        assert root.shape[:-1] == hips.shape[:-1] and root.shape[:-1] == quats.shape[:-1], "Batch sizes must match."
+        assert root.shape[:-1] == hips.shape[:-1] and root.shape[:-1] == quats.shape[:-2], "Batch sizes must match."
 
         self.rootPos = np.asarray(root, dtype=np.float32)
         self.hipPos = np.asarray(hips, dtype=np.float32)
@@ -35,19 +35,18 @@ class Pose:
         root = pose[..., 0, :3].copy()
         hips = pose[..., 1, :3].copy()
         quats = pose[..., 2:, :].copy()
-        return Pose(root, hips, Rotation.from_quat(quats))
+        return Pose(root, hips, quats)
 
     def pack(self) -> np.ndarray:
         """Packs the PoseData back into a single flat array representation."""
         # Get raw quaternion array to determine shape
-        raw_quats : np.ndarray = self.quats.as_quat()
-        num_bones = raw_quats.shape[-2]
-        batch_shape = raw_quats.shape[:-2]
+        num_bones = self.quats.shape[-2]
+        batch_shape = self.quats.shape[:-2]
 
         result = np.zeros((*batch_shape, num_bones + 2, 4), dtype=np.float32)
         result[..., 0, :3] = self.rootPos
         result[..., 1, :3] = self.hipPos
-        result[..., 2:, :] = raw_quats
+        result[..., 2:, :] = self.quats
         return result
 
     def __add__(self, other: Pose) -> Pose:
@@ -59,8 +58,8 @@ class Pose:
         # Using slicing [0:1] to maintain shape or indexing [0] based on usage
         # We assume the user wants the first rotation in the sequence.
 
-        r_x0: Rotation = self.quats[0]
-        r_v0: Rotation = other.quats[0]
+        r_x0: Rotation = Rotation.from_quat(self.quats[..., 0, :])
+        r_v0: Rotation = Rotation.from_quat(other.quats[..., 0, :])
 
         # Multiply rotation and rotate offset vector
         new_root = self.rootPos + r_x0.apply(other.rootPos)
@@ -69,7 +68,10 @@ class Pose:
         new_hips = self.hipPos + other.hipPos
 
         # Joint rotations composition
-        new_quats = self.quats * other.quats
+        new_quats = np.array(Rotation.as_quat(
+            Rotation.from_quat(self.quats) *
+            Rotation.from_quat(other.quats)
+        ))
 
         return Pose(new_root, new_hips, new_quats)
 
@@ -78,25 +80,27 @@ class Pose:
         Subtracts a base pose 'other' from 'self' to get the delta pose.
         """
         # Inverse root rotation of 'other' (b)
-        r_b0_inv: Rotation = other.quats[0].inv()
+
+        r_b0_inv: Rotation = Rotation.from_quat(other.quats[..., 0, :]).inv()
 
         # Relative root position & rotation
-        diff_root : np.ndarray = r_b0_inv.apply(self.rootPos - other.rootPos)
+        diff_root = np.array(
+            r_b0_inv.apply(self.rootPos - other.rootPos)
+        )
 
         # Hips vector difference
         diff_hips = self.hipPos - other.hipPos
 
         # Relative joint rotations: inverse(b) * a
-        diff_quats = other.quats.inv() * self.quats
-
-        # Extract underlying array for shortest path sign alignment
-        raw_diff_quats: np.ndarray = diff_quats.as_quat()
-
+        diff_quats = np.array(Rotation.as_quat(
+            Rotation.from_quat(other.quats).inv() *
+            Rotation.from_quat(self.quats)
+        ))
         # Because we use [x, y, z, w], the scalar part 'w' is now at index -1
-        flip = raw_diff_quats[..., -1] < 0
-        raw_diff_quats[flip] = -raw_diff_quats[flip]
+        flip = diff_quats[..., -1] < 0
+        diff_quats[flip] = -diff_quats[flip]
 
-        return Pose(diff_root, diff_hips, Rotation.from_quat(raw_diff_quats))
+        return Pose(diff_root, diff_hips, diff_quats)
 
     @staticmethod
     def lerp(a: Pose, b: Pose, t: float) -> Pose:
@@ -111,7 +115,7 @@ class Pose:
 
         # We need to construct a Rotation object that represents the start and end
         # stack arrays to fit R.from_quat
-        q_stacked = np.stack([a.quats.as_quat(), b.quats.as_quat()])
+        q_stacked = np.stack([a.quats, b.quats])
         r_stacked = Rotation.from_quat(q_stacked)
 
         slerper = Slerp([0.0, 1.0], r_stacked)
@@ -119,7 +123,7 @@ class Pose:
 
         # Slerp returns an array of rotations. We take the one corresponding to 't'
         # Using indexing [0] to extract the Rotation object for time 't'
-        quats = interpolated_rotations[0]
+        quats = np.array(interpolated_rotations[:1].as_quat())
 
         return Pose(root, hips, quats)
 
@@ -130,7 +134,7 @@ class Pose:
 
         roots = np.array([s.rootPos for s in states])
         hips_arr = np.array([s.hipPos for s in states])
-        quats_arr = np.array([s.quats.as_quat() for s in states])
+        quats_arr = np.array([s.quats for s in states])
 
         root = np.sum(roots * weights[:, np.newaxis], axis=0)
         hips = np.sum(hips_arr * weights[:, np.newaxis], axis=0)
