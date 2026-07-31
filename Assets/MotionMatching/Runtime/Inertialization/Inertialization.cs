@@ -75,7 +75,6 @@ public class Inertialization : MoSynthStage
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
-        _currentPose = new PoseVector(motionSynthesisComponent.CurrentPose);
     }
 
     public override void Apply(PoseVector pose, float deltaTime)

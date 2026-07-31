@@ -1,35 +1,34 @@
 import numpy as np
 import torch
-from pxr.Gf._gf import Rotation
+from scipy.spatial.transform import Rotation
 
 from Pose import Pose
-from labs.Theory.laplacian_deformation import indices
+from Skeleton import Skeleton
 
 
 class MotionField:
     def __init__(self,
-                 motion_states: np.ndarray, poses_x: np.ndarray,
-                 poses_v: np.ndarray, poses_y: np.ndarray):
+                poses_x: np.ndarray,
+                 poses_v: np.ndarray, poses_y: np.ndarray,
+                 skeleton: Skeleton):
         """
         Initialize the MotionField.
-        :param motion_states: Holds global space positions and velocities.
-        Shape: (state_count, feature_count, 3)
-        :param poses_x: Pose in array format (root, hips, quats) for each state.
-        Shape: (state_count, num_bones + 2, 4)
-        :param poses_v: Pose velocity in array format (root, hips, quats) for each state.
-        Shape: (state_count, num_bones + 2, 4)
-        :param poses_y: Next pose velocity in array format (root, hips, quats) for each state.
-        Shape: (state_count, num_bones + 2, 4)
+
+        :param poses_x: Pose in array format (root, hips, quats) for each state. Shape: (state_count, num_bones + 2, 4)
+        :param poses_v: Pose velocity in array format (root, hips, quats) for each state. Shape: (state_count, num_bones + 2, 4)
+        :param poses_y: Next pose velocity in array format (root, hips, quats) for each state. Shape: (state_count, num_bones + 2, 4)
+        :param skeleton: The Skeleton object used for forward kinematics of the poses.
         """
-        assert (motion_states.shape[:-2] ==
-                poses_x.shape[:-2] ==
+        assert (poses_x.shape[:-2] ==
                 poses_v.shape[:-2] ==
                 poses_y.shape[:-2]), "Inconsistent batch shapes"
 
+        motion_states = MotionField.build_motion_states(poses_x, poses_v, skeleton)
         self.states = torch.from_numpy(motion_states).to('cuda').unsqueeze(0)
         self.poses_x = poses_x
         self.poses_v = poses_v
         self.poses_y = poses_y
+        self.skeleton = skeleton
 
     def get_knn(self, motion_state, k):
         query = torch.from_numpy(motion_state).to('cuda')
@@ -78,3 +77,64 @@ class MotionField:
         weights = 1.0 / (distances**2 + 1e-8)
         weights = weights / np.sum(weights)
         return weights
+
+    def greedy_action(self, desired_direction, current_x, current_v, k_neighbors=15):
+
+        current_state = MotionField.build_motion_states(current_x, current_v, self.skeleton)
+        indices, distances = self.get_knn(current_state, k=k_neighbors)
+        weights = MotionField.calculate_similarity_weights(distances)
+
+        rewards = np.zeros(k_neighbors)
+
+        def reward(desired_dir, next_x):
+            next_pose = Pose.from_array(next_x)
+            next_root_dir = Rotation.from_quat(next_pose.quats[0]).apply(np.array([0, 0, 1]))
+            return np.dot(desired_dir, next_root_dir)
+
+        for n_idx in range(k_neighbors):
+            w = weights.copy()
+            w[n_idx] = 1.0
+            w /= np.sum(w)
+            nx, nv = self.compute_new_state(current_x, indices[0], w)
+
+            reward = reward(desired_direction, nx)
+
+            # store the rewards
+            rewards[n_idx] = reward
+
+        best_i = np.argmax(rewards)
+        weights[best_i] = 1.0
+        weights /= np.sum(weights)
+        new_x, new_v = self.compute_new_state(current_x, indices[0], weights)
+
+        return new_x, new_v
+
+    @staticmethod
+    def build_motion_states(x, v, skeleton):
+        """
+        Build motion states from pose and velocity. Used to construct the motion field.
+        :param x:
+        :param v:
+        :param skeleton:
+        :return:
+        """
+        metric_weights = np.array(
+            [
+                0, .3, .1, .1, .5, .01, .01, .01, .01, .01, .01, .01, .01, .01, .01, .2, .5, 1, 1, .2, .5, 1, 1],
+            dtype=np.float32)
+        metric_velocity_weights = np.array(
+            [1, .8, .5, .1, .1, .5, .1, 0, 0, 0, 0, 0, 0, 0, 0, 1.2, 1.5, 2, 0, 1.2, 1.5, 2, 0],
+            dtype=np.float32)
+
+        current_pose = Pose.from_array(x)
+
+        p_a, _ = skeleton.fk_root_space(current_pose)
+        # _, p_a = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
+
+        next_pose = current_pose + Pose.from_array(v)
+
+        # _, p_b = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
+        p_b, _ = skeleton.fk_root_space(next_pose)
+
+        return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_b - p_a],
+                              axis=-2)  # (batch, bone_count*2, 3)

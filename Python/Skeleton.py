@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import Union, Iterator, Tuple
 
+from typing import Union, Iterator
+
+import numpy as np
 from scipy.spatial.transform import Rotation
 
 from Pose import Pose
-import numpy as np
 
 
 class Skeleton:
@@ -58,14 +59,42 @@ class Skeleton:
 
         return global_positions, global_rotations
 
+    def get_local_positions(self, pose: Pose) -> np.ndarray:
+        """
+        Returns the local positions of all joints in the skeleton based on the given pose.
+        The local position of each joint is relative to its parent joint.
+        """
+        joints = list(self)
+        num_joints = len(joints)
+
+        batch_shape = pose.quats.shape[:-2]
+        local_positions = np.zeros(batch_shape + (num_joints, 3), dtype=np.float32)
+
+        for i, joint in enumerate(joints):
+            parent = joint.parent()
+            if parent is None:
+                # root
+                local_positions[..., i, :] = pose.rootPos
+                continue
+            if i == 1:  # hips
+                local_positions[..., i, :] = pose.hipPos
+            else:
+                local_positions[..., i, :] = joint.default_local_position
+
+        return local_positions
+
+
 
 class Joint:
-    def __init__(self, name):
+    def __init__(self,
+                 name,
+                 local_pos=np.zeros(3, dtype=np.float32),
+                 local_rot=Rotation.identity()):
         self.name = name
         self._parent = None
         self._children: list[Joint] = []
-        self.default_local_position = np.zeros(3, dtype=np.float32)
-        self.default_local_rotation = Rotation.identity()
+        self.default_local_position = local_pos
+        self.default_local_rotation = local_rot
 
     def add_child(self, child: Joint):
         assert child._parent is None, "Child joint already has a parent."
