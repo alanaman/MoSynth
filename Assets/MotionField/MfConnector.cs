@@ -43,7 +43,23 @@ public class MfConnector : MoSynthStage, IDisposable
         while (_receivedPoses.TryDequeue(out PoseVector newPose))
         {
             Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.LeftFootContact}");
-            pose.CopyFrom(newPose);
+
+            // Only update positions for Simulation Bone (0) and Hips (1) to prevent stretching
+            if (pose.JointLocalPositions.Length > 0 && newPose.JointLocalPositions.Length > 0)
+                pose.JointLocalPositions[0] = newPose.JointLocalPositions[0];
+            if (pose.JointLocalPositions.Length > 1 && newPose.JointLocalPositions.Length > 1)
+                pose.JointLocalPositions[1] = newPose.JointLocalPositions[1];
+
+            // Update Rotations, Velocities, and Angular Velocities for all bones
+            for (var i = 0; i < pose.JointLocalRotations.Length && i < newPose.JointLocalRotations.Length; i++)
+            {
+                pose.JointLocalRotations[i] = newPose.JointLocalRotations[i];
+                pose.JointLocalVelocities[i] = newPose.JointLocalVelocities[i];
+                pose.JointLocalAngularVelocities[i] = newPose.JointLocalAngularVelocities[i];
+            }
+
+            pose.LeftFootContact = newPose.LeftFootContact;
+            pose.RightFootContact = newPose.RightFootContact;
         }
     }
 
