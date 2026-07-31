@@ -1,8 +1,7 @@
 import numpy as np
-from scipy.spatial.transform import Rotation as Rot
-
 import ipyanimlab as lab
 
+from MotionField import MotionField
 from Pose import Pose
 
 viewer = lab.Viewer(move_speed=5, width=1280, height=720)
@@ -62,21 +61,21 @@ for joint_idx, joint in enumerate(joints):
 assert joints[0].parent() is None, "root bone should be the first bone"
 
 skeleton = Skeleton("char", joints[0])
-# %%
+
 contacts = []
 for anim in animations:
     _, p = lab.utils.quat_fk(anim.quats, anim.pos, parents)
     contacts.append(lab.utils.extract_feet_contacts(p, bones.index('LeftToe'), bones.index('RightToe'), 0.1))
 
-states_x = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
-states_v = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
-states_y = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
-states_c = np.zeros([50000, 2], dtype=np.bool)
-states_count = 0
+pose_x = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
+pose_v = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
+pose_y = np.zeros([50000, bone_count + 2, 4], dtype=np.float32)
+pose_c = np.zeros([50000, 2], dtype=np.bool)
+pose_count = 0
 
 
-def add_states_ex(quats, pos, l_contact, r_contact):
-    global states_count
+def add_poses_ex(quats, pos, l_contact, r_contact):
+    global pose_count
 
     for i in range(quats.shape[0] - 2):
         a = Pose(
@@ -103,35 +102,35 @@ def add_states_ex(quats, pos, l_contact, r_contact):
         a.rootPos[:] = 0
         a.quats[..., 0, :] = np.array(Rot.identity().as_quat())
 
-        states_x[states_count, :, :] = a.pack()
-        states_v[states_count, :, :] = v.pack()
-        states_y[states_count, :, :] = y.pack()
+        pose_x[pose_count, :, :] = a.pack()
+        pose_v[pose_count, :, :] = v.pack()
+        pose_y[pose_count, :, :] = y.pack()
 
-        states_c[states_count, 0] = l_contact[i]
-        states_c[states_count, 1] = r_contact[i]
+        pose_c[pose_count, 0] = l_contact[i]
+        pose_c[pose_count, 1] = r_contact[i]
 
-        states_count += 1
+        pose_count += 1
 
 
-def add_states(anim_id, timings):
-    add_states_ex(animations[anim_id].quats[timings], animations[anim_id].pos[timings], contacts[anim_id][0][timings],
-                  contacts[anim_id][1][timings])
+def add_poses(anim_id, timings):
+    add_poses_ex(animations[anim_id].quats[timings], animations[anim_id].pos[timings], contacts[anim_id][0][timings],
+                 contacts[anim_id][1][timings])
 
 
 # Walk :
-add_states(2, slice(100, 2800))
-end_of_walk_ids = states_count
+add_poses(2, slice(100, 2800))
+end_of_walk_ids = pose_count
 
 # Jog :
-add_states(15, slice(1200, 1800))
-add_states(15, slice(3450, 3860))
-add_states(14, slice(180, 800))
-add_states(13, slice(200, 2300))
+add_poses(15, slice(1200, 1800))
+add_poses(15, slice(3450, 3860))
+add_poses(14, slice(180, 800))
+add_poses(13, slice(200, 2300))
 
-states_x = states_x[:states_count, ...]
-states_v = states_v[:states_count, ...]
-states_y = states_y[:states_count, ...]
-states_c = states_c[:states_count, ...]
+pose_x = pose_x[:pose_count, ...]
+pose_v = pose_v[:pose_count, ...]
+pose_y = pose_y[:pose_count, ...]
+pose_c = pose_c[:pose_count, ...]
 
 FEATURE_SHAPE = (bone_count * 2, 3)
 metric_weights = np.array(
@@ -143,19 +142,51 @@ metric_velocity_weights = np.array(
     dtype=np.float32)
 
 
-def build_motion_state(x, v):
-    current_pose = Pose.from_array(x)  # pose_unpack(pose_add(x, v))
-    # next_pose.quats[..., 0, :] = np.array(Rot.identity().as_quat())
+def build_motion_states(x, v):
+    current_pose = Pose.from_array(x)
 
     p_a, _ = skeleton.fk_root_space(current_pose)
     # _, p_a = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
 
     next_pose = current_pose + Pose.from_array(v)
 
-    # next_pose.quats[0] = [1,0,0,0]
     # _, p_b = lab.utils.quat_fk(next_pose.quats, default_skeleton_p, parents)
     p_b, _ = skeleton.fk_root_space(next_pose)
 
-    return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_b - p_a], axis=-2)
+    return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_b - p_a], axis=-2) # (batch, bone_count*2, 3)
 
-motion_states = build_motion_state(states_x, states_v)
+motion_states = build_motion_states(pose_x, pose_v)
+
+motion_field = MotionField(motion_states)
+
+from scipy.spatial.transform import Rotation as Rot
+
+
+desired_dir = client.getdir()
+current_x = client.getx()
+current_v = client.getvel()
+
+current_state = build_motion_states(current_x, current_v)
+
+K_NEIGHBORS = 15
+
+indices, distances = motion_field.get_knn(current_state, k=K_NEIGHBORS)
+weights = MotionField.calculate_similarity_weights(distances)
+
+rewards = np.zeros(K_NEIGHBORS)
+
+for n_idx in range(K_NEIGHBORS):
+    w = weights.copy()
+    w[n_idx] = 1.0
+    w /= np.sum(w)
+    nx, nv = motion_field.compute_new_state(current_x, indices, w)
+
+    Pose.from_array(nx).quats[0]
+
+    reward = action_reward(desired_direction, current_x, nx)
+
+    # store the rewards
+    rewards[n_idx] = reward
+
+motion_field.compute_new_state(current_state)
+

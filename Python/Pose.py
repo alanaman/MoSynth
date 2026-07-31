@@ -4,10 +4,12 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 from typing import List
 
+from utils.quaternions import blend_quaternions
+
 
 class Pose:
     """
-    Represents skeletal pose data with root translation, hip translation,
+    Represents skeletal poses with root translation, hip translation,
     and joint rotation quaternions.
     """
 
@@ -128,24 +130,34 @@ class Pose:
         return Pose(root, hips, quats)
 
     @staticmethod
-    def blend(states: List[Pose], weights: np.ndarray) -> Pose:
+    def blend(poses: Pose, weights: np.ndarray) -> Pose:
         """Weighted blend across multiple pose states."""
         weights = np.asarray(weights, dtype=np.float32)
 
-        roots = np.array([s.rootPos for s in states])
-        hips_arr = np.array([s.hipPos for s in states])
-        quats_arr = np.array([s.quats for s in states])
+        # roots = np.array([s.rootPos for s in poses])
+        # hips_arr = np.array([s.hipPos for s in poses])
+        # quats_arr = np.array([s.quats for s in poses])
 
-        root = np.sum(roots * weights[:, np.newaxis], axis=0)
-        hips = np.sum(hips_arr * weights[:, np.newaxis], axis=0)
-
+        # poses.rootPos (..., 3), poses.hipPos (..., 3), poses.quats (..., num_bones, 4)
+        roots = np.sum(poses.rootPos * weights[..., np.newaxis], axis=0)
+        hips = np.sum(poses.hipPos * weights[..., np.newaxis], axis=0)
         # Weighted sum of quaternions with normalization
-        raw_quats = np.sum(quats_arr * weights[:, np.newaxis, np.newaxis], axis=0)
-        norms = np.linalg.norm(raw_quats, axis=-1, keepdims=True)
-        norms[norms == 0] = 1.0  # Prevent divide-by-zero
-        quats = raw_quats / norms
+        quats = blend_quaternions(poses.quats, weights, axis=0)
 
-        return Pose(root, hips, quats)
+        # raw_quats = np.sum(poses.quats * weights[:, np.newaxis, np.newaxis], axis=0)
+        # norms = np.linalg.norm(raw_quats, axis=-1, keepdims=True)
+        # norms[norms == 0] = 1.0  # Prevent divide-by-zero
+        # quats = raw_quats / norms
+
+        return Pose(roots, hips, quats)
+
+    @staticmethod
+    def concatenate(poses: List[Pose]) -> Pose:
+        """Concatenates a list of Pose instances along the batch dimension."""
+        roots = np.concatenate([p.rootPos for p in poses], axis=0)
+        hips = np.concatenate([p.hipPos for p in poses], axis=0)
+        quats = np.concatenate([p.quats for p in poses], axis=0)
+        return Pose(roots, hips, quats)
 
     # @staticmethod
     # def to_qp(a: PoseData, default_skeleton_p: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

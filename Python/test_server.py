@@ -1,26 +1,50 @@
 import zmq
-import struct
+import json
+import time
+
+
+def generate_mock_pose(frame_number: int, num_joints: int = 10) -> dict:
+    return {
+        "JointLocalPositions": [{"x": 0.0, "y": 1.0, "z": 0.0} for _ in range(num_joints)],
+
+        # FIX: Unity.Mathematics.quaternion expects a 'value' property of type float4
+        "JointLocalRotations": [{"value": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}} for _ in range(num_joints)],
+
+        "JointLocalVelocities": [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(num_joints)],
+        "JointLocalAngularVelocities": [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(num_joints)],
+        "LeftFootContact": True,
+        "RightFootContact": False
+    }
 
 def main():
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
 
-    print("Server listening on port 5555...")
+    print("Python ZeroMQ server listening on port 5555...")
 
     while True:
-        # Receive byte array from Unity
-        message = socket.recv()
-        
-        # Calculate how many floats are in the byte array (4 bytes per float)
-        num_floats = len(message) // 4
-        
-        # Unpack the bytes into floats (using little-endian format '<')
-        floats = struct.unpack(f'<{num_floats}f', message)
-        print(f"Received: {floats}")
-        
-        # Reply with the exact same byte array
-        socket.send(message)
+        # Read raw bytes first so we don't crash on bad queued data
+        raw_message = socket.recv()
+
+        try:
+            # Attempt to decode to string
+            message = raw_message.decode('utf-8')
+            print(f"Received request for frame: {message}")
+
+            frame_number = int(message)
+            pose_data = generate_mock_pose(frame_number, 23)
+
+            # Send serialized JSON back to Unity
+            socket.send_string(json.dumps(pose_data))
+
+        except UnicodeDecodeError:
+            print(f"Ignored invalid/leftover binary data: {raw_message}")
+            socket.send_string(json.dumps({"error": "Invalid string encoding"}))
+        except ValueError:
+            print(f"Invalid frame number format: {message}")
+            socket.send_string(json.dumps({"error": "Invalid frame number"}))
+
 
 if __name__ == "__main__":
     main()
