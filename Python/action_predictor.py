@@ -161,10 +161,10 @@ def create_pose_json_reply(skeleton: Skeleton,
     euler_angles = np.array(Rotation.from_quat(Pose.from_array(current_v).quats).as_euler('xyz'))
 
     return {
-        "JointLocalPositions": [{"x": pos[0], "y": pos[1], "z": pos[2]} for pos in local_positions.tolist()],
-        "JointLocalRotations": [{"value": {"x": quat[0], "y": quat[1], "z": quat[2], "w": quat[3]}} for quat in p.quats.tolist()],
+        "JointLocalPositions": [{"x": pos[0], "y": pos[1], "z": -pos[2]} for pos in local_positions.tolist()],
+        "JointLocalRotations": [{"value": {"x": -quat[0], "y": -quat[1], "z": quat[2], "w": quat[3]}} for quat in p.quats.tolist()],
         "JointLocalVelocities": [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(23)],
-        "JointLocalAngularVelocities": [{"x": ang_vel[0], "y": ang_vel[1], "z": ang_vel[2]} for ang_vel in euler_angles.tolist()],
+        "JointLocalAngularVelocities": [{"x": -ang_vel[0], "y": -ang_vel[1], "z": ang_vel[2]} for ang_vel in euler_angles.tolist()],
         "LeftFootContact": bool(pose_contacts[0]),
         "RightFootContact": bool(pose_contacts[1])
     }
