@@ -762,7 +762,7 @@ namespace MotionMatching
             }
             else
             {
-                worldPosition = pose.GetWorldSpacePosition(skeleton, joint);
+                worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
             }
             futureLocalPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
         }
@@ -778,7 +778,7 @@ namespace MotionMatching
             }
             else
             {
-                worldRotation = pose.GetWorldSpaceRotation(skeleton, joint);
+                worldRotation = skeleton.GetWorldSpaceRotation(joint, pose);
                 localForward = mmData.GetLocalForward(joint.index);
             }
             var worldDirection = math.mul(worldRotation, localForward);
@@ -787,14 +787,14 @@ namespace MotionMatching
 
         private static float3 GetJointPosition(PoseVector pose, Skeleton skeleton, Joint joint, float3 characterOrigin, float3 characterForward)
         {
-            var worldPosition = pose.GetWorldSpacePosition(skeleton, joint);
+            var worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             return localPosition;
         }
         private static float3 GetJointVelocity(PoseVector pose, PoseVector poseNext, Skeleton skeleton, Joint joint, float3 characterOrigin, float3 characterForward, float frameTime)
         {
-            var worldPosition = pose.GetWorldSpacePosition(skeleton, joint);
-            var worldPositionNext = poseNext.GetWorldSpacePosition(skeleton, joint);
+            var worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
+            var worldPositionNext = skeleton.GetWorldSpacePosition(joint, poseNext);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             var localVelocity = (GetLocalPositionFromCharacter(worldPositionNext, characterOrigin, characterForward) - localPosition) / frameTime;
             return localVelocity;

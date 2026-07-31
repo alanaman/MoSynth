@@ -126,9 +126,7 @@ public class RetargetingStage : MoSynthStage
             // TODO: precalculate for entire skeleton
             
             var newSourceRot =
-                sourcePose.GetRootSpaceRotation(
-                    animationSkeleton, animationSkeleton.Joints[i + 1]
-                );
+                animationSkeleton.GetRootSpaceRotation(animationSkeleton.Joints[i + 1], sourcePose);
             
             // targetTPoseRotation -> Local Target -> World (Target TPose)
             /*
@@ -153,7 +151,7 @@ public class RetargetingStage : MoSynthStage
                 _hipsCorrection * targetTPoseRotation;
             
             var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i+1]);
-            var parentRot = pose.GetRootSpaceRotation(animationSkeleton, parentJoint);
+            var parentRot = animationSkeleton.GetRootSpaceRotation(parentJoint, pose);
             
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
 

@@ -114,8 +114,8 @@ namespace MotionMatching
             }
             for (var i = 0; i < poses.Length; i++)
             {
-                hipsWorldPositions[i] = poses[i].GetWorldSpacePosition(poseSet.Skeleton, hipsJoint);
-                hipsWorldRotations[i] = poses[i].GetWorldSpaceRotation(poseSet.Skeleton, hipsJoint);
+                hipsWorldPositions[i] = poseSet.Skeleton.GetWorldSpacePosition(hipsJoint, poses[i]);
+                hipsWorldRotations[i] = poseSet.Skeleton.GetWorldSpaceRotation(hipsJoint, poses[i]);
             }
             // Prepare simulation bone lists for python
             var sbPosX = new float[poses.Length];

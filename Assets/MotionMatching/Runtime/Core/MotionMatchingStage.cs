@@ -107,7 +107,7 @@ public class MotionMatchingStage : MoSynthStage
         controlInput.OnHighInputChange += () => { _searchTimeLeft = 0; };
         
         Assert.IsTrue(
-            motionSynthesisComponent.skeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
+            motionSynthesisComponent.SkeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
         
@@ -269,7 +269,7 @@ public class MotionMatchingStage : MoSynthStage
     
     public void FillQueryVector()
     {
-        var simulationBone = _owner.skeletonTransforms[0];
+        var simulationBone = _owner.SkeletonTransforms[0];
         var queryFeatureSpan = _queryFeatureVector.AsSpan();
         
         // Trajectory features

@@ -20,7 +20,8 @@ public class MotionSynthesisComponent : MotionSynthesizer
     /// The transforms of the character controlled by this <see cref="MotionSynthesisComponent"/>.
     /// These are the transforms that will be used to render the character.
     /// </summary>
-    public Transform[] skeletonTransforms;
+    [NonSerialized]
+    public Transform[] SkeletonTransforms;
     
     // TODO: remove?
     private Animator _animator;
@@ -71,11 +72,11 @@ public class MotionSynthesisComponent : MotionSynthesizer
         var poseJoints = poseSet.Skeleton.Joints;
         
         // +1 for SimulationBone
-        skeletonTransforms = new Transform[poseJoints.Count];
-        skeletonTransforms[0] = transform; // SimulationBone
+        SkeletonTransforms = new Transform[poseJoints.Count];
+        SkeletonTransforms[0] = transform; // SimulationBone
         for (var i = 1; i < poseJoints.Count; i++)
         {
-            skeletonTransforms[i] = _animator.GetBoneTransform(poseJoints[i].type);
+            SkeletonTransforms[i] = _animator.GetBoneTransform(poseJoints[i].type);
         }
     }
     
@@ -134,10 +135,10 @@ public class MotionSynthesisComponent : MotionSynthesizer
     {
         CurrentPose = new PoseVector(skeleton.Joints.Count);
         
-        for (var i = 0; i < skeletonTransforms.Length; i++)
+        for (var i = 0; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
-            CurrentPose.JointLocalPositions[i] = skeletonTransforms[i].localPosition;
+            CurrentPose.JointLocalRotations[i] = SkeletonTransforms[i].localRotation;
+            CurrentPose.JointLocalPositions[i] = SkeletonTransforms[i].localPosition;
             CurrentPose.JointLocalVelocities[i] = float3.zero;
             CurrentPose.JointLocalAngularVelocities[i] = float3.zero;
         }
@@ -164,20 +165,20 @@ public class MotionSynthesisComponent : MotionSynthesizer
         for (var i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
         {
             var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
-            CurrentPose.JointLocalAngularVelocities[i] = (skeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
-            CurrentPose.JointLocalVelocities[i] = (float3)skeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
+            CurrentPose.JointLocalAngularVelocities[i] = (SkeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
+            CurrentPose.JointLocalVelocities[i] = (float3)SkeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
         }
         
-        CurrentPose.JointLocalPositions[0] = skeletonTransforms[0].localPosition;
-        CurrentPose.JointLocalRotations[0] = skeletonTransforms[0].localRotation;
+        CurrentPose.JointLocalPositions[0] = SkeletonTransforms[0].localPosition;
+        CurrentPose.JointLocalRotations[0] = SkeletonTransforms[0].localRotation;
         
-        for (var i = 1; i < skeletonTransforms.Length; i++)
+        for (var i = 1; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
+            CurrentPose.JointLocalRotations[i] = SkeletonTransforms[i].localRotation;
         }
 
         // hip
-        CurrentPose.JointLocalPositions[1] = skeletonTransforms[1].localPosition;
+        CurrentPose.JointLocalPositions[1] = SkeletonTransforms[1].localPosition;
 
         
         // CurrentPose.LeftFootContact = ?;
@@ -197,18 +198,18 @@ public class MotionSynthesisComponent : MotionSynthesizer
 
         for (var i = 0; i < skeleton.Joints.Count; i++)
         {
-            skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+            SkeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
         }
 
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
         
         // hips
-        skeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
+        SkeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
         
         // root
         if (rootPositionsMask)
         {
-            skeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
+            SkeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
         }
 
         // if (blendPoses && _previousHipsPositionMask != rootPositionsMask)
@@ -264,7 +265,13 @@ public class MotionSynthesisComponent : MotionSynthesizer
         }
     }
 
-
+    private void OnDestroy()
+    {
+        foreach (var stage in stages)
+        {
+            stage?.OnDestroy();
+        }
+    }
 
 
     public override void SetRotAdjustment(quaternion adjustmentRotation)
