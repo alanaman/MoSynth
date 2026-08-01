@@ -194,7 +194,7 @@ public class MotionMatchingStage : MoSynthStage
     //     return pose;
     // }
 
-    public override void Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseVector pose, float deltaTime)
     {
         // _searchTimeLeft -= deltaTime;
         if (_searchTimeLeft <= 0)
@@ -253,6 +253,7 @@ public class MotionMatchingStage : MoSynthStage
         
         pose.JointLocalPositions[0] = math.transform(_animToWorld, pose.JointLocalPositions[0]);
         pose.JointLocalRotations[0] = math.mul(new quaternion(_animToWorld), pose.JointLocalRotations[0]);
+        return true;
     }
     
     [Pure]

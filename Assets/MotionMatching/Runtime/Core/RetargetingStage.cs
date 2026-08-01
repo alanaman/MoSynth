@@ -107,7 +107,7 @@ public class RetargetingStage : MoSynthStage
     }
 
 
-    public override void Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseVector pose, float deltaTime)
     {
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
         
@@ -164,7 +164,8 @@ public class RetargetingStage : MoSynthStage
             pose.JointLocalRotations[i+1] = newTargetLocalRot;
             // hipcorrection
         }
-
+        
+        return true;
         // Hips
         // if (rootPositionsMask)
         // {

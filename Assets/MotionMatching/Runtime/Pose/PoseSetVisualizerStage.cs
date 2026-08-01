@@ -26,7 +26,7 @@ public class PoseSetVisualizerStage : MoSynthStage
         _poseSet = mmData.GetOrImportPoseSet();
     }
 
-    public override void Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseVector pose, float deltaTime)
     {
         // Advance frames with time
         _currentFrameTime = CurrentFrame + math.frac(_currentFrameTime);
@@ -39,6 +39,7 @@ public class PoseSetVisualizerStage : MoSynthStage
         }
         _poseSet.GetPose(CurrentFrame, out var newPose);
         pose.CopyFrom(newPose);
+        return true;
     }
 }
 }

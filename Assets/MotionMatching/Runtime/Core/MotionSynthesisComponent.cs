@@ -124,7 +124,10 @@ public class MotionSynthesisComponent : MotionSynthesizer
         {
             if (stage.isEnabled)
             {
-                stage.Apply(pose, Time.deltaTime);
+                if(!stage.Apply(pose, Time.deltaTime))
+                {
+                    break;
+                }
             }
         }
         

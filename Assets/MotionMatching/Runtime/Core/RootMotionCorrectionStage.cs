@@ -28,7 +28,7 @@ public class RootMotionCorrectionStage : MoSynthStage
         _rootRotation = _root.rotation;
     }
 
-    public override void Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseVector pose, float deltaTime)
     {
         if (_hasRootJumped)
         {
@@ -50,6 +50,7 @@ public class RootMotionCorrectionStage : MoSynthStage
             pose.JointLocalPositions[0] = _transformPosAtLastJump + math.mul(_transformRotAtLastJump, posWrtLastJump);
             pose.JointLocalRotations[0] = math.mul(_transformRotAtLastJump, rotWrtLastJump);
         }
+        return true;
     }
 }
 }

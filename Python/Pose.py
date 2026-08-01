@@ -26,6 +26,7 @@ class Pose:
         assert root.shape[-1] == 3, "Root position must be a 3D vector."
         assert hips.shape[-1] == 3, "Hips position must be a 3D vector."
         assert root.shape[:-1] == hips.shape[:-1] and root.shape[:-1] == quats.shape[:-2], "Batch sizes must match."
+        assert len(root.shape) > 1, "Root position must have at least 2 dimensions (batch, 3)."
 
         self.rootPos = np.asarray(root, dtype=np.float32)
         self.hipPos = np.asarray(hips, dtype=np.float32)
@@ -37,6 +38,11 @@ class Pose:
         root = pose[..., 0, :3].copy()
         hips = pose[..., 1, :3].copy()
         quats = pose[..., 2:, :].copy()
+        if len(root.shape) == 1:
+            root = np.expand_dims(root, axis=0)
+            hips = np.expand_dims(hips, axis=0)
+            quats = np.expand_dims(quats, axis=0)
+
         return Pose(root, hips, quats)
 
     def pack(self) -> np.ndarray:
@@ -134,22 +140,25 @@ class Pose:
         """Weighted blend across multiple pose states."""
         weights = np.asarray(weights, dtype=np.float32)
 
-        # roots = np.array([s.rootPos for s in poses])
-        # hips_arr = np.array([s.hipPos for s in poses])
-        # quats_arr = np.array([s.quats for s in poses])
-
         # poses.rootPos (..., 3), poses.hipPos (..., 3), poses.quats (..., num_bones, 4)
         roots = np.sum(poses.rootPos * weights[..., np.newaxis], axis=0)
         hips = np.sum(poses.hipPos * weights[..., np.newaxis], axis=0)
-        # Weighted sum of quaternions with normalization
         quats = blend_quaternions(poses.quats, weights, axis=0)
 
-        # raw_quats = np.sum(poses.quats * weights[:, np.newaxis, np.newaxis], axis=0)
-        # norms = np.linalg.norm(raw_quats, axis=-1, keepdims=True)
-        # norms[norms == 0] = 1.0  # Prevent divide-by-zero
-        # quats = raw_quats / norms
+        roots = np.expand_dims(roots, axis=0)
+        hips = np.expand_dims(hips, axis=0)
+        quats = np.expand_dims(quats, axis=0)
 
         return Pose(roots, hips, quats)
+
+    def scaled(self, scale_factor: float) -> Pose:
+        """Scales the pose by a given factor."""
+        scaled_root = self.rootPos * scale_factor
+        scaled_hips = self.hipPos * scale_factor
+        axis_angle = Rotation.from_quat(self.quats).as_rotvec()
+        scaled_quats = np.array(Rotation.from_rotvec(axis_angle * scale_factor).as_quat())
+
+        return Pose(scaled_root, scaled_hips, scaled_quats)
 
     @staticmethod
     def concatenate(poses: List[Pose]) -> Pose:
@@ -159,10 +168,3 @@ class Pose:
         quats = np.concatenate([p.quats for p in poses], axis=0)
         return Pose(roots, hips, quats)
 
-    # @staticmethod
-    # def to_qp(a: PoseData, default_skeleton_p: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    #     """Converts pose data into rigid body position/rotation arrays (qp format)."""
-    #     p = default_skeleton_p.copy()
-    #     p[0, :] = a.rootPos
-    #     p[1, :] = a.hipPos
-    #     return a.quats.as_quat(), p

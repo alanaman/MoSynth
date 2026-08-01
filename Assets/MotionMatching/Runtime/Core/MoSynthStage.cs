@@ -29,7 +29,7 @@ public abstract class MoSynthStage
     {
     }
 
-    public abstract void Apply(PoseVector pose, float deltaTime);
+    public abstract bool Apply(PoseVector pose, float deltaTime);
 
     public virtual void OnDestroy()
     {

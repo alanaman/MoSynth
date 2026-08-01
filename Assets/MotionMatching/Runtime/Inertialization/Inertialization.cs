@@ -77,13 +77,13 @@ public class Inertialization : MoSynthStage
         _owner = motionSynthesisComponent;
     }
 
-    public override void Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseVector pose, float deltaTime)
     {
         if (!_isPoseInitialized)
         {
             _currentPose.CopyFrom(pose);
             _isPoseInitialized = true;
-            return;
+            return true;
         }
 
         // Update the rotational inertialization for joint local rotations
@@ -111,6 +111,7 @@ public class Inertialization : MoSynthStage
         );
 
         _currentPose.CopyFrom(pose);
+        return true;
     }
 
     (quaternion newRot, float3 newAngularVel) InertializeJointUpdate(
