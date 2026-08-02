@@ -81,7 +81,7 @@ public class Inertialization : MoSynthStage
     {
         if (!_isPoseInitialized)
         {
-            _currentPose.CopyFrom(pose);
+            _currentPose = new PoseVector(pose);
             _isPoseInitialized = true;
             return true;
         }

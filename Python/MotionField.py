@@ -65,7 +65,7 @@ class MotionField:
         nearest_pose_y = Pose.from_array(self.poses_y[tug_index])
         current_pose_x = Pose.from_array(current_pose_x)
 
-        tug_v = nearest_pose_x + nearest_pose_v - current_pose_x
+        tug_v = nearest_pose_x.add(nearest_pose_v) - current_pose_x
         tug_v.rootPos[..., :] = 0
         tug_v.quats[..., 0, :] = Rotation.identity().as_quat()
         tug_y = nearest_pose_y
@@ -73,7 +73,9 @@ class MotionField:
         tugged_v = Pose.blend(Pose.concatenate([blended_v, tug_v]), np.array([1 - tug_ratio, tug_ratio]))
         tugged_y = Pose.blend(Pose.concatenate([blended_y, tug_y]), np.array([1 - tug_ratio, tug_ratio]))
 
-        return (current_pose_x + tugged_v.scaled(delta_time)).pack(), tugged_y.pack()
+        return ((
+            current_pose_x.add(blended_v.scaled(delta_time))).pack(),
+                tugged_y.pack())
 
     @staticmethod
     def calculate_similarity_weights(distances: np.ndarray) -> np.ndarray:
@@ -114,6 +116,16 @@ class MotionField:
 
         return new_x, new_v
 
+    def get_next_pose(self, current_x, current_v, delta_time):
+        current_state = MotionField.build_motion_states(current_x, current_v, self.skeleton)
+        indices, distances = self.get_knn(current_state, k=1)
+        weights = MotionField.calculate_similarity_weights(distances)
+
+
+        new_x, new_v = self.compute_new_state(current_x, delta_time, indices[:1], weights[:1])  # Use only the best neighbor for next pose
+
+        return new_x, new_v
+
     @staticmethod
     def build_motion_states(x, v, skeleton):
         """
@@ -135,10 +147,9 @@ class MotionField:
 
         p_a, _ = skeleton.fk_root_space(current_pose)
 
-        # next_pose = current_pose + Pose.from_array(v)
+        next_pose = current_pose.add(Pose.from_array(v))
 
-        # p_b, _ = skeleton.fk_root_space(next_pose)
-        p_v, _ = skeleton.fk_root_space(Pose.from_array(v))
+        p_b, _ = skeleton.fk_root_space(next_pose)
 
-        return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, p_v],
+        return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, (p_b - p_a)*0.03],
                               axis=-2)  # (batch, bone_count*2, 3)

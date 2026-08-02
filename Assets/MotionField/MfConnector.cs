@@ -31,6 +31,11 @@ public class MfConnector : MoSynthStage, IDisposable
     [Min(1)]
     private int receivePollIntervalMs = 100;
     
+    [SerializeField]
+    private float frameTime = 1f/30f;
+    
+    private float _frameTimeRemaining = 0f;
+    
     
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
@@ -67,20 +72,27 @@ public class MfConnector : MoSynthStage, IDisposable
             _deltaTimeRequests.Enqueue(deltaTime);
             Debug.Log($"Requested Frame: {Time.frameCount}");
         }
-
-        // Process received poses on Unity's main thread
-        float dequeueStartTime = Time.realtimeSinceStartup;
-        while (_receivedPoses.TryDequeue(out PoseVector newPose))
+        
+        _frameTimeRemaining -= deltaTime;
+        if (_frameTimeRemaining <= 0f)
         {
-            if ((Time.realtimeSinceStartup - dequeueStartTime) * 1000f >= dequeueTimeoutMs)
+            // Process received poses on Unity's main thread
+            float dequeueStartTime = Time.realtimeSinceStartup;
+            while (_receivedPoses.TryDequeue(out PoseVector newPose))
             {
-                Debug.LogWarning($"Stopped dequeue loop after {dequeueTimeoutMs} ms timeout.");
-                break;
-            }
+                if ((Time.realtimeSinceStartup - dequeueStartTime) * 1000f >= dequeueTimeoutMs)
+                {
+                    Debug.LogWarning($"Stopped dequeue loop after {dequeueTimeoutMs} ms timeout.");
+                    break;
+                }
 
-            Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.LeftFootContact}");
-            pose.CopyFrom(newPose);
-            return true;
+                Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.LeftFootContact}");
+                pose.CopyFrom(newPose);
+                return true;
+            }
+            _frameTimeRemaining += frameTime;
+            // in case unity lags
+            _frameTimeRemaining = Mathf.Max(0f, _frameTimeRemaining);
         }
         return false;
     }

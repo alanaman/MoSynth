@@ -16,13 +16,18 @@ public class BvhVisualiser : MonoBehaviour
 
     private Transform[] _skeletonBoneTransforms;
     private Transform _skeletonRoot;
-    private int _currentFrame;
+    
+    
     private float _currentFrameTime;
 
+    [SerializeField]
+    private int currentFrame;
+    
     private void Awake()
     {
         if (!bvhAnimation) return;
         SetupSkeleton();
+        UpdateSkeletonTransforms();
     }
 
     private void SetupSkeleton()
@@ -40,16 +45,21 @@ public class BvhVisualiser : MonoBehaviour
 
         if (!play) return;
         
-        _currentFrameTime = _currentFrame + math.frac(_currentFrameTime);
+        _currentFrameTime = currentFrame + math.frac(_currentFrameTime);
         _currentFrameTime += Time.deltaTime / bvhAnimation.FrameTime;
-        _currentFrame = (int)math.floor(_currentFrameTime);
+        currentFrame = (int)math.floor(_currentFrameTime);
             
-        if (_currentFrame >= bvhAnimation.Frames.Length)
+        if (currentFrame >= bvhAnimation.Frames.Length)
         {
-            _currentFrame = 0;
+            currentFrame = 0;
         }
             
-        var frame = bvhAnimation.Frames[_currentFrame];
+        UpdateSkeletonTransforms();
+    }
+
+    private void UpdateSkeletonTransforms()
+    {
+        var frame = bvhAnimation.Frames[currentFrame];
         _skeletonBoneTransforms[0].localPosition = frame.rootMotion;
         for (int i = 0; i < frame.localRotations.Length; i++)
         {
@@ -61,6 +71,7 @@ public class BvhVisualiser : MonoBehaviour
     {
         if(bvhAnimation == null) return;
         SetupSkeleton();
+        UpdateSkeletonTransforms();
     }
     
     /// <summary>

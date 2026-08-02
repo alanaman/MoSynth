@@ -1,12 +1,8 @@
 import numpy as np
-import ipyanimlab as lab
-from sympy import euler
-
-import Skeleton
-from MotionField import MotionField
-from Pose import Pose
 from scipy.spatial.transform import Rotation
 
+from MotionField import MotionField
+from Pose import Pose
 from Skeleton import Skeleton
 
 global pose_count
@@ -16,60 +12,61 @@ from pose_set_importer import deserialize_pose_set
 
 
 def load_animations():
-    pose_set: PoseSet = deserialize_pose_set('../Assets/StreamingAssets/MMDatabases/MotionMatchingData', 'MotionMatchingData')
+    pose_set: PoseSet = deserialize_pose_set('../Assets/StreamingAssets/MMDatabases/MotionMatchingData',
+                                             'MotionMatchingData')
 
     skeleton: Skeleton = pose_set.skeleton
     bone_count = len(list(skeleton))
 
-    n = pose_set.local_positions.shape[0]
-    N = n - 2  # need triplets (i, i+1, i+2)
+    n_src_poses = pose_set.local_positions.shape[0]
+    n_trg_poses = n_src_poses - 1 # need (i, i+1) i has x, v and i+1 has y
 
-    pos   = pose_set.local_positions            # (n, n_joints, 3)
-    quats = pose_set.local_rotations            # (n, n_joints, 4)
-    lv    = pose_set.local_velocities           # (n, n_joints, 3)
-    lav   = pose_set.local_angular_velocities   # (n, n_joints, 3) — Euler angles, degrees, xyz
+    pos = pose_set.local_positions  # (n_poses, n_joints, 3)
+    quats = pose_set.local_rotations  # (n_poses, n_joints, 4)
+    lv = pose_set.local_velocities  # (n_poses, n_joints, 3)
+    lav = pose_set.local_angular_velocities  # (n_poses, n_joints, 3) — Euler angles, degrees, xyz
 
-    # Convert angular velocities (Euler angles, degrees, xyz) → unit quaternions (n, n_joints, 4)
+    # Convert angular velocities (Euler angles, degrees, xyz) → unit quaternions (n_poses, n_joints, 4)
     lav_quats = (
-        Rotation.from_euler('xyz', lav.reshape(-1, 3), degrees=True)
+        Rotation.from_rotvec(lav.reshape(-1, 3))
         .as_quat()
-        .reshape(n, bone_count, 4)
+        .reshape(n_src_poses, bone_count, 4)
         .astype(np.float32)
     )
 
     # pose_x: current pose at frame i, expressed in root-relative frame
-    #   slot 0 — root position   : zeroed  (translation-invariant)
-    #   slot 1 — hip position    : kept as-is
-    #   slot 2 — root bone quat  : identity (yaw-invariant)
+    #   slot 0 — root position: zeroed (translation-invariant)
+    #   slot 1 — hip position: kept as-is
+    #   slot 2 — root bone quat: identity (yaw-invariant)
     #   slots 3+ — remaining joint quats
-    pose_x = np.zeros((N, bone_count + 2, 4), dtype=np.float32)
-    pose_x[:, 1, :3] = pos[:N, 1, :] # hip
-    pose_x[:, 2, :]  = [0., 0., 0., 1.]         # identity quaternion [x,y,z,w]
-    pose_x[:, 3:, :] = quats[:N, 1:, :]
+    pose_x = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_x[:, 1, :3] = pos[:n_trg_poses, 1, :]  # hip
+    pose_x[:, 2, :] = [0., 0., 0., 1.]  # identity quaternion [x,y,z,w]
+    pose_x[:, 3:, :] = quats[:n_trg_poses, 1:, :]
 
     # pose_v: velocity at frame i  =  Pose(i+1) − Pose(i)
     #   slot 0 — root translational velocity
     #   slot 1 — hip translational velocity
     #   slots 2+ — joint angular velocities as quaternions
-    pose_v = np.zeros((N, bone_count + 2, 4), dtype=np.float32)
-    pose_v[:, 0, :3] = lv[:N, 0, :]
-    pose_v[:, 1, :3] = lv[:N, 1, :]
-    pose_v[:, 2:, :] = lav_quats[:N, :, :]
+    pose_v = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_v[:, 0, :3] = lv[:n_trg_poses, 0, :]
+    pose_v[:, 1, :3] = lv[:n_trg_poses, 1, :]
+    pose_v[:, 2:, :] = lav_quats[:n_trg_poses, :, :]
 
     # pose_y: future velocity at frame i+1  =  Pose(i+2) − Pose(i+1)
     #   Same layout as pose_v, shifted one frame forward.
-    pose_y = np.zeros((N, bone_count + 2, 4), dtype=np.float32)
-    pose_y[:, 0, :3] = lv[1:N+1, 0, :]
-    pose_y[:, 1, :3] = lv[1:N+1, 1, :]
-    pose_y[:, 2:, :] = lav_quats[1:N+1, :, :]
+    pose_y = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_y[:, 0, :3] = lv[1:n_trg_poses+1, 0, :]
+    pose_y[:, 1, :3] = lv[1:n_trg_poses+1, 1, :]
+    pose_y[:, 2:, :] = lav_quats[1:n_trg_poses+1, :, :]
 
     # pose_contacts: foot contact flags aligned to frame i
-    pose_contacts = pose_set.foot_contacts[:N, :].copy()
+    pose_contacts = pose_set.foot_contacts[:n_trg_poses, :].copy()
 
-    return skeleton, pose_x, pose_v, pose_y, pose_contacts
+    return skeleton, pose_x, pose_v, pose_y, pose_contacts, pose_set
 
 
-import zmq, json
+import zmq
 
 
 def create_pose_json_reply(skeleton: Skeleton,
@@ -94,38 +91,39 @@ def create_pose_json_reply(skeleton: Skeleton,
 
 
 def main():
-    skeleton, pose_x, pose_v, pose_y, pose_contacts = load_animations()
+    skeleton, pose_x, pose_v, pose_y, pose_contacts, pose_set = load_animations()
     motion_field = MotionField(pose_x, pose_v, pose_y, skeleton)
 
     context = zmq.Context()
     socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5557")
+    socket.bind("tcp://*:5555")
     print("Python ZeroMQ server listening on port 5555...")
 
-    last_index = 600
+    last_index = 700
     current_x = pose_x[last_index, ...].copy()
     current_v = pose_v[last_index, ...].copy()
     current_contacts = pose_contacts[last_index, ...]
 
     while True:
-        raw_msg = socket.recv()
+        # raw_msg = socket.recv()
+        #
+        # # decode desired direction from json sent from Unity
+        # try:
+        #     msg = raw_msg.decode('utf-8')
+        #     data = json.loads(msg)
+        #     desired_dir = np.array(data["desired_dir"])
+        #     delta_time = float(data["delta_time"])
+        # except Exception as e:
+        #     print(f"Error decoding message: {e}")
+        #     socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
+        #     continue
 
-        # decode desired direction from json sent from Unity
-        try:
-            msg = raw_msg.decode('utf-8')
-            data = json.loads(msg)
-            desired_dir = np.array(data["desired_dir"])
-            delta_time = float(data["delta_time"])
-        except Exception as e:
-            print(f"Error decoding message: {e}")
-            socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
-            continue
-
-        current_x[...], current_v[...] = motion_field.greedy_action(
-            desired_dir, current_x, current_v, delta_time, k_neighbors=15)
-        reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
-        socket.send_string(json.dumps(reply))
-
+        desired_dir = np.array([0.0, 0.0])
+        delta_time = pose_set.frameTime
+        current_x[...], current_v[...] = motion_field.get_next_pose(
+            current_x, current_v, delta_time)
+        # reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
+        # socket.send_string(json.dumps(reply))
 
 
 if __name__ == "__main__":

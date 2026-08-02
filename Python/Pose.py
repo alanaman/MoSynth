@@ -57,7 +57,7 @@ class Pose:
         result[..., 2:, :] = self.quats
         return result
 
-    def __add__(self, other: Pose) -> Pose:
+    def add(self, other: Pose) -> Pose:
         """
         Adds a velocity/delta pose to this pose.
         (Calculates relative transformation for root and composes rotations).
@@ -77,8 +77,8 @@ class Pose:
 
         # Joint rotations composition
         new_quats = np.array(Rotation.as_quat(
-            Rotation.from_quat(self.quats) *
-            Rotation.from_quat(other.quats)
+            Rotation.from_quat(other.quats) *
+            Rotation.from_quat(self.quats)
         ))
 
         return Pose(new_root, new_hips, new_quats)

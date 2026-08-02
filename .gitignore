@@ -83,3 +83,12 @@ crashlytics-build.properties
 
 # plugin samples
 /[Aa]ssets/[Ss]amples/
+/[Aa]ssets/[Ss]amples.meta
+
+/[Aa]ssets/[Pp]ackages/
+/[Aa]ssets/[Pp]ackages.meta
+
+/[Aa]ssets/[Ss]treamingAssets/
+/[Aa]ssets/[Ss]treamingAssets.meta
+
+/External/
