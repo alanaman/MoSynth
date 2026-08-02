@@ -26,17 +26,17 @@ public class Inertialization : MoSynthStage
     [NonSerialized] public float3 InertializedHips;
     [NonSerialized] public float3 InertializedHipsVelocity;
 
-    private quaternion[] OffsetRotations;
-    private float3[] OffsetAngularVelocities;
-    private float3 OffsetHips;
+    private quaternion[] _offsetRotations;
+    private float3[] _offsetAngularVelocities;
+    private float3 _offsetHips;
 
-    private float3 OffsetHipsVelocity;
+    private float3 _offsetHipsVelocity;
 
     // Contacts
-    private float3 OffsetLeftContact;
-    private float3 OffsetLeftContactVelocity;
-    private float3 OffsetRightContact;
-    private float3 OffsetRightContactVelocity;
+    private float3 _offsetLeftContact;
+    private float3 _offsetLeftContactVelocity;
+    private float3 _offsetRightContact;
+    private float3 _offsetRightContactVelocity;
 
 
     #endregion
@@ -53,9 +53,9 @@ public class Inertialization : MoSynthStage
         int numJoints = skeleton.Joints.Count;
         InertializedRotations = new quaternion[numJoints];
         _inertializedAngularVelocities = new float3[numJoints];
-        OffsetRotations = new quaternion[numJoints];
-        for (int i = 0; i < numJoints; i++) OffsetRotations[i] = quaternion.identity; // init to a valid quaternion
-        OffsetAngularVelocities = new float3[numJoints];
+        _offsetRotations = new quaternion[numJoints];
+        for (int i = 0; i < numJoints; i++) _offsetRotations[i] = quaternion.identity; // init to a valid quaternion
+        _offsetAngularVelocities = new float3[numJoints];
     }
 
     /// <summary>
@@ -87,24 +87,24 @@ public class Inertialization : MoSynthStage
         }
 
         // Update the rotational inertialization for joint local rotations
-        for (int i = 1; i < pose.JointLocalRotations.Length; i++)
+        for (int i = 1; i < pose.jointLocalRotations.Length; i++)
         {
-            var targetRot = pose.JointLocalRotations[i];
-            var targetAngularVelocity = pose.JointLocalAngularVelocities[i];
-            var currentRot = _currentPose.JointLocalRotations[i];
-            var currentAngularVelocity = _currentPose.JointLocalAngularVelocities[i];
-            (pose.JointLocalRotations[i], pose.JointLocalAngularVelocities[i]) = InertializeJointUpdate(
+            var targetRot = pose.jointLocalRotations[i];
+            var targetAngularVelocity = pose.jointLocalAngularVelocities[i];
+            var currentRot = _currentPose.jointLocalRotations[i];
+            var currentAngularVelocity = _currentPose.jointLocalAngularVelocities[i];
+            (pose.jointLocalRotations[i], pose.jointLocalAngularVelocities[i]) = InertializeJointUpdate(
                 currentRot, currentAngularVelocity,
                 targetRot, targetAngularVelocity, deltaTime);
 
         }
 
         // Update the linear inertialization for hips
-        var targetHipPos = pose.JointLocalPositions[1];
-        var targetHipVel = pose.JointLocalVelocities[1];
-        var currentHipPos = _currentPose.JointLocalPositions[1];
-        var currentHipVel = _currentPose.JointLocalVelocities[1];
-        (pose.JointLocalPositions[1], pose.JointLocalVelocities[1]) = InertializeJointUpdate(
+        var targetHipPos = pose.jointLocalPositions[1];
+        var targetHipVel = pose.jointLocalVelocities[1];
+        var currentHipPos = _currentPose.jointLocalPositions[1];
+        var currentHipVel = _currentPose.jointLocalVelocities[1];
+        (pose.jointLocalPositions[1], pose.jointLocalVelocities[1]) = InertializeJointUpdate(
             currentHipPos, currentHipVel,
             targetHipPos, targetHipVel,
             deltaTime
@@ -151,25 +151,25 @@ public class Inertialization : MoSynthStage
         poseSet.GetPose(sourcePoseIndex, out PoseVector sourcePose);
         poseSet.GetPose(targetPoseIndex, out PoseVector targetPose);
         // Set up the inertialization for joint local rotations (no simulation bone)
-        for (int i = 1; i < sourcePose.JointLocalRotations.Length; i++)
+        for (int i = 1; i < sourcePose.jointLocalRotations.Length; i++)
         {
-            quaternion sourceJointRotation = sourcePose.JointLocalRotations[i];
-            quaternion targetJointRotation = targetPose.JointLocalRotations[i];
-            float3 sourceJointAngularVelocity = sourcePose.JointLocalAngularVelocities[i];
-            float3 targetJointAngularVelocity = targetPose.JointLocalAngularVelocities[i];
+            quaternion sourceJointRotation = sourcePose.jointLocalRotations[i];
+            quaternion targetJointRotation = targetPose.jointLocalRotations[i];
+            float3 sourceJointAngularVelocity = sourcePose.jointLocalAngularVelocities[i];
+            float3 targetJointAngularVelocity = targetPose.jointLocalAngularVelocities[i];
             InertializeJointTransition(sourceJointRotation, sourceJointAngularVelocity,
                 targetJointRotation, targetJointAngularVelocity,
-                ref OffsetRotations[i], ref OffsetAngularVelocities[i]);
+                ref _offsetRotations[i], ref _offsetAngularVelocities[i]);
         }
 
         // Set up the inertialization for hips
-        float3 sourceHips = sourcePose.JointLocalPositions[1];
-        float3 targetHips = targetPose.JointLocalPositions[1];
-        float3 sourceHipsVelocity = sourcePose.JointLocalVelocities[1];
-        float3 targetHipsVelocity = targetPose.JointLocalVelocities[1];
+        float3 sourceHips = sourcePose.jointLocalPositions[1];
+        float3 targetHips = targetPose.jointLocalPositions[1];
+        float3 sourceHipsVelocity = sourcePose.jointLocalVelocities[1];
+        float3 targetHipsVelocity = targetPose.jointLocalVelocities[1];
         InertializeJointTransition(sourceHips, sourceHipsVelocity,
             targetHips, targetHipsVelocity,
-            ref OffsetHips, ref OffsetHipsVelocity);
+            ref _offsetHips, ref _offsetHipsVelocity);
     }
 
     /// <summary>
@@ -181,7 +181,7 @@ public class Inertialization : MoSynthStage
     {
         InertializeJointTransition(sourceLeftContact, sourceLeftContactVelocity,
             targetLeftContact, targetLeftContactVelocity,
-            ref OffsetLeftContact, ref OffsetLeftContactVelocity);
+            ref _offsetLeftContact, ref _offsetLeftContactVelocity);
     }
 
     /// <summary>
@@ -193,7 +193,7 @@ public class Inertialization : MoSynthStage
     {
         InertializeJointTransition(sourceRightContact, sourceRightContactVelocity,
             targetRightContact, targetRightContactVelocity,
-            ref OffsetRightContact, ref OffsetRightContactVelocity);
+            ref _offsetRightContact, ref _offsetRightContactVelocity);
     }
 
     public void UpdateLeftContact(float3 targetPos, float3 targetVelocity, float halfLife, float deltaTime,
@@ -201,7 +201,7 @@ public class Inertialization : MoSynthStage
     {
         InertializeJointUpdate(targetPos, targetVelocity,
             halfLife, deltaTime,
-            ref OffsetLeftContact, ref OffsetLeftContactVelocity,
+            ref _offsetLeftContact, ref _offsetLeftContactVelocity,
             out newPos, out newVel);
     }
 
@@ -210,7 +210,7 @@ public class Inertialization : MoSynthStage
     {
         InertializeJointUpdate(targetPos, targetVelocity,
             halfLife, deltaTime,
-            ref OffsetRightContact, ref OffsetRightContactVelocity,
+            ref _offsetRightContact, ref _offsetRightContactVelocity,
             out newPos, out newVel);
     }
 
@@ -221,22 +221,22 @@ public class Inertialization : MoSynthStage
     public void Update(PoseVector targetPose, float halfLife, float deltaTime)
     {
         // Update the inertialization for joint local rotations
-        for (int i = 1; i < targetPose.JointLocalRotations.Length; i++)
+        for (int i = 1; i < targetPose.jointLocalRotations.Length; i++)
         {
-            quaternion targetJointRotation = targetPose.JointLocalRotations[i];
-            float3 targetAngularVelocity = targetPose.JointLocalAngularVelocities[i];
+            quaternion targetJointRotation = targetPose.jointLocalRotations[i];
+            float3 targetAngularVelocity = targetPose.jointLocalAngularVelocities[i];
             InertializeJointUpdate(targetJointRotation, targetAngularVelocity,
                 halfLife, deltaTime,
-                ref OffsetRotations[i], ref OffsetAngularVelocities[i],
+                ref _offsetRotations[i], ref _offsetAngularVelocities[i],
                 out InertializedRotations[i], out _inertializedAngularVelocities[i]);
         }
 
         // Update the inertialization for hips
-        float3 targetHips = targetPose.JointLocalPositions[1];
-        float3 targetRootVelocity = targetPose.JointLocalVelocities[1];
+        float3 targetHips = targetPose.jointLocalPositions[1];
+        float3 targetRootVelocity = targetPose.jointLocalVelocities[1];
         InertializeJointUpdate(targetHips, targetRootVelocity,
             halfLife, deltaTime,
-            ref OffsetHips, ref OffsetHipsVelocity,
+            ref _offsetHips, ref _offsetHipsVelocity,
             out InertializedHips, out InertializedHipsVelocity);
     }
 

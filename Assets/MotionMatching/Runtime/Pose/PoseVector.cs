@@ -1,8 +1,5 @@
 using System;
-using System.Diagnostics.Contracts;
-using UnityEngine;
 using Unity.Mathematics;
-using Unity.Mathematics.Geometry;
 
 namespace MotionMatching
 {
@@ -14,57 +11,58 @@ namespace MotionMatching
 [Serializable]
 public struct PoseVector
 {
+    // TODO: separate root motion into its own field
     // The first element is the SimulationBone (added artificially), and the rest are the bones of the original skeleton
-    public float3[] JointLocalPositions;
-    public quaternion[] JointLocalRotations;
-    public float3[] JointLocalVelocities; // Computed from World Positions
-    public float3[] JointLocalAngularVelocities; // Computed from World Rotations
-    public bool LeftFootContact; // True if the foot is in contact with the ground, false otherwise
-    public bool RightFootContact;
+    public float3[] jointLocalPositions;
+    public quaternion[] jointLocalRotations;
+    public float3[] jointLocalVelocities; // Computed from World Positions
+    public float3[] jointLocalAngularVelocities; // Computed from World Rotations
+    public bool leftFootContact; // True if the foot is in contact with the ground, false otherwise
+    public bool rightFootContact;
 
     public PoseVector(int numJoints)
     {
-        JointLocalPositions = new float3[numJoints];
-        JointLocalRotations = new quaternion[numJoints];
-        JointLocalVelocities = new float3[numJoints];
-        JointLocalAngularVelocities = new float3[numJoints];
-        LeftFootContact = false;
-        RightFootContact = false;
+        jointLocalPositions = new float3[numJoints];
+        jointLocalRotations = new quaternion[numJoints];
+        jointLocalVelocities = new float3[numJoints];
+        jointLocalAngularVelocities = new float3[numJoints];
+        leftFootContact = false;
+        rightFootContact = false;
     }
 
     public PoseVector(PoseVector other)
     {
-        JointLocalPositions = (float3[])other.JointLocalPositions.Clone();
-        JointLocalRotations = (quaternion[])other.JointLocalRotations.Clone();
-        JointLocalVelocities = (float3[])other.JointLocalVelocities.Clone();
-        JointLocalAngularVelocities = (float3[])other.JointLocalAngularVelocities.Clone();
-        LeftFootContact = other.LeftFootContact;
-        RightFootContact = other.RightFootContact;
+        jointLocalPositions = (float3[])other.jointLocalPositions.Clone();
+        jointLocalRotations = (quaternion[])other.jointLocalRotations.Clone();
+        jointLocalVelocities = (float3[])other.jointLocalVelocities.Clone();
+        jointLocalAngularVelocities = (float3[])other.jointLocalAngularVelocities.Clone();
+        leftFootContact = other.leftFootContact;
+        rightFootContact = other.rightFootContact;
     }
     
     public PoseVector(float3[] jointLocalPositions, quaternion[] jointLocalRotations,
         float3[] jointLocalVelocities, float3[] jointLocalAngularVelocities,
         bool leftFootContact, bool rightFootContact)
     {
-        JointLocalPositions = jointLocalPositions;
-        JointLocalRotations = jointLocalRotations;
-        JointLocalVelocities = jointLocalVelocities;
-        JointLocalAngularVelocities = jointLocalAngularVelocities;
-        LeftFootContact = leftFootContact;
-        RightFootContact = rightFootContact;
+        this.jointLocalPositions = jointLocalPositions;
+        this.jointLocalRotations = jointLocalRotations;
+        this.jointLocalVelocities = jointLocalVelocities;
+        this.jointLocalAngularVelocities = jointLocalAngularVelocities;
+        this.leftFootContact = leftFootContact;
+        this.rightFootContact = rightFootContact;
     }
 
     public void CopyFrom(PoseVector other)
     {
-        for (var i = 0; i < JointLocalPositions.Length; i++)
+        for (var i = 0; i < jointLocalPositions.Length; i++)
         {
-            JointLocalPositions[i] = other.JointLocalPositions[i];
-            JointLocalRotations[i] = other.JointLocalRotations[i];
-            JointLocalVelocities[i] = other.JointLocalVelocities[i];
-            JointLocalAngularVelocities[i] = other.JointLocalAngularVelocities[i];
+            jointLocalPositions[i] = other.jointLocalPositions[i];
+            jointLocalRotations[i] = other.jointLocalRotations[i];
+            jointLocalVelocities[i] = other.jointLocalVelocities[i];
+            jointLocalAngularVelocities[i] = other.jointLocalAngularVelocities[i];
         }
-        LeftFootContact = other.LeftFootContact;
-        RightFootContact = other.RightFootContact;
+        leftFootContact = other.leftFootContact;
+        rightFootContact = other.rightFootContact;
     }
 }
 }

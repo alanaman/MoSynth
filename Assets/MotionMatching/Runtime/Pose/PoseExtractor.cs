@@ -75,8 +75,8 @@ public static class PoseExtractor
         var rightFootContact = new bool[poses.Length];
         for (var i = 0; i < poses.Length; i++)
         {
-            leftFootContact[i] = poses[i].LeftFootContact;
-            rightFootContact[i] = poses[i].RightFootContact;
+            leftFootContact[i] = poses[i].leftFootContact;
+            rightFootContact[i] = poses[i].rightFootContact;
         }
 
         // Median Filter
@@ -135,8 +135,8 @@ public static class PoseExtractor
 
             // Find median
             var medianIndex = windowsRadius;
-            pose.LeftFootContact = leftFootContactWindow[medianIndex];
-            pose.RightFootContact = rightFootContactWindow[medianIndex];
+            pose.leftFootContact = leftFootContactWindow[medianIndex];
+            pose.rightFootContact = rightFootContactWindow[medianIndex];
             poses[i] = pose;
         }
     }
@@ -167,10 +167,10 @@ public static class PoseExtractor
         var sbDirZ = new float[poses.Length];
         for (var i = 0; i < poses.Length; i++)
         {
-            sbPosX[i] = poses[i].JointLocalPositions[0].x;
-            sbPosY[i] = poses[i].JointLocalPositions[0].y;
-            sbPosZ[i] = poses[i].JointLocalPositions[0].z;
-            var rot = poses[i].JointLocalRotations[0];
+            sbPosX[i] = poses[i].jointLocalPositions[0].x;
+            sbPosY[i] = poses[i].jointLocalPositions[0].y;
+            sbPosZ[i] = poses[i].jointLocalPositions[0].z;
+            var rot = poses[i].jointLocalRotations[0];
             var dir = math.mul(rot, new float3(0, 0, 1));
             sbDirX[i] = dir.x;
             sbDirY[i] = dir.y;
@@ -184,21 +184,21 @@ public static class PoseExtractor
         // Set new Simulation Bone positions and rotations
         for (var i = 0; i < poses.Length; i++)
         {
-            poses[i].JointLocalPositions[0] = new float3(sbPosX[i], sbPosY[i], sbPosZ[i]);
+            poses[i].jointLocalPositions[0] = new float3(sbPosX[i], sbPosY[i], sbPosZ[i]);
             var dir = new float3(sbDirX[i], sbDirY[i], sbDirZ[i]);
             dir = math.normalize(dir);
-            poses[i].JointLocalRotations[0] = math.normalize(quaternion.LookRotation(dir, math.up()));
+            poses[i].jointLocalRotations[0] = math.normalize(quaternion.LookRotation(dir, math.up()));
         }
 
         // Set new relative Hips position and rotation to the Simulation Bone
         for (var i = 0; i < poses.Length; i++)
         {
-            var sbPos = poses[i].JointLocalPositions[0];
-            var inverseSbRot = math.inverse(poses[i].JointLocalRotations[0]);
+            var sbPos = poses[i].jointLocalPositions[0];
+            var inverseSbRot = math.inverse(poses[i].jointLocalRotations[0]);
             var newHipsPos = math.mul(inverseSbRot, hipsWorldPositions[i] - sbPos);
             var newHipsRot = math.mul(inverseSbRot, hipsWorldRotations[i]);
-            poses[i].JointLocalPositions[1] = newHipsPos;
-            poses[i].JointLocalRotations[1] = newHipsRot;
+            poses[i].jointLocalPositions[1] = newHipsPos;
+            poses[i].jointLocalRotations[1] = newHipsRot;
         }
 
         // Look up to the TODO 
@@ -210,10 +210,10 @@ public static class PoseExtractor
     {
         var frame = bvhAnimation.Frames[frameIndex];
         // Joints
-        for (var i = 1; i < pose.JointLocalPositions.Length; i++)
+        for (var i = 1; i < pose.jointLocalPositions.Length; i++)
         {
-            pose.JointLocalPositions[i] = bvhAnimation.Skeleton.Joints[i - 1].localOffset;
-            pose.JointLocalRotations[i] = frame.localRotations[i - 1];
+            pose.jointLocalPositions[i] = bvhAnimation.Skeleton.Joints[i - 1].localOffset;
+            pose.jointLocalRotations[i] = frame.localRotations[i - 1];
         }
 
         // SimulationBone
@@ -224,28 +224,36 @@ public static class PoseExtractor
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);
-        pose.JointLocalPositions[0] = sbPos;
-        pose.JointLocalRotations[0] = sbRot;
+        pose.jointLocalPositions[0] = sbPos;
+        pose.jointLocalRotations[0] = sbRot;
 
         // make first joint (hips) position and direction relative to the simulation bone
         var inverseSbRot = math.inverse(sbRot);
-        pose.JointLocalPositions[1] = math.mul(inverseSbRot, frameRootMotion - sbPos);
-        pose.JointLocalRotations[1] = math.mul(inverseSbRot, frame.localRotations[0]);
+        pose.jointLocalPositions[1] = math.mul(inverseSbRot, frameRootMotion - sbPos);
+        pose.jointLocalRotations[1] = math.mul(inverseSbRot, frame.localRotations[0]);
     }
 
     private static void ExtractPoseVelocities(ref PoseVector pose, in PoseVector nextPose, BvhAnimation bvhAnimation)
     {
-        for (var joint = 0; joint < pose.JointLocalPositions.Length; joint++)
+        for (var jointIdx = 0; jointIdx < pose.jointLocalPositions.Length; jointIdx++)
         {
-            var nextPos = nextPose.JointLocalPositions[joint];
-            var pos = pose.JointLocalPositions[joint];
-            pose.JointLocalVelocities[joint] = (nextPos - pos) / bvhAnimation.FrameTime;
+            var nextPos = nextPose.jointLocalPositions[jointIdx];
+            var pos = pose.jointLocalPositions[jointIdx];
+            pose.jointLocalVelocities[jointIdx] = (nextPos - pos) / bvhAnimation.FrameTime;
 
-            var nextRot = nextPose.JointLocalRotations[joint];
-            var rot = pose.JointLocalRotations[joint];
-            pose.JointLocalAngularVelocities[joint] =
+            var nextRot = nextPose.jointLocalRotations[jointIdx];
+            var rot = pose.jointLocalRotations[jointIdx];
+            pose.jointLocalAngularVelocities[jointIdx] =
                 MathExtensions.AngularVelocity(rot, nextRot, bvhAnimation.FrameTime);
         }
+        
+        // root motion
+        var vel = (nextPose.jointLocalPositions[0] - pose.jointLocalPositions[0]) / bvhAnimation.FrameTime;
+
+        // transform the root velocity so that it is
+        // with respect to the root space of the current pose
+        vel = math.mul(math.inverse(pose.jointLocalRotations[0]), vel);
+        pose.jointLocalVelocities[0] = vel;
     }
 
     private static void ExtractPoseContacts(ref PoseVector pose, Skeleton skeleton, int leftToesIndex,
@@ -256,8 +264,8 @@ public static class PoseExtractor
         var leftToeVel = skeleton.GetWorldSpaceVelocity(skeleton.Joints[leftToesIndex], pose);
         var rightToeVel = skeleton.GetWorldSpaceVelocity(skeleton.Joints[rightToesIndex], pose);
 
-        pose.LeftFootContact = math.length(leftToeVel) < contactVelocityThreshold;
-        pose.RightFootContact = math.length(rightToeVel) < contactVelocityThreshold;
+        pose.leftFootContact = math.length(leftToeVel) < contactVelocityThreshold;
+        pose.rightFootContact = math.length(rightToeVel) < contactVelocityThreshold;
     }
 
     private static void ForwardKinematics(Skeleton skeleton,

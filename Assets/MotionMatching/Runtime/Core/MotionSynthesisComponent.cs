@@ -11,10 +11,11 @@ public class MotionSynthesisComponent : MotionSynthesizer
     // TODO: remove. shouldn't be coupled to MotionMatchingData
     public MotionMatchingData mmData;
     
+    [NonSerialized]
     public PoseVector CurrentPose;
-    
-    Skeleton skeleton;
-    public Skeleton Skeleton => skeleton;
+
+    private Skeleton _skeleton;
+    public Skeleton Skeleton => _skeleton;
     
     /// <summary>
     /// The transforms of the character controlled by this <see cref="MotionSynthesisComponent"/>.
@@ -47,12 +48,12 @@ public class MotionSynthesisComponent : MotionSynthesizer
     {
         _animator = GetComponent<Animator>();
         
-        skeleton = null;
+        _skeleton = null;
         
         stages.RemoveAll(stage => stage == null);
         foreach (var stage in stages)
         {
-            skeleton = stage.GetSkeleton(skeleton);
+            _skeleton = stage.GetSkeleton(_skeleton);
         }
 
         InitSkeletonTransformsArray();
@@ -136,18 +137,18 @@ public class MotionSynthesisComponent : MotionSynthesizer
 
     void InitCurrentPose()
     {
-        CurrentPose = new PoseVector(skeleton.Joints.Count);
+        CurrentPose = new PoseVector(_skeleton.Joints.Count);
         
         for (var i = 0; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = SkeletonTransforms[i].localRotation;
-            CurrentPose.JointLocalPositions[i] = SkeletonTransforms[i].localPosition;
-            CurrentPose.JointLocalVelocities[i] = float3.zero;
-            CurrentPose.JointLocalAngularVelocities[i] = float3.zero;
+            CurrentPose.jointLocalRotations[i] = SkeletonTransforms[i].localRotation;
+            CurrentPose.jointLocalPositions[i] = SkeletonTransforms[i].localPosition;
+            CurrentPose.jointLocalVelocities[i] = float3.zero;
+            CurrentPose.jointLocalAngularVelocities[i] = float3.zero;
         }
 
-        CurrentPose.LeftFootContact = false;
-        CurrentPose.RightFootContact = false;
+        CurrentPose.leftFootContact = false;
+        CurrentPose.rightFootContact = false;
     }
 
     void ConstructCurrentPoseFromSkeletonTransforms()
@@ -165,23 +166,23 @@ public class MotionSynthesisComponent : MotionSynthesizer
         //
         // pose.JointLocalPositions[0] = math.mul(_inverseAnimationSpaceOriginRot, localSpacePos) + _animationSpaceOriginPos;
         
-        for (var i = 0; i < CurrentPose.JointLocalAngularVelocities.Length; i++)
+        for (var i = 0; i < CurrentPose.jointLocalAngularVelocities.Length; i++)
         {
-            var inverseLocalRotation = Quaternion.Inverse(CurrentPose.JointLocalRotations[i]);
-            CurrentPose.JointLocalAngularVelocities[i] = (SkeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
-            CurrentPose.JointLocalVelocities[i] = (float3)SkeletonTransforms[i].localPosition - CurrentPose.JointLocalPositions[i];
+            var inverseLocalRotation = Quaternion.Inverse(CurrentPose.jointLocalRotations[i]);
+            CurrentPose.jointLocalAngularVelocities[i] = (SkeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
+            CurrentPose.jointLocalVelocities[i] = (float3)SkeletonTransforms[i].localPosition - CurrentPose.jointLocalPositions[i];
         }
         
-        CurrentPose.JointLocalPositions[0] = SkeletonTransforms[0].localPosition;
-        CurrentPose.JointLocalRotations[0] = SkeletonTransforms[0].localRotation;
+        CurrentPose.jointLocalPositions[0] = SkeletonTransforms[0].localPosition;
+        CurrentPose.jointLocalRotations[0] = SkeletonTransforms[0].localRotation;
         
         for (var i = 1; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.JointLocalRotations[i] = SkeletonTransforms[i].localRotation;
+            CurrentPose.jointLocalRotations[i] = SkeletonTransforms[i].localRotation;
         }
 
         // hip
-        CurrentPose.JointLocalPositions[1] = SkeletonTransforms[1].localPosition;
+        CurrentPose.jointLocalPositions[1] = SkeletonTransforms[1].localPosition;
 
         
         // CurrentPose.LeftFootContact = ?;
@@ -199,20 +200,22 @@ public class MotionSynthesisComponent : MotionSynthesizer
         //     transform.position = simulationBone;
         // }
 
-        for (var i = 0; i < skeleton.Joints.Count; i++)
+        for (var i = 1; i < _skeleton.Joints.Count; i++)
         {
-            SkeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+            SkeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
         }
 
-        // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
-        
         // hips
-        SkeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
+        SkeletonTransforms[1].localPosition = pose.jointLocalPositions[1];
         
         // root
         if (rootPositionsMask)
         {
-            SkeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
+            var rootTransform = SkeletonTransforms[0];
+            rootTransform.localPosition += rootTransform.localRotation * pose.jointLocalVelocities[0] * Time.deltaTime;
+            var angVel = pose.jointLocalAngularVelocities[0];
+            var rootRotation = quaternion.AxisAngle(angVel, math.length(angVel) * Time.deltaTime);
+            rootTransform.localRotation *= rootRotation;
         }
 
         // if (blendPoses && _previousHipsPositionMask != rootPositionsMask)

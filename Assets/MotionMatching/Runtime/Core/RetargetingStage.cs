@@ -1,4 +1,3 @@
-
 using System;
 using Unity.Mathematics;
 using UnityEngine;
@@ -14,54 +13,53 @@ public class RetargetingStage : MoSynthStage
     /// The T-pose obtained from one of the animation assets.
     /// </summary>
     private quaternion[] _animationTPose;
-    
+
     /// <summary>
     /// The T-pose of the character skeleton set up during the Mecanim mapping.   
     /// </summary>
     private quaternion[] _characterTPose;
-    
+
     // TODO: this requires that an animator component be set up
     // find another way to retarget
     private Animator _animator;
-    
+
     // TODO: Retargeting should be independent of Motion Matching
     public MotionMatchingData mmData;
-    
+
     private quaternion _hipsCorrection;
-    
+
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _animator = motionSynthesisComponent.GetComponent<Animator>();
-        
+
         // TODO: use only one list of joints
         // currently animJoints dont have Joint.type set correctly
         // and poseJoints have extra simBone entry
         var poseSet = mmData.GetOrImportPoseSet();
         var poseJoints = poseSet.Skeleton.Joints;
-        
+
         var tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
         var animJoints = tPoseAnimation.Skeleton.Joints;
-        
+
         _animationTPose = new quaternion[animJoints.Count];
         _characterTPose = new quaternion[animJoints.Count];
-        
+
         for (var i = 0; i < animJoints.Count - 1; i++)
         {
             _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], 0);
         }
-        
+
         var tPoseSkeleton = _animator.avatar.humanDescription.skeleton;
-        var targetHipsRot = quaternion.identity;
         for (var i = 0; i < animJoints.Count; i++)
         {
             var jointTransform = _animator.GetBoneTransform(poseJoints[i + 1].type);
             var targetJointIndex = Array.FindIndex(tPoseSkeleton, bone => bone.name == jointTransform.name);
             Debug.Assert(targetJointIndex != -1, "Target joint not found: " + jointTransform.name);
-            
+
             // Initialize the rotation as the local rotation of the joint
             var cumulativeRotation = tPoseSkeleton[targetJointIndex].rotation;
-            
+
             // Traverse up the hierarchy until reaching the Animator's transform
             var currentTransform = jointTransform.parent;
             while (currentTransform != null && currentTransform != _animator.transform)
@@ -78,28 +76,11 @@ public class RetargetingStage : MoSynthStage
                 // Move to the next parent in the hierarchy
                 currentTransform = currentTransform.parent;
             }
-            
+
             // Store the world rotation
             _characterTPose[i] = cumulativeRotation;
-            
-            // _characterTPose[i] = tPoseSkeleton[targetJointIndex].rotation;
-            
-            if (poseJoints[i + 1].type == HumanBodyBones.Hips)
-            {
-                targetHipsRot = cumulativeRotation;
-            }
         }
-        
-        // Find ForwardLocalVector and UpLocalVector
-        var forwardLocalVector = math.mul(math.inverse(targetHipsRot), math.forward());
-        var upLocalVector = math.mul(math.inverse(targetHipsRot), math.up());
-        // // Correct body orientation so they are both facing the same direction
-        // var targetWorldForward = math.mul(_characterTPose[0], forwardLocalVector);
-        // var targetWorldUp = math.mul(_characterTPose[0], upLocalVector);
-        
-        var targetWorldForward = math.forward();
-        var targetWorldUp = math.up();
-        
+
         var sourceWorldForward = math.mul(_animationTPose[0], mmData.HipsForwardLocalVector);
         var sourceWorldUp = math.mul(_animationTPose[0], mmData.HipsUpLocalVector);
         var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
@@ -110,24 +91,23 @@ public class RetargetingStage : MoSynthStage
     public override bool Apply(PoseVector pose, float deltaTime)
     {
         // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
-        
+
         var animationSkeleton = _owner.Skeleton;
-        
+
         var sourcePose = new PoseVector(pose);
-        
+
         // Retargeting
-        for (var i = 0; i < animationSkeleton.Joints.Count-1; i++)
+        for (var i = 0; i < animationSkeleton.Joints.Count - 1; i++)
         {
             // Motion Matching Target Rotation
             var sourceTPoseRotation = _animationTPose[i];
             var targetTPoseRotation = _characterTPose[i];
-            var newSourceLocalRot = sourcePose.JointLocalRotations[i+1];
-            
+
             // TODO: precalculate for entire skeleton
-            
+
             var newSourceRot =
                 animationSkeleton.GetRootSpaceRotation(animationSkeleton.Joints[i + 1], sourcePose);
-            
+
             // targetTPoseRotation -> Local Target -> World (Target TPose)
             /*
                 R_t = Rotation transforming from target local space to world space.
@@ -149,22 +129,21 @@ public class RetargetingStage : MoSynthStage
             var newTargetRot =
                 newSourceRot * Quaternion.Inverse(sourceTPoseRotation) *
                 _hipsCorrection * targetTPoseRotation;
-            
-            var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i+1]);
+
+            var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i + 1]);
             var parentRot = animationSkeleton.GetRootSpaceRotation(parentJoint, pose);
-            
+
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
 
             // animationSkeleton.Joints;
             //
             // MotionMatchingSkinnedMeshRenderer.BodyJoints;
-            
-            
-            
-            pose.JointLocalRotations[i+1] = newTargetLocalRot;
+
+
+            pose.jointLocalRotations[i + 1] = newTargetLocalRot;
             // hipcorrection
         }
-        
+
         return true;
         // Hips
         // if (rootPositionsMask)

@@ -66,7 +66,7 @@ public class MfConnector : MoSynthStage, IDisposable
         }
 
         // Keep at most one request queued while another request is waiting for a reply.
-        // Otherwise this queue grows every frame whenever the server is unavailable.
+        // Otherwise, this queue grows every frame whenever the server is unavailable.
         if (_isRunning && _deltaTimeRequests.IsEmpty)
         {
             _deltaTimeRequests.Enqueue(deltaTime);
@@ -86,7 +86,7 @@ public class MfConnector : MoSynthStage, IDisposable
                     break;
                 }
 
-                Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.LeftFootContact}");
+                Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.leftFootContact}");
                 pose.CopyFrom(newPose);
                 return true;
             }
@@ -103,39 +103,37 @@ public class MfConnector : MoSynthStage, IDisposable
         {
             // The socket is created, used, and disposed on this thread. NetMQ sockets are
             // not thread-safe and must not be closed from Unity's main thread.
-            using (var client = new RequestSocket())
-            {
-                client.Connect($"tcp://localhost:{port}");
+            using var client = new RequestSocket();
+            client.Connect($"tcp://localhost:{port}");
 
+            while (_isRunning)
+            {
+                if (!_deltaTimeRequests.TryDequeue(out float deltaTime))
+                {
+                    Thread.Sleep(1);
+                    continue;
+                }
+
+                client.SendFrame(JsonConvert.SerializeObject(new
+                {
+                    desired_dir = new[] { 0.0f, 1.0f },
+                    delta_time = deltaTime
+                }));
+
+                // A REQ socket must receive its reply before sending again. Poll with a
+                // short timeout so play-mode shutdown can be observed between attempts.
                 while (_isRunning)
                 {
-                    if (!_deltaTimeRequests.TryDequeue(out float deltaTime))
+                    if (!client.TryReceiveFrameString(
+                            TimeSpan.FromMilliseconds(Math.Max(1, receivePollIntervalMs)),
+                            out string message))
                     {
-                        Thread.Sleep(1);
                         continue;
                     }
 
-                    client.SendFrame(JsonConvert.SerializeObject(new
-                    {
-                        desired_dir = new[] { 0.0f, 1.0f },
-                        delta_time = deltaTime
-                    }));
-
-                    // A REQ socket must receive its reply before sending again. Poll with a
-                    // short timeout so play-mode shutdown can be observed between attempts.
-                    while (_isRunning)
-                    {
-                        if (!client.TryReceiveFrameString(
-                                TimeSpan.FromMilliseconds(Math.Max(1, receivePollIntervalMs)),
-                                out string message))
-                        {
-                            continue;
-                        }
-
-                        PoseVector pose = JsonConvert.DeserializeObject<PoseVector>(message);
-                        _receivedPoses.Enqueue(pose);
-                        break;
-                    }
+                    PoseVector pose = JsonConvert.DeserializeObject<PoseVector>(message);
+                    _receivedPoses.Enqueue(pose);
+                    break;
                 }
             }
         }

@@ -64,11 +64,11 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         if (play)
         {
             _poseSet.GetPose(currentFrame, out PoseVector pose);
-            _skeletonTransforms[0].localPosition = pose.JointLocalPositions[0];
-            _skeletonTransforms[1].localPosition = pose.JointLocalPositions[1];
-            for (int i = 0; i < pose.JointLocalRotations.Length; i++)
+            _skeletonTransforms[0].localPosition = pose.jointLocalPositions[0];
+            _skeletonTransforms[1].localPosition = pose.jointLocalPositions[1];
+            for (int i = 0; i < pose.jointLocalRotations.Length; i++)
             {
-                _skeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+                _skeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
             }
             currentFrame = (currentFrame + 1) % _poseSet.NumberPoses;
         }
@@ -143,11 +143,11 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             int leftToesIndex = leftToesJoint.index;
             int rightToesIndex = rightToesJoint.index;
             Gizmos.color = Color.green;
-            if (pose.LeftFootContact)
+            if (pose.leftFootContact)
             {
                 Gizmos.DrawSphere(_skeletonTransforms[leftToesIndex].position, spheresRadius);
             }
-            if (pose.RightFootContact)
+            if (pose.rightFootContact)
             {
                 Gizmos.DrawSphere(_skeletonTransforms[rightToesIndex].position, spheresRadius);
             }

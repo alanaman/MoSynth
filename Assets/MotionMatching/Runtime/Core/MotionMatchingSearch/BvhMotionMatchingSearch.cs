@@ -21,7 +21,7 @@ public class BvhMotionMatchingSearch : MotionMatchingSearch
         FeatureSet = featureSet;
         TagMask = tagMask;
         FeatureWeights = featuresWeights;
-        featureSet.GetBVHBuffers(out _largeBoundingBoxMin,
+        featureSet.GetBvhBuffers(out _largeBoundingBoxMin,
             out _largeBoundingBoxMax,
             out _smallBoundingBoxMin,
             out _smallBoundingBoxMax);

@@ -3,8 +3,8 @@ using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Jobs;
-using UnityEngine.Serialization;
 using System.Linq;
+
 namespace MotionMatching
 {
 
@@ -286,9 +286,9 @@ public class MotionMatchingController : MotionSynthesizer
     private void UpdateAnimationSpaceOrigin()
     {
         PoseSet.GetPose(CurrentFrame, out var mmPose);
-        _animationSpaceOriginPos = mmPose.JointLocalPositions[0];
-        _animationSpaceOriginRot = mmPose.JointLocalRotations[0];
-        _inverseAnimationSpaceOriginRot = Quaternion.Inverse(mmPose.JointLocalRotations[0]);
+        _animationSpaceOriginPos = mmPose.jointLocalPositions[0];
+        _animationSpaceOriginRot = mmPose.jointLocalRotations[0];
+        _inverseAnimationSpaceOriginRot = Quaternion.Inverse(mmPose.jointLocalRotations[0]);
         _mmTransformOriginPos = SkeletonTransforms[0].position;
         _mmTransformOriginRot = SkeletonTransforms[0].rotation;
     }
@@ -393,8 +393,8 @@ public class MotionMatchingController : MotionSynthesizer
         quaternion previousRotation = SkeletonTransforms[0].rotation;
         // animation space to local space
         var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot, 
-                            (pose.JointLocalPositions[0] - _animationSpaceOriginPos));
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.JointLocalRotations[0]);
+                            (pose.jointLocalPositions[0] - _animationSpaceOriginPos));
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.jointLocalRotations[0]);
         
         // local space to world space
         SkeletonTransforms[0].SetPositionAndRotation(
@@ -414,15 +414,15 @@ public class MotionMatchingController : MotionSynthesizer
         }
         else
         {
-            for (int i = 1; i < pose.JointLocalRotations.Length; i++)
+            for (int i = 1; i < pose.jointLocalRotations.Length; i++)
             {
-                SkeletonTransforms[i].localRotation = pose.JointLocalRotations[i];
+                SkeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
             }
         }
 
         // Hips Position
         SkeletonTransforms[1].localPosition =
-            inertialize ? _inertialization.InertializedHips : pose.JointLocalPositions[1];
+            inertialize ? _inertialization.InertializedHips : pose.jointLocalPositions[1];
         // Foot Lock
         UpdateFootLock(pose);
         // Post-processing the transforms
@@ -474,7 +474,7 @@ public class MotionMatchingController : MotionSynthesizer
         // If the contact was previously inactive and now it is active,
         // transition to the locked contact state
         // Also, make sure the inertialization returns an almost 0 velocity before locking
-        if (!IsLeftFootContact && targetPose.LeftFootContact &&
+        if (!IsLeftFootContact && targetPose.leftFootContact &&
             math.length(leftContactVelocity) < mmData.ContactVelocityThreshold)
         {
             // Contact point is the current position of the foot
@@ -498,7 +498,7 @@ public class MotionMatchingController : MotionSynthesizer
         }
         // If we need to unlock or previously in contact but now not
         // we transition to the input position
-        else if (unlockLeftContact || (IsLeftFootContact && !targetPose.LeftFootContact))
+        else if (unlockLeftContact || (IsLeftFootContact && !targetPose.leftFootContact))
         {
             IsLeftFootContact = false;
 
@@ -515,7 +515,7 @@ public class MotionMatchingController : MotionSynthesizer
         }
 
         // Same for Right Foot
-        if (!IsRightFootContact && targetPose.RightFootContact &&
+        if (!IsRightFootContact && targetPose.rightFootContact &&
             math.length(rightContactVelocity) < mmData.ContactVelocityThreshold)
         {
             IsRightFootContact = true;
@@ -535,7 +535,7 @@ public class MotionMatchingController : MotionSynthesizer
                     currentRightToesPosition, currentRightToesVelocity);
             }
         }
-        else if (unlockRightContact || (IsRightFootContact && !targetPose.RightFootContact))
+        else if (unlockRightContact || (IsRightFootContact && !targetPose.rightFootContact))
         {
             IsRightFootContact = false;
 
@@ -577,8 +577,8 @@ public class MotionMatchingController : MotionSynthesizer
     {
         // animation space to local space
         var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
-            targetPose.JointLocalPositions[0] - _animationSpaceOriginPos);
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, targetPose.JointLocalRotations[0]);
+            targetPose.jointLocalPositions[0] - _animationSpaceOriginPos);
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, targetPose.jointLocalRotations[0]);
         
         // Simulation Bone
         float3 currentPos = SkeletonTransforms[0].position;
@@ -593,14 +593,14 @@ public class MotionMatchingController : MotionSynthesizer
         
         SkeletonTransforms[0].SetPositionAndRotation(newPos,newRot);
 
-        for (var i = 1; i < targetPose.JointLocalRotations.Length; i++)
+        for (var i = 1; i < targetPose.jointLocalRotations.Length; i++)
         {
-            SkeletonTransforms[i].localRotation = targetPose.JointLocalRotations[i];
+            SkeletonTransforms[i].localRotation = targetPose.jointLocalRotations[i];
         }
         
         // Hips Position
         SkeletonTransforms[1].localPosition =
-            inertialize ? _inertialization.InertializedHips : targetPose.JointLocalPositions[1];
+            inertialize ? _inertialization.InertializedHips : targetPose.jointLocalPositions[1];
     }
     
     /// <summary>
@@ -801,8 +801,8 @@ public class MotionMatchingController : MotionSynthesizer
     {
         // animation space to local space
         var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
-            futurePose.JointLocalPositions[0] - _animationSpaceOriginPos);
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.JointLocalRotations[0]);
+            futurePose.jointLocalPositions[0] - _animationSpaceOriginPos);
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.jointLocalRotations[0]);
         // local space to world space
         var simulationBonePos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
         var simulationBoneRot = math.mul(_mmTransformOriginRot, localSpaceRot);

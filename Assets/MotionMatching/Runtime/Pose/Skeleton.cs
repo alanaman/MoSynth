@@ -108,11 +108,11 @@ public class Skeleton
         var worldRot = quaternion.identity;
         while (joint.index != 0) // while not root
         {
-            worldRot = math.mul(poseVector.JointLocalRotations[joint.index], worldRot);
+            worldRot = math.mul(poseVector.jointLocalRotations[joint.index], worldRot);
             joint = GetParent(joint);
         }
 
-        worldRot = math.mul(poseVector.JointLocalRotations[0], worldRot); // root
+        worldRot = math.mul(poseVector.jointLocalRotations[0], worldRot); // root
         return worldRot;
     }
 
@@ -125,12 +125,12 @@ public class Skeleton
         var localToWorld = Matrix4x4.identity;
         while (joint.index != 0) // while not root
         {
-            localToWorld = Matrix4x4.TRS(poseVector.JointLocalPositions[joint.index], poseVector.JointLocalRotations[joint.index],
+            localToWorld = Matrix4x4.TRS(poseVector.jointLocalPositions[joint.index], poseVector.jointLocalRotations[joint.index],
                 new float3(1.0f, 1.0f, 1.0f)) * localToWorld;
             joint = GetParent(joint);
         }
 
-        localToWorld = Matrix4x4.TRS(poseVector.JointLocalPositions[0], poseVector.JointLocalRotations[0], new float3(1.0f, 1.0f, 1.0f)) *
+        localToWorld = Matrix4x4.TRS(poseVector.jointLocalPositions[0], poseVector.jointLocalRotations[0], new float3(1.0f, 1.0f, 1.0f)) *
                        localToWorld; // root
         return localToWorld.MultiplyPoint3x4(Vector3.zero);
     }
@@ -146,10 +146,10 @@ public class Skeleton
 
         while (joint.index != 0) // while not root
         {
-            var p = poseVector.JointLocalPositions[joint.index];
-            var q = poseVector.JointLocalRotations[joint.index];
-            var v = poseVector.JointLocalVelocities[joint.index];
-            var w = poseVector.JointLocalAngularVelocities[joint.index];
+            var p = poseVector.jointLocalPositions[joint.index];
+            var q = poseVector.jointLocalRotations[joint.index];
+            var v = poseVector.jointLocalVelocities[joint.index];
+            var w = poseVector.jointLocalAngularVelocities[joint.index];
 
             var rotatedPosAcc = math.mul(q, posAcc);
             
@@ -162,9 +162,9 @@ public class Skeleton
         }
 
         // Apply root (Simulation Bone) transform
-        var rootQ = poseVector.JointLocalRotations[0];
-        var rootV = poseVector.JointLocalVelocities[0];
-        var rootW = poseVector.JointLocalAngularVelocities[0];
+        var rootQ = poseVector.jointLocalRotations[0];
+        var rootV = poseVector.jointLocalVelocities[0];
+        var rootW = poseVector.jointLocalAngularVelocities[0];
 
         var rootRotatedPosAcc = math.mul(rootQ, posAcc);
         linVelAcc = rootV + math.cross(rootW, rootRotatedPosAcc) + math.mul(rootQ, linVelAcc);
@@ -181,15 +181,15 @@ public class Skeleton
 
         while (joint.index != 0)
         {
-            var q = poseVector.JointLocalRotations[joint.index];
-            var w = poseVector.JointLocalAngularVelocities[joint.index];
+            var q = poseVector.jointLocalRotations[joint.index];
+            var w = poseVector.jointLocalAngularVelocities[joint.index];
 
             angVelAcc = w + math.mul(q, angVelAcc);
             joint = GetParent(joint);
         }
 
-        var rootQ = poseVector.JointLocalRotations[0];
-        var rootW = poseVector.JointLocalAngularVelocities[0];
+        var rootQ = poseVector.jointLocalRotations[0];
+        var rootW = poseVector.jointLocalAngularVelocities[0];
 
         return rootW + math.mul(rootQ, angVelAcc);
     }
@@ -203,7 +203,7 @@ public class Skeleton
         var rot = quaternion.identity;
         while (joint.index != 0) // while not root
         {
-            rot = math.mul(poseVector.JointLocalRotations[joint.index], rot);
+            rot = math.mul(poseVector.jointLocalRotations[joint.index], rot);
             joint = GetParent(joint);
         }
         return rot;
@@ -218,8 +218,8 @@ public class Skeleton
         var localToCharacter = float4x4.identity;
         while (joint.index != 0) // while not root
         {
-            var localRot = math.float3x3(poseVector.JointLocalRotations[joint.index]);
-            var localTransform = math.float4x4(localRot, poseVector.JointLocalPositions[joint.index]);
+            var localRot = math.float3x3(poseVector.jointLocalRotations[joint.index]);
+            var localTransform = math.float4x4(localRot, poseVector.jointLocalPositions[joint.index]);
             localToCharacter = math.mul(localTransform, localToCharacter);
             joint = GetParent(joint);
         }
@@ -239,10 +239,10 @@ public class Skeleton
 
         while (joint.index != 0) // while not root
         {
-            var p = poseVector.JointLocalPositions[joint.index];
-            var q = poseVector.JointLocalRotations[joint.index];
-            var v = poseVector.JointLocalVelocities[joint.index];
-            var w = poseVector.JointLocalAngularVelocities[joint.index];
+            var p = poseVector.jointLocalPositions[joint.index];
+            var q = poseVector.jointLocalRotations[joint.index];
+            var v = poseVector.jointLocalVelocities[joint.index];
+            var w = poseVector.jointLocalAngularVelocities[joint.index];
 
             var rotatedPosAcc = math.mul(q, posAcc);
 
@@ -266,8 +266,8 @@ public class Skeleton
 
         while (joint.index != 0)
         {
-            var q = poseVector.JointLocalRotations[joint.index];
-            var w = poseVector.JointLocalAngularVelocities[joint.index];
+            var q = poseVector.jointLocalRotations[joint.index];
+            var w = poseVector.jointLocalAngularVelocities[joint.index];
 
             angVelAcc = w + math.mul(q, angVelAcc);
             joint = GetParent(joint);

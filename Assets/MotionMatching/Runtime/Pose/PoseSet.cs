@@ -249,8 +249,8 @@ public class PoseSet
         for (int i = 0; i < Skeleton.Joints.Count; i++)
         {
             Joint joint = Skeleton.Joints[i];
-            Matrix4x4 current = Matrix4x4.TRS(pose.JointLocalPositions[joint.index],
-                pose.JointLocalRotations[joint.index], Vector3.one);
+            Matrix4x4 current = Matrix4x4.TRS(pose.jointLocalPositions[joint.index],
+                pose.jointLocalRotations[joint.index], Vector3.one);
             localToWorld[joint.index] = localToWorld[joint.parentIndex] * current;
         }
 
@@ -269,8 +269,8 @@ public class PoseSet
     {
 
         // animation space to local space
-        float3 localSpacePos = math.mul(inverseRotAnimationSpace, pose.JointLocalPositions[0] - posAnimationSpace);
-        quaternion localSpaceRot = math.mul(inverseRotAnimationSpace, pose.JointLocalRotations[0]);
+        float3 localSpacePos = math.mul(inverseRotAnimationSpace, pose.jointLocalPositions[0] - posAnimationSpace);
+        quaternion localSpaceRot = math.mul(inverseRotAnimationSpace, pose.jointLocalRotations[0]);
         // local space to world space
         float3 simulationBonePos = math.mul(rotWorld, localSpacePos) + posWorld;
         quaternion simulationBoneRot = math.mul(rotWorld, localSpaceRot);
@@ -291,8 +291,8 @@ public class PoseSet
         for (int i = 1; i < Skeleton.Joints.Count; i++)
         {
             Joint joint = Skeleton.Joints[i];
-            Matrix4x4 current = Matrix4x4.TRS(pose.JointLocalPositions[joint.index],
-                pose.JointLocalRotations[joint.index], Vector3.one);
+            Matrix4x4 current = Matrix4x4.TRS(pose.jointLocalPositions[joint.index],
+                pose.jointLocalRotations[joint.index], Vector3.one);
             localToWorldRes[joint.index] = localToWorldRes[joint.parentIndex] * current;
         }
 

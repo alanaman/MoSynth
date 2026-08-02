@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 from scipy.spatial.transform import Rotation
 
@@ -19,7 +21,7 @@ def load_animations():
     bone_count = len(list(skeleton))
 
     n_src_poses = pose_set.local_positions.shape[0]
-    n_trg_poses = n_src_poses - 1 # need (i, i+1) i has x, v and i+1 has y
+    n_trg_poses = n_src_poses - 1  # need (i, i+1) i has x, v and i+1 has y
 
     pos = pose_set.local_positions  # (n_poses, n_joints, 3)
     quats = pose_set.local_rotations  # (n_poses, n_joints, 4)
@@ -56,9 +58,9 @@ def load_animations():
     # pose_y: future velocity at frame i+1  =  Pose(i+2) − Pose(i+1)
     #   Same layout as pose_v, shifted one frame forward.
     pose_y = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_y[:, 0, :3] = lv[1:n_trg_poses+1, 0, :]
-    pose_y[:, 1, :3] = lv[1:n_trg_poses+1, 1, :]
-    pose_y[:, 2:, :] = lav_quats[1:n_trg_poses+1, :, :]
+    pose_y[:, 0, :3] = lv[1:n_trg_poses + 1, 0, :]
+    pose_y[:, 1, :3] = lv[1:n_trg_poses + 1, 1, :]
+    pose_y[:, 2:, :] = lav_quats[1:n_trg_poses + 1, :, :]
 
     # pose_contacts: foot contact flags aligned to frame i
     pose_contacts = pose_set.foot_contacts[:n_trg_poses, :].copy()
@@ -73,18 +75,21 @@ def create_pose_json_reply(skeleton: Skeleton,
                            current_x: np.ndarray,
                            current_v: np.ndarray,
                            pose_contacts: np.ndarray):
-    p = Pose.from_array(current_x)
-    local_positions = skeleton.get_local_positions(p)[0]
-    assert local_positions.shape == (23, 3), f"Expected shape {(23, 3)}, got {local_positions.shape}"
-    euler_angles = np.array(Rotation.from_quat(Pose.from_array(current_v).quats[0]).as_euler('xyz'))
+    p_x = Pose.from_array(current_x)
+    p_v = Pose.from_array(current_v)
 
+    pos = skeleton.get_local_positions(p_x)[0]
+    assert pos.shape == (23, 3), f"Expected shape {(23, 3)}, got {pos.shape}"
+    lv = np.zeros_like(pos)
+    lv[0] = p_v.rootPos
+    quats = p_x.quats[0]
+    lav = np.array(Rotation.from_quat(p_v.quats[0]).as_rotvec())
     return {
-        "JointLocalPositions": [{"x": pos[0], "y": pos[1], "z": pos[2]} for pos in local_positions.tolist()],
-        "JointLocalRotations": [{"value": {"x": quat[0], "y": quat[1], "z": quat[2], "w": quat[3]}} for quat in
-                                p.quats[0].tolist()],
-        "JointLocalVelocities": [{"x": 0.0, "y": 0.0, "z": 0.0} for _ in range(23)],
+        "JointLocalPositions": [{"x": p[0], "y": p[1], "z": p[2]} for p in pos.tolist()],
+        "JointLocalRotations": [{"value": {"x": q[0], "y": q[1], "z": q[2], "w": q[3]}} for q in quats.tolist()],
+        "JointLocalVelocities": [{"x": v[0], "y": v[1], "z": v[2]} for v in lv.tolist()],
         "JointLocalAngularVelocities": [{"x": ang_vel[0], "y": ang_vel[1], "z": ang_vel[2]} for ang_vel in
-                                        euler_angles.tolist()],
+                                        lav.tolist()],
         "LeftFootContact": bool(pose_contacts[0]),
         "RightFootContact": bool(pose_contacts[1])
     }
@@ -105,25 +110,27 @@ def main():
     current_contacts = pose_contacts[last_index, ...]
 
     while True:
-        # raw_msg = socket.recv()
-        #
-        # # decode desired direction from json sent from Unity
-        # try:
-        #     msg = raw_msg.decode('utf-8')
-        #     data = json.loads(msg)
-        #     desired_dir = np.array(data["desired_dir"])
-        #     delta_time = float(data["delta_time"])
-        # except Exception as e:
-        #     print(f"Error decoding message: {e}")
-        #     socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
-        #     continue
-
-        desired_dir = np.array([0.0, 0.0])
         delta_time = pose_set.frameTime
         current_x[...], current_v[...] = motion_field.get_next_pose(
             current_x, current_v, delta_time)
-        # reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
-        # socket.send_string(json.dumps(reply))
+
+        raw_msg = socket.recv()
+
+        # decode desired direction from json sent from Unity
+        try:
+            msg = raw_msg.decode('utf-8')
+            data = json.loads(msg)
+            desired_dir = np.array(data["desired_dir"])
+            # delta_time = float(data["delta_time"])
+        except Exception as e:
+            print(f"Error decoding message: {e}")
+            socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
+            continue
+
+        # desired_dir = np.array([0.0, 0.0])
+        # current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
+        reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
+        socket.send_string(json.dumps(reply))
 
 
 if __name__ == "__main__":

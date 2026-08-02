@@ -36,10 +36,10 @@ public class MotionMatchingStage : MoSynthStage
     private float _searchTimeLeft;
 
     [Tooltip("How important is the trajectory (future positions + future directions)")]
-    [UnityEngine.Range(0.0f, 1.0f)]
+    [Range(0.0f, 1.0f)]
     public float responsiveness = 1.0f;
 
-    [Tooltip("How important is the current pose")] [UnityEngine.Range(0.0f, 1.0f)]
+    [Tooltip("How important is the current pose")] [Range(0.0f, 1.0f)]
     public float quality = 1.0f;
 
     [SerializeField]
@@ -63,32 +63,11 @@ public class MotionMatchingStage : MoSynthStage
 
     private NativeArray<bool> _tagMask;
 
-    // This variable is used to correct the root motion when we switch to a 
-    // different frame in the PoseSet
-    // TODO:
-    // it is a bit confusing. either use separate channel for root motion
-    // add a separate root correction stage and pass a Tag down the pipeline
-    // to indicate when to do the correction
-    private bool _hasSwitchedFrames;
-    
-    private float3 _animationSpaceOriginPos;
-    private quaternion _animationSpaceOriginRot;
-    private quaternion _inverseAnimationSpaceOriginRot;
-
-    /// <summary>
-    /// Position of the transform right after motion matching search
-    /// </summary>
-    private float3 _mmTransformOriginPos;
-    /// <summary>
-    /// Rotation of the transform right after motion matching search
-    /// </summary>
-    private quaternion _mmTransformOriginRot; 
     /// <summary>
     /// Current frame index as float to keep track of variable frame rate
     /// </summary>
     private float _currentFrameTime;
 
-    private float4x4 _animToWorld;
     private float _databaseFrameRate;
 
 
@@ -130,24 +109,12 @@ public class MotionMatchingStage : MoSynthStage
         // Search first Frame valid (to start with a valid pose)
         for (var i = 0; i < featureSet.NumberFeatureVectors; i++)
         {
-            if (featureSet.IsValidFeature(i))
-            {
-                CurrentFrame = i;
-                _poseSet.GetPose(i, out var pose);
-                _animationSpaceOriginPos = pose.JointLocalPositions[0];
-                _animationSpaceOriginRot = pose.JointLocalRotations[0];
-                _inverseAnimationSpaceOriginRot = math.inverse(_animationSpaceOriginRot);
-
-                _hasSwitchedFrames = true;
-                // TODO: is this needed?
-                // _mmTransformOriginPos = skeletonTransforms[0].position;
-                // _mmTransformOriginRot = skeletonTransforms[0].rotation;
-                break;
-            }
+            if (!featureSet.IsValidFeature(i)) continue;
+            CurrentFrame = i;
+            break;
         }
         
         mmSearch.Initialize(featureSet, _tagMask, _featureWeights);
-        
     }
 
     public override Skeleton GetSkeleton(in Skeleton inSkeleton)
@@ -155,45 +122,7 @@ public class MotionMatchingStage : MoSynthStage
         _poseSet = mmData.GetOrImportPoseSet();
         return _poseSet.Skeleton;
     }
-
-    // // TODO: not here
-    // PoseVector ConstructPoseFromSkeletonTransforms(in PoseVector prevPose, Transform[] skeletonTransforms)
-    // {
-    //     var pose = new PoseVector();
-    //     
-    //     // Simulation Bone
-    //     float3 pos = skeletonTransforms[0].position;
-    //     var rot = skeletonTransforms[0].rotation;
-    //     
-    //     // world space to local space
-    //     var localSpacePos = math.mul(math.inverse(_mmTransformOriginRot), (pos - _mmTransformOriginPos));
-    //     var localSpaceRot = math.mul(math.inverse(_mmTransformOriginRot), rot);
-    //     
-    //     // local space to animation space
-    //     pose.JointLocalRotations[0] = math.mul(_animationSpaceOriginRot, localSpaceRot);
-    //     
-    //     pose.JointLocalPositions[0] = math.mul(_inverseAnimationSpaceOriginRot, localSpacePos) + _animationSpaceOriginPos;
-    //     
-    //     for (var i = 1; i < skeletonTransforms.Length; i++)
-    //     {
-    //         pose.JointLocalRotations[i] = skeletonTransforms[i].localRotation;
-    //     }
-    //
-    //     // hip
-    //     pose.JointLocalPositions[1] = skeletonTransforms[1].localPosition;
-    //
-    //     for (int i = 0; i < pose.JointLocalAngularVelocities.Length; i++)
-    //     {
-    //         pose.JointLocalAngularVelocities[i] = math.Euler(math.mul(pose.JointLocalRotations[i], prevPose.JointLocalRotations[i]));
-    //         pose.JointLocalVelocities[i] = pose.JointLocalPositions[i] - prevPose.JointLocalPositions[i];
-    //     }
-    //     
-    //     pose.LeftFootContact = ?;
-    //     pose.RightFootContact = ?;
-    //             
-    //     return pose;
-    // }
-
+    
     public override bool Apply(PoseVector pose, float deltaTime)
     {
         // _searchTimeLeft -= deltaTime;
@@ -217,7 +146,6 @@ public class MotionMatchingStage : MoSynthStage
             
             if(math.abs(CurrentFrame - bestFrame) > minFrameSwitchDistance)
             {
-                _hasSwitchedFrames = true;
                 CurrentFrame = bestFrame;
             }
             
@@ -235,24 +163,10 @@ public class MotionMatchingStage : MoSynthStage
         
         _poseSet.GetPose(CurrentFrame, out var newPose);
 
-        if (_hasSwitchedFrames)
-        {
-            // make sure the root doesn't jump around due to switching frames
-            var animSpacePos = newPose.JointLocalPositions[0];
-            var animSpaceRot = newPose.JointLocalRotations[0];
-
-            var animSpaceTransform = new float4x4(animSpaceRot, animSpacePos);
-            var worldTransformAtLastJump= new float4x4(_owner.transform.rotation, _owner.transform.position);
-            
-            _animToWorld = math.mul(worldTransformAtLastJump, math.inverse(animSpaceTransform));
-            
-            _hasSwitchedFrames = false;
-        }
-        
         pose.CopyFrom(newPose);
         
-        pose.JointLocalPositions[0] = math.transform(_animToWorld, pose.JointLocalPositions[0]);
-        pose.JointLocalRotations[0] = math.mul(new quaternion(_animToWorld), pose.JointLocalRotations[0]);
+        // pose.jointLocalPositions[0] = math.transform(_animToWorld, pose.jointLocalPositions[0]);
+        // pose.jointLocalRotations[0] = math.mul(new quaternion(_animToWorld), pose.jointLocalRotations[0]);
         return true;
     }
     

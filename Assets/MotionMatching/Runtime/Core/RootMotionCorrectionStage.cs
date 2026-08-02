@@ -32,8 +32,8 @@ public class RootMotionCorrectionStage : MoSynthStage
     {
         if (_hasRootJumped)
         {
-            _animSpacePos = pose.JointLocalPositions[0];
-            _animSpaceRot = pose.JointLocalRotations[0];
+            _animSpacePos = pose.jointLocalPositions[0];
+            _animSpaceRot = pose.jointLocalRotations[0];
             _transformPosAtLastJump = _owner.transform.position;
             _transformRotAtLastJump = _owner.transform.rotation;
             
@@ -41,14 +41,14 @@ public class RootMotionCorrectionStage : MoSynthStage
         }
         else
         {
-            var newAnimSpacePos = pose.JointLocalPositions[0];
-            var newAnimSpaceRot = pose.JointLocalRotations[0];
+            var newAnimSpacePos = pose.jointLocalPositions[0];
+            var newAnimSpaceRot = pose.jointLocalRotations[0];
             var posWrtLastJump = math.mul(math.inverse(_animSpaceRot), 
                                    (newAnimSpacePos - _animSpacePos));
             var rotWrtLastJump = math.mul(math.inverse(_animSpaceRot), newAnimSpaceRot);
             
-            pose.JointLocalPositions[0] = _transformPosAtLastJump + math.mul(_transformRotAtLastJump, posWrtLastJump);
-            pose.JointLocalRotations[0] = math.mul(_transformRotAtLastJump, rotWrtLastJump);
+            pose.jointLocalPositions[0] = _transformPosAtLastJump + math.mul(_transformRotAtLastJump, posWrtLastJump);
+            pose.jointLocalRotations[0] = math.mul(_transformRotAtLastJump, rotWrtLastJump);
         }
         return true;
     }
