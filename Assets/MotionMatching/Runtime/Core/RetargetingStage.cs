@@ -45,7 +45,7 @@ public class RetargetingStage : MoSynthStage
         _animationTPose = new quaternion[animJoints.Count];
         _characterTPose = new quaternion[animJoints.Count];
 
-        for (var i = 0; i < animJoints.Count - 1; i++)
+        for (var i = 0; i < animJoints.Count; i++)
         {
             _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], 0);
         }
@@ -90,8 +90,6 @@ public class RetargetingStage : MoSynthStage
 
     public override bool Apply(PoseVector pose, float deltaTime)
     {
-        // motionMatching.SetPosAdjustment(transform.position - motionMatching.transform.position);
-
         var animationSkeleton = _owner.Skeleton;
 
         var sourcePose = new PoseVector(pose);
@@ -123,33 +121,22 @@ public class RetargetingStage : MoSynthStage
             // sourceTPoseRotation^-1 -> World (SourceTPose) -> Local Source
             // sourceRotation -> Local Source -> World (Source)
 
-            // var newTargetLocalRot =
-            //     newSourceLocalRot * Quaternion.Inverse(sourceTPoseRotation) *
-            //     _hipsCorrection * targetTPoseRotation;
             var newTargetRot =
-                newSourceRot * Quaternion.Inverse(sourceTPoseRotation) *
-                _hipsCorrection * targetTPoseRotation;
+                math.mul(
+                    math.mul(newSourceRot, math.inverse(sourceTPoseRotation)),
+                    math.mul(_hipsCorrection, targetTPoseRotation)
+                );
+
 
             var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i + 1]);
             var parentRot = animationSkeleton.GetRootSpaceRotation(parentJoint, pose);
 
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
 
-            // animationSkeleton.Joints;
-            //
-            // MotionMatchingSkinnedMeshRenderer.BodyJoints;
-
-
             pose.jointLocalRotations[i + 1] = newTargetLocalRot;
-            // hipcorrection
         }
 
         return true;
-        // Hips
-        // if (rootPositionsMask)
-        // {
-        //     _targetBones[0].position = (float3)owner.SkeletonTransforms[1].position;
-        // }
 
         // // Toes-Floor Penetration
         // if (avoidToesFloorPenetration)

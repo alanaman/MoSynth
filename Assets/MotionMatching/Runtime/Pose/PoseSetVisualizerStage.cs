@@ -14,6 +14,10 @@ public class PoseSetVisualizerStage : MoSynthStage
     public int CurrentFrame { get; private set; }
     private float _currentFrameTime;
     
+    [SerializeField]
+    private int startFrame;
+    
+    
     public override Skeleton GetSkeleton(in Skeleton inSkeleton)
     {
         _poseSet = mmData.GetOrImportPoseSet();
@@ -24,6 +28,7 @@ public class PoseSetVisualizerStage : MoSynthStage
     {
         _owner = motionSynthesisComponent;
         _poseSet = mmData.GetOrImportPoseSet();
+        CurrentFrame = startFrame;
     }
 
     public override bool Apply(PoseVector pose, float deltaTime)

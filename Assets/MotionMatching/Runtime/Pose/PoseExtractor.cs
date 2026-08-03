@@ -22,6 +22,7 @@ public static class PoseExtractor
         var poses = new PoseVector[nFrames];
         var nBvhJoints = bvhAnimation.Skeleton.Joints.Count;
         var nPoseSetJoints = nBvhJoints + 1; // +1 for SimulationBone
+        
         if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.LeftToes, out var leftToesJoint))
         {
             Debug.LogError("LeftToes not found in BVHAnimation");

@@ -10,19 +10,18 @@ namespace MotionMatching
 /// </summary>
 public class BvhVisualiser : MonoBehaviour
 {
-    [FormerlySerializedAs("_animation")] public BvhAnimation bvhAnimation;
+    public BvhAnimation bvhAnimation;
     public bool play;
     public float spheresRadius = 0.1f;
 
     private Transform[] _skeletonBoneTransforms;
     private Transform _skeletonRoot;
-    
-    
+
+
     private float _currentFrameTime;
 
-    [SerializeField]
-    private int currentFrame;
-    
+    [SerializeField] private int currentFrame;
+
     private void Awake()
     {
         if (!bvhAnimation) return;
@@ -44,16 +43,16 @@ public class BvhVisualiser : MonoBehaviour
         if (bvhAnimation == null) return;
 
         if (!play) return;
-        
+
         _currentFrameTime = currentFrame + math.frac(_currentFrameTime);
         _currentFrameTime += Time.deltaTime / bvhAnimation.FrameTime;
         currentFrame = (int)math.floor(_currentFrameTime);
-            
+
         if (currentFrame >= bvhAnimation.Frames.Length)
         {
             currentFrame = 0;
         }
-            
+
         UpdateSkeletonTransforms();
     }
 
@@ -69,11 +68,11 @@ public class BvhVisualiser : MonoBehaviour
 
     private void OnValidate()
     {
-        if(bvhAnimation == null) return;
+        if (bvhAnimation == null) return;
         SetupSkeleton();
         UpdateSkeletonTransforms();
     }
-    
+
     /// <summary>
     /// Ensures the GameObject hierarchy matches the provided Skeleton structure.
     /// Existing bones are preserved; missing bones are created at their proper local offsets.
@@ -114,7 +113,7 @@ public class BvhVisualiser : MonoBehaviour
             var joint = skeleton.Joints[jointIndex];
 
             // Resolve the parent transform first (recursion ensures parents exist before children)
-            var parentTransform = this.transform; 
+            var parentTransform = this.transform;
             if (joint.parentIndex >= 0)
             {
                 parentTransform = GetOrCreateBone(joint.parentIndex);
@@ -132,10 +131,10 @@ public class BvhVisualiser : MonoBehaviour
             {
                 // Bone is missing, create it
                 var newBone = new GameObject(joint.name);
-                
+
                 // SetParent with worldPositionStays = false to preserve local transform identity
                 newBone.transform.SetParent(parentTransform, false);
-                
+
                 boneTransforms[jointIndex] = newBone.transform;
             }
 
@@ -170,7 +169,4 @@ public class BvhVisualiser : MonoBehaviour
     }
 #endif
 }
-
-
-
 }

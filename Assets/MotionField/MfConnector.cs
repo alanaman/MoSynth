@@ -16,27 +16,17 @@ public class MfConnector : MoSynthStage, IDisposable
     private volatile bool _isRunning;
     private int _disposeState;
     private volatile string _workerError;
-    
+
     // Thread-safe queues for communication between main thread and ZMQ thread
     private ConcurrentQueue<float> _deltaTimeRequests = new();
     private ConcurrentQueue<PoseVector> _receivedPoses = new();
-    
-    [SerializeField]
-    private int port = 5555;
 
-    [SerializeField]
-    private float dequeueTimeoutMs = 2f;
+    [SerializeField] private int port = 5555;
 
-    [SerializeField]
-    [Min(1)]
-    private int receivePollIntervalMs = 100;
-    
-    [SerializeField]
-    private float frameTime = 1f/30f;
-    
-    private float _frameTimeRemaining = 0f;
-    
-    
+    [SerializeField] private float dequeueTimeoutMs = 2f;
+
+    [SerializeField] [Min(1)] private int receivePollIntervalMs = 100;
+
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         // A serialized stage can be initialized again after leaving and re-entering play mode.
@@ -46,8 +36,8 @@ public class MfConnector : MoSynthStage, IDisposable
         ClearQueue(_receivedPoses);
 
         // Required for NetMQ to run properly in Unity
-        AsyncIO.ForceDotNet.Force(); 
-        
+        AsyncIO.ForceDotNet.Force();
+
         _isRunning = true;
         _clientThread = new Thread(ClientWorker)
         {
@@ -72,28 +62,22 @@ public class MfConnector : MoSynthStage, IDisposable
             _deltaTimeRequests.Enqueue(deltaTime);
             Debug.Log($"Requested Frame: {Time.frameCount}");
         }
-        
-        _frameTimeRemaining -= deltaTime;
-        if (_frameTimeRemaining <= 0f)
-        {
-            // Process received poses on Unity's main thread
-            float dequeueStartTime = Time.realtimeSinceStartup;
-            while (_receivedPoses.TryDequeue(out PoseVector newPose))
-            {
-                if ((Time.realtimeSinceStartup - dequeueStartTime) * 1000f >= dequeueTimeoutMs)
-                {
-                    Debug.LogWarning($"Stopped dequeue loop after {dequeueTimeoutMs} ms timeout.");
-                    break;
-                }
 
-                Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.leftFootContact}");
-                pose.CopyFrom(newPose);
-                return true;
+        // Process received poses on Unity's main thread
+        float dequeueStartTime = Time.realtimeSinceStartup;
+        while (_receivedPoses.TryDequeue(out PoseVector newPose))
+        {
+            if ((Time.realtimeSinceStartup - dequeueStartTime) * 1000f >= dequeueTimeoutMs)
+            {
+                Debug.LogWarning($"Stopped dequeue loop after {dequeueTimeoutMs} ms timeout.");
+                break;
             }
-            _frameTimeRemaining += frameTime;
-            // in case unity lags
-            _frameTimeRemaining = Mathf.Max(0f, _frameTimeRemaining);
+
+            Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.leftFootContact}");
+            pose.CopyFrom(newPose);
+            return true;
         }
+
         return false;
     }
 
@@ -158,7 +142,7 @@ public class MfConnector : MoSynthStage, IDisposable
         }
 
         _isRunning = false;
-        
+
         // Receive polling lets this join normally finish within receivePollIntervalMs.
         if (_clientThread is { IsAlive: true })
         {

@@ -8,54 +8,6 @@ namespace MotionMatching
     public static class MathExtensions
     {
         /// <summary>
-        /// Returns the rotation between two vectors, from and to are normalized
-        /// If from and to are coplanar and opposite, coplanarNormal is used to determine the axis of rotation
-        /// </summary>
-        public static quaternion FromToRotationSafe(float3 from, float3 to, float3 coplanarNormal)
-        {
-            float dotFT = math.dot(math.normalize(from), math.normalize(to));
-            if (dotFT > 0.99999f) // cross(from, to) is zero
-            {
-                return quaternion.identity;
-            }
-            else if (dotFT < -0.99999f) // cross(from, to) is zero
-            {
-                return quaternion.AxisAngle(
-                    angle: math.PI,
-                    axis: coplanarNormal
-                );
-            }
-            return quaternion.AxisAngle(
-                angle: math.acos(math.clamp(dotFT, -1f, 1f)),
-                axis: math.normalize(math.cross(from, to))
-            );
-        }
-
-        /// <summary>
-        /// Returns the rotation between two vectors, from and to are ASSUMED to be normalized
-        /// If from and to are coplanar and opposite, coplanarNormal is used to determine the axis of rotation
-        /// </summary>
-        public static quaternion FromToRotation(float3 from, float3 to, float3 coplanarNormal)
-        {
-            float dotFT = math.dot(from, to);
-            if (dotFT > 0.99999f) // cross(from, to) is zero
-            {
-                return quaternion.identity;
-            }
-            else if (dotFT < -0.99999f) // cross(from, to) is zero
-            {
-                return quaternion.AxisAngle(
-                    angle: math.PI,
-                    axis: coplanarNormal
-                );
-            }
-            return quaternion.AxisAngle(
-                angle: math.acos(math.clamp(dotFT, -1f, 1f)),
-                axis: math.normalize(math.cross(from, to))
-            );
-        }
-
-        /// <summary>
         /// Quaternion absolute forces the quaternion to take the shortest path
         /// </summary>
         public static quaternion Abs(quaternion q)
@@ -113,51 +65,6 @@ namespace MotionMatching
                 float s = math.sin(halfangle) / halfangle;
                 return new quaternion(s * angleAxis.x, s * angleAxis.y, s * angleAxis.z, c);
             }
-        }
-
-        /* Source: https://stackoverflow.com/a/33999726 */
-        /// <summary>
-        /// Mirror a quaternion along the X axis.
-        /// </summary>
-        public static quaternion MirrorX(quaternion q)
-        {
-            return new quaternion(q.value.x, -q.value.y, -q.value.z, q.value.w);
-        }
-        /// <summary>
-        /// Mirror a quaternion along the Y axis.
-        /// </summary>
-        public static quaternion MirrorY(quaternion q)
-        {
-            return new quaternion(-q.value.x, q.value.y, -q.value.z, q.value.w);
-        }
-        /// <summary>
-        /// Mirror a quaternion along the Z axis.
-        /// </summary>
-        public static quaternion MirrorZ(quaternion q)
-        {
-            return new quaternion(-q.value.x, -q.value.y, q.value.z, q.value.w);
-        }
-
-        /* Source: 'On the Continuity of Rotation Representations in Neural Networks' by Yi Zhou et al., 2019 */
-        /// <summary>
-        /// Transform a quaternion 4D to a continuous 6D representation
-        /// </summary>
-        public static float3x2 QuaternionToContinuous(quaternion q)
-        {
-            float3x3 rotation = new float3x3(q);
-            return new float3x2(rotation.c0, rotation.c1);
-        }
-        /// <summary>
-        /// Transform a continuous 6D to a quaternion 4D representation
-        /// </summary>
-        public static quaternion QuaternionFromContinuous(float3x2 m)
-        {
-            // Gram-Schmidt-like orthogonalization
-            float3 b1 = math.normalize(m.c0);
-            float3 b2 = math.normalize(m.c1 - (math.dot(b1, m.c1) * b1));
-            float3 b3 = math.cross(b1, b2);
-            float3x3 rotation = new float3x3(b1, b2, b3);
-            return new quaternion(rotation);
         }
     }
 }
