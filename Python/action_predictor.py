@@ -110,9 +110,6 @@ def main():
     current_contacts = pose_contacts[last_index, ...]
 
     while True:
-        delta_time = pose_set.frameTime
-        current_x[...], current_v[...] = motion_field.get_next_pose(
-            current_x, current_v, delta_time)
 
         raw_msg = socket.recv()
 
@@ -121,17 +118,22 @@ def main():
             msg = raw_msg.decode('utf-8')
             data = json.loads(msg)
             desired_dir = np.array(data["desired_dir"])
-            # delta_time = float(data["delta_time"])
+            delta_time = float(data["delta_time"])
         except Exception as e:
             print(f"Error decoding message: {e}")
             socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
             continue
 
         # desired_dir = np.array([0.0, 0.0])
-        # current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
+        # current_x[...], current_v[...] = motion_field.get_next_pose(current_x, current_v, delta_time)
+        # current_x[...], current_v[...] = motion_field.get_next_pose_blended(current_x, current_v, delta_time, k_neighbors=15)
+        current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
         reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
         socket.send_string(json.dumps(reply))
 
 
 if __name__ == "__main__":
     main()
+
+def get_multiplier():
+    return 10

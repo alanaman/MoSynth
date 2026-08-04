@@ -55,27 +55,32 @@ class MotionField:
                           delta_time: float,
                           indices,
                           weights,
-                          tug_ratio=0.1):
+                          nearest_pose_index = None,
+                          tug_ratio=0.2):
+
         blended_v = Pose.blend(Pose.from_array(self.poses_v[indices, ...]), weights)
         blended_y = Pose.blend(Pose.from_array(self.poses_y[indices, ...]), weights)
 
-        tug_index = indices[np.argmax(weights)]
-        nearest_pose_x = Pose.from_array(self.poses_x[tug_index])
-        nearest_pose_v = Pose.from_array(self.poses_v[tug_index])
-        nearest_pose_y = Pose.from_array(self.poses_y[tug_index])
         current_pose_x = Pose.from_array(current_pose_x)
 
-        tug_v = nearest_pose_x.add(nearest_pose_v) - current_pose_x
-        tug_v.rootPos[..., :] = 0
-        tug_v.quats[..., 0, :] = Rotation.identity().as_quat()
-        tug_y = nearest_pose_y
+        next_pose_x = current_pose_x.add(blended_v.scaled(delta_time))
+        next_pose_v = blended_y
 
-        tugged_v = Pose.blend(Pose.concatenate([blended_v, tug_v]), np.array([1 - tug_ratio, tug_ratio]))
-        tugged_y = Pose.blend(Pose.concatenate([blended_y, tug_y]), np.array([1 - tug_ratio, tug_ratio]))
+        tug_index = indices[np.argmax(weights)] if nearest_pose_index is None else nearest_pose_index
+        nearest_pose_x = Pose.from_array(self.poses_x[tug_index]).add(
+            Pose.from_array(self.poses_v[tug_index]).scaled(delta_time))
+        nearest_pose_v = Pose.from_array(self.poses_y[tug_index])
 
-        return ((
-            current_pose_x.add(blended_v.scaled(delta_time))).pack(),
-                tugged_y.pack())
+        tugged_pose_x = Pose.blend(
+            Pose.concatenate([next_pose_x, nearest_pose_x]),
+            np.array([1 - tug_ratio, tug_ratio])
+        )
+        tugged_pose_v = Pose.blend(
+            Pose.concatenate([next_pose_v, nearest_pose_v]),
+            np.array([1 - tug_ratio, tug_ratio])
+        )
+
+        return tugged_pose_x.pack(), tugged_pose_v.pack()
 
     @staticmethod
     def calculate_similarity_weights(distances: np.ndarray) -> np.ndarray:
@@ -112,18 +117,49 @@ class MotionField:
         best_i = np.argmax(rewards)
         weights[best_i] = 1.0
         weights /= np.sum(weights)
-        new_x, new_v = self.compute_new_state(current_x, delta_time, indices, weights)
+        new_x, new_v = self.compute_new_state(current_x, delta_time, indices, weights, tug_ratio=1)
+        print(indices[best_i], distances[best_i], rewards[best_i])
+        return new_x, new_v
+
+    def get_next_pose_blended(self, current_x: np.ndarray, current_v: np.ndarray, delta_time, k_neighbors=15):
+        current_state = MotionField.build_motion_states(current_x, current_v, self.skeleton)
+        indices, distances = self.get_knn(current_state, k=k_neighbors)
+        weights = MotionField.calculate_similarity_weights(distances)
+
+        best_i = 0
+        weights[best_i] = 1.0
+        weights /= np.sum(weights)
+        new_x, new_v = self.compute_new_state(current_x, delta_time, indices, weights,
+                                              nearest_pose_index=indices[np.argmax(weights)],
+                                              tug_ratio=0.1)  # Use only the best neighbor for next pose
 
         return new_x, new_v
 
-    def get_next_pose(self, current_x, current_v, delta_time):
+    def get_next_pose(self, current_x: np.ndarray, current_v: np.ndarray, delta_time):
         current_state = MotionField.build_motion_states(current_x, current_v, self.skeleton)
-        indices, distances = self.get_knn(current_state, k=1)
+        indices, distances = self.get_knn(current_state, k=15)
         weights = MotionField.calculate_similarity_weights(distances)
 
+        print(indices[0], delta_time)
+        new_x, new_v = self.compute_new_state(current_x, delta_time, indices[:1], np.array([1.0]),
+                                              tug_ratio=1)  # Use only the best neighbor for next pose
+        # x = Pose.from_array(current_x)
+        # v = Pose.from_array(self.poses_v[indices[0]])
+        # y = Pose.from_array(self.poses_y[indices[0]])
+        #
+        # new_pose_x = x.add(v.scaled(delta_time))
+        # new_pose_v = y
+        #
+        # nearest_pose_x = Pose.from_array(self.poses_x[indices[0]])
+        # nearest_pose_v = Pose.from_array(self.poses_v[indices[0]])
+        # nearest_pose_x = nearest_pose_x.add(nearest_pose_v.scaled(delta_time))
+        # nearest_pose_v = Pose.from_array(self.poses_y[indices[0]])
+        #
+        # tug_ratio = 0.1
+        # tugged_pose_x = Pose.blend(Pose.concatenate([new_pose_x, nearest_pose_x]), np.array([1 - tug_ratio, tug_ratio]))
+        # tugged_pose_v = Pose.blend(Pose.concatenate([new_pose_v, nearest_pose_v]), np.array([1 - tug_ratio, tug_ratio]))
 
-        new_x, new_v = self.compute_new_state(current_x, delta_time, indices[:1], weights[:1])  # Use only the best neighbor for next pose
-
+        # return tugged_pose_x.pack(), tugged_pose_v.pack()
         return new_x, new_v
 
     @staticmethod
@@ -151,5 +187,6 @@ class MotionField:
 
         p_b, _ = skeleton.fk_root_space(next_pose)
 
-        return np.concatenate([p_a * metric_weights[:, np.newaxis] * .8, (p_b - p_a)*0.03],
-                              axis=-2)  # (batch, bone_count*2, 3)
+        return np.concatenate(
+            [p_a * metric_weights[:, np.newaxis] * .8, (p_b - p_a)],
+            axis=-2)  # (batch, bone_count*2, 3)
