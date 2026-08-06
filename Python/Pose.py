@@ -32,8 +32,8 @@ class Pose:
         self.hipPos = np.asarray(hips, dtype=np.float32)
         self.quats = quats
 
-    @classmethod
-    def from_array(cls, pose: np.ndarray) -> Pose:
+    @staticmethod
+    def from_array(pose: np.ndarray) -> Pose:
         """Unpacks a flat pose tensor into a PoseData instance."""
         root = pose[..., 0, :3].copy()
         hips = pose[..., 1, :3].copy()

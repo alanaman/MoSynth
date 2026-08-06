@@ -19,10 +19,10 @@ public static class PoseExtractor
         var bvhAnimation = animation.GetAnimation();
         // Set Poses
         var nFrames = bvhAnimation.Frames.Length;
-        var poses = new PoseVector[nFrames];
+        var poses = new PoseVector[nFrames - 1];
         var nBvhJoints = bvhAnimation.Skeleton.Joints.Count;
         var nPoseSetJoints = nBvhJoints + 1; // +1 for SimulationBone
-        
+
         if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.LeftToes, out var leftToesJoint))
         {
             Debug.LogError("LeftToes not found in BVHAnimation");
@@ -36,18 +36,21 @@ public static class PoseExtractor
 
         var rightToesIndex = rightToesJoint.index + 1; // +1 for SimulationBone
 
-        for (var i = 0; i < nFrames; i++)
+        for (var i = 0; i < nFrames - 1; i++)
         {
             poses[i] = new PoseVector(nPoseSetJoints);
             ExtractPose(ref poses[i], bvhAnimation, i, mmData);
         }
 
-        for (var i = 0; i < nFrames - 1; i++)
+        for (var i = 0; i < nFrames - 2; i++)
         {
             ExtractPoseVelocities(ref poses[i], poses[i + 1], bvhAnimation);
         }
+        var lastPose = new PoseVector(nPoseSetJoints);
+        ExtractPose(ref lastPose, bvhAnimation, nFrames - 1, mmData);
+        ExtractPoseVelocities(ref poses[^1], lastPose, bvhAnimation);
 
-        for (var i = 0; i < nFrames; i++)
+        for (var i = 0; i < nFrames - 1; i++)
         {
             // Note: this requires velocities to be pre-calculated
             ExtractPoseContacts(ref poses[i],
@@ -247,7 +250,7 @@ public static class PoseExtractor
             pose.jointLocalAngularVelocities[jointIdx] =
                 MathExtensions.AngularVelocity(rot, nextRot, bvhAnimation.FrameTime);
         }
-        
+
         // root motion
         var vel = (nextPose.jointLocalPositions[0] - pose.jointLocalPositions[0]) / bvhAnimation.FrameTime;
 

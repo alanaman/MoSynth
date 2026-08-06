@@ -12,16 +12,19 @@ global pose_count
 from Animation import PoseSet
 from pose_set_importer import deserialize_pose_set
 
+from debugging.python_net import connect_debugger
 
-def load_animations():
-    pose_set: PoseSet = deserialize_pose_set('../Assets/StreamingAssets/MMDatabases/MotionMatchingData',
-                                             'MotionMatchingData')
+connect_debugger()
+
+
+def load_animations(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchingData'):
+    pose_set: PoseSet = deserialize_pose_set(data_dir, 'MotionMatchingData')
 
     skeleton: Skeleton = pose_set.skeleton
     bone_count = len(list(skeleton))
 
     n_src_poses = pose_set.local_positions.shape[0]
-    n_trg_poses = n_src_poses - 1  # need (i, i+1) i has x, v and i+1 has y
+    n_target_poses = n_src_poses - 1  # need (i, i+1) i has x, v and i+1 has y
 
     pos = pose_set.local_positions  # (n_poses, n_joints, 3)
     quats = pose_set.local_rotations  # (n_poses, n_joints, 4)
@@ -41,29 +44,29 @@ def load_animations():
     #   slot 1 — hip position: kept as-is
     #   slot 2 — root bone quat: identity (yaw-invariant)
     #   slots 3+ — remaining joint quats
-    pose_x = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_x[:, 1, :3] = pos[:n_trg_poses, 1, :]  # hip
+    pose_x = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_x[:, 1, :3] = pos[:n_target_poses, 1, :]  # hip
     pose_x[:, 2, :] = [0., 0., 0., 1.]  # identity quaternion [x,y,z,w]
-    pose_x[:, 3:, :] = quats[:n_trg_poses, 1:, :]
+    pose_x[:, 3:, :] = quats[:n_target_poses, 1:, :]
 
     # pose_v: velocity at frame i  =  Pose(i+1) − Pose(i)
     #   slot 0 — root translational velocity
     #   slot 1 — hip translational velocity
     #   slots 2+ — joint angular velocities as quaternions
-    pose_v = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_v[:, 0, :3] = lv[:n_trg_poses, 0, :]
-    pose_v[:, 1, :3] = lv[:n_trg_poses, 1, :]
-    pose_v[:, 2:, :] = lav_quats[:n_trg_poses, :, :]
+    pose_v = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_v[:, 0, :3] = lv[:n_target_poses, 0, :]
+    pose_v[:, 1, :3] = lv[:n_target_poses, 1, :]
+    pose_v[:, 2:, :] = lav_quats[:n_target_poses, :, :]
 
     # pose_y: future velocity at frame i+1  =  Pose(i+2) − Pose(i+1)
     #   Same layout as pose_v, shifted one frame forward.
-    pose_y = np.zeros((n_trg_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_y[:, 0, :3] = lv[1:n_trg_poses + 1, 0, :]
-    pose_y[:, 1, :3] = lv[1:n_trg_poses + 1, 1, :]
-    pose_y[:, 2:, :] = lav_quats[1:n_trg_poses + 1, :, :]
+    pose_y = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
+    pose_y[:, 0, :3] = lv[1:n_target_poses + 1, 0, :]
+    pose_y[:, 1, :3] = lv[1:n_target_poses + 1, 1, :]
+    pose_y[:, 2:, :] = lav_quats[1:n_target_poses + 1, :, :]
 
     # pose_contacts: foot contact flags aligned to frame i
-    pose_contacts = pose_set.foot_contacts[:n_trg_poses, :].copy()
+    pose_contacts = pose_set.foot_contacts[:n_target_poses, :].copy()
 
     return skeleton, pose_x, pose_v, pose_y, pose_contacts, pose_set
 
@@ -93,6 +96,27 @@ def create_pose_json_reply(skeleton: Skeleton,
         "LeftFootContact": bool(pose_contacts[0]),
         "RightFootContact": bool(pose_contacts[1])
     }
+
+def get_pose_arrays(skeleton: Skeleton,
+                    current_x: np.ndarray,
+                    current_v: np.ndarray,
+                    pose_contacts: np.ndarray):
+    p_x = Pose.from_array(current_x)
+    p_v = Pose.from_array(current_v)
+
+    pos = skeleton.get_local_positions(p_x)[0]
+    lv = np.zeros_like(pos)
+    lv[0] = p_v.rootPos
+    quats = p_x.quats[0]
+    lav = np.array(Rotation.from_quat(p_v.quats[0]).as_rotvec(), dtype=np.float32)
+
+    # Ensure flat float arrays for PythonNet auto-marshalling
+    pos = np.ascontiguousarray(pos, dtype=np.float32).flatten().tolist()
+    quats = np.ascontiguousarray(quats, dtype=np.float32).flatten().tolist()
+    lv = np.ascontiguousarray(lv, dtype=np.float32).flatten().tolist()
+    lav = np.ascontiguousarray(lav, dtype=np.float32).flatten().tolist()
+
+    return pos, quats, lv, lav, bool(pose_contacts[0]), bool(pose_contacts[1])
 
 
 def main():
@@ -125,9 +149,9 @@ def main():
             continue
 
         # desired_dir = np.array([0.0, 0.0])
-        # current_x[...], current_v[...] = motion_field.get_next_pose(current_x, current_v, delta_time)
+        current_x[...], current_v[...] = motion_field.get_next_pose(current_x, current_v, delta_time)
         # current_x[...], current_v[...] = motion_field.get_next_pose_blended(current_x, current_v, delta_time, k_neighbors=15)
-        current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
+#         current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
         reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
         socket.send_string(json.dumps(reply))
 
