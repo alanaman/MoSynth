@@ -57,27 +57,29 @@ class Pose:
         result[..., 2:, :] = self.quats
         return result
 
-    def add(self, other: Pose) -> Pose:
+    def add(self, delta: PoseDelta) -> Pose:
         """
-        Adds a velocity/delta pose to this pose.
-        (Calculates relative transformation for root and composes rotations).
+        Integrates a delta onto this pose.
+
+        The delta must already be scaled to the desired time step (use
+        PoseDelta.scaled(dt)); this method applies it verbatim. In particular
+        `pose_x[i].add(pose_v[i].scaled(frame_time)) == pose_x[i + 1]`.
+
+        The root translation is expressed in root-local space (matching
+        PoseExtractor.ExtractPoseVelocities), so it is rotated by the root
+        bone rotation before being applied.
         """
-        # Extract root rotations (assuming index 0 is the root bone)
-        # Using slicing [0:1] to maintain shape or indexing [0] based on usage
-        # We assume the user wants the first rotation in the sequence.
+        r_root: Rotation = Rotation.from_quat(self.quats[..., 0, :])
 
-        r_x0: Rotation = Rotation.from_quat(self.quats[..., 0, :])
-        r_v0: Rotation = Rotation.from_quat(other.quats[..., 0, :])
-
-        # Multiply rotation and rotate offset vector
-        new_root = self.rootPos + r_x0.apply(other.rootPos)
+        new_root = self.rootPos + r_root.apply(delta.rootVel)
 
         # Hips vector addition
-        new_hips = self.hipPos + other.hipPos
+        new_hips = self.hipPos + delta.hipVel
 
-        # Joint rotations composition
-        new_quats = np.array(Rotation.as_quat(
-            Rotation.from_quat(other.quats) *
+        # Joint rotations composition. The delta is left-multiplied, matching
+        # MathExtensions.AngularVelocity: next = delta * current.
+        new_quats = np.asarray(Rotation.as_quat(
+            Rotation.from_rotvec(delta.rotvecs) *
             Rotation.from_quat(self.quats)
         ))
 
@@ -151,15 +153,6 @@ class Pose:
 
         return Pose(roots, hips, quats)
 
-    def scaled(self, scale_factor: float) -> Pose:
-        """Scales the pose by a given factor."""
-        scaled_root = self.rootPos * scale_factor
-        scaled_hips = self.hipPos * scale_factor
-        axis_angle = Rotation.from_quat(self.quats).as_rotvec()
-        scaled_quats = np.array(Rotation.from_rotvec(axis_angle * scale_factor).as_quat())
-
-        return Pose(scaled_root, scaled_hips, scaled_quats)
-
     @staticmethod
     def concatenate(poses: List[Pose]) -> Pose:
         """Concatenates a list of Pose instances along the batch dimension."""
@@ -167,4 +160,100 @@ class Pose:
         hips = np.concatenate([p.hipPos for p in poses], axis=0)
         quats = np.concatenate([p.quats for p in poses], axis=0)
         return Pose(roots, hips, quats)
+
+
+class PoseDelta:
+    """
+    A pose velocity / delta: root and hip translational rates plus per-joint
+    angular rates.
+
+    Angular rates are stored as rotation *vectors* (angle * axis, rad/s), never
+    as quaternions. A unit quaternion can only carry a rotation in [0, 2*pi) and
+    scipy canonicalises it back to [0, pi], so round-tripping a rad/s rate
+    through a quaternion silently aliases every joint turning faster than
+    pi rad/s (~2.6% of this dataset, of which the majority come back pointing
+    the opposite way). Keeping rotation vectors makes `scaled` exact.
+
+    The packed layout matches Pose so the (..., num_bones + 2, 4) arrays coming
+    from / going to C# are unchanged:
+        slot 0  [:3] -> root translational rate (root-local space)
+        slot 1  [:3] -> hip translational rate
+        slots 2+[:3] -> per-joint angular rate as a rotation vector
+    The trailing component of each slot is unused and kept at 0.
+    """
+
+    rootVel: np.ndarray
+    hipVel: np.ndarray
+    rotvecs: np.ndarray
+
+    def __init__(self, root_vel: np.ndarray, hip_vel: np.ndarray, rotvecs: np.ndarray):
+        """
+        :param root_vel: Vector3 root translational rate (..., 3)
+        :param hip_vel: Vector3 hips translational rate (..., 3)
+        :param rotvecs: Joint angular rates as rotation vectors (..., num_bones, 3)
+        """
+        assert root_vel.shape[-1] == 3, "Root velocity must be a 3D vector."
+        assert hip_vel.shape[-1] == 3, "Hip velocity must be a 3D vector."
+        assert rotvecs.shape[-1] == 3, "Angular rates must be rotation vectors."
+        assert root_vel.shape[:-1] == hip_vel.shape[:-1] and \
+               root_vel.shape[:-1] == rotvecs.shape[:-2], "Batch sizes must match."
+        assert len(root_vel.shape) > 1, "Root velocity must have at least 2 dimensions (batch, 3)."
+
+        self.rootVel = np.asarray(root_vel, dtype=np.float32)
+        self.hipVel = np.asarray(hip_vel, dtype=np.float32)
+        self.rotvecs = np.asarray(rotvecs, dtype=np.float32)
+
+    @staticmethod
+    def from_array(delta: np.ndarray) -> PoseDelta:
+        """Unpacks a flat delta tensor into a PoseDelta instance."""
+        root_vel = delta[..., 0, :3].copy()
+        hip_vel = delta[..., 1, :3].copy()
+        rotvecs = delta[..., 2:, :3].copy()
+        if len(root_vel.shape) == 1:
+            root_vel = np.expand_dims(root_vel, axis=0)
+            hip_vel = np.expand_dims(hip_vel, axis=0)
+            rotvecs = np.expand_dims(rotvecs, axis=0)
+
+        return PoseDelta(root_vel, hip_vel, rotvecs)
+
+    def pack(self) -> np.ndarray:
+        """Packs the PoseDelta back into a single flat array representation."""
+        num_bones = self.rotvecs.shape[-2]
+        batch_shape = self.rotvecs.shape[:-2]
+
+        result = np.zeros((*batch_shape, num_bones + 2, 4), dtype=np.float32)
+        result[..., 0, :3] = self.rootVel
+        result[..., 1, :3] = self.hipVel
+        result[..., 2:, :3] = self.rotvecs
+        return result
+
+    def scaled(self, scale_factor: float) -> PoseDelta:
+        """Scales the delta by a given factor. Exact: rates are linear."""
+        return PoseDelta(self.rootVel * scale_factor,
+                         self.hipVel * scale_factor,
+                         self.rotvecs * scale_factor)
+
+    @staticmethod
+    def blend(deltas: PoseDelta, weights: np.ndarray) -> PoseDelta:
+        """Weighted blend across multiple delta states (batch axis 0)."""
+        weights = np.asarray(weights, dtype=np.float32)
+
+        root_vel = np.sum(deltas.rootVel * weights[..., np.newaxis], axis=0)
+        hip_vel = np.sum(deltas.hipVel * weights[..., np.newaxis], axis=0)
+        # Rotation vectors blend linearly - that is the correct operation for
+        # angular rates, and needs no nlerp/renormalisation.
+        w = weights.reshape((-1,) + (1,) * (deltas.rotvecs.ndim - 1))
+        rotvecs = np.sum(deltas.rotvecs * w, axis=0)
+
+        return PoseDelta(np.expand_dims(root_vel, axis=0),
+                         np.expand_dims(hip_vel, axis=0),
+                         np.expand_dims(rotvecs, axis=0))
+
+    @staticmethod
+    def concatenate(deltas: List[PoseDelta]) -> PoseDelta:
+        """Concatenates a list of PoseDelta instances along the batch dimension."""
+        root_vels = np.concatenate([d.rootVel for d in deltas], axis=0)
+        hip_vels = np.concatenate([d.hipVel for d in deltas], axis=0)
+        rotvecs = np.concatenate([d.rotvecs for d in deltas], axis=0)
+        return PoseDelta(root_vels, hip_vels, rotvecs)
 

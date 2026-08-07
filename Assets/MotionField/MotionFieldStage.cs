@@ -73,8 +73,9 @@ public class MotionFieldStage : MoSynthStage, IDisposable
             dynamic poseV = animData[2];
             dynamic poseY = animData[3];
             dynamic poseContacts = animData[4];
+            dynamic frameTime = animData[5];
 
-            _motionField = motionFieldModule.MotionField(poseX, poseV, poseY, _skeleton);
+            _motionField = motionFieldModule.MotionField(poseX, poseV, poseY, _skeleton, frameTime);
 
             int lastIndex = 700;
             _currentX = poseX[lastIndex].copy();
