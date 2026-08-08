@@ -108,7 +108,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         _sourceBones = new Transform[BodyJoints.Length];
         _targetBones = new Transform[BodyJoints.Length];
         // Animation containing in the first frame a T-Pose
-        var tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
+        var tPoseAnimation = mmData.tPoseAnimationClip;
         // Store Rotations
         // Source
         var skeleton = tPoseAnimation.Skeleton;
@@ -118,7 +118,7 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
                 skeleton.TryFind(jointName, out var joint))
             {
                 // Get the rotation for the first frame of the animation
-                _animationTPose[i] = tPoseAnimation.GetWorldRotation(joint, 0);
+                _animationTPose[i] = tPoseAnimation.GetWorldRotation(joint, tPoseAnimation.Frames[0]);
             }
         }
 
@@ -170,8 +170,8 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         // Correct body orientation so they are both facing the same direction
         var targetWorldForward = math.mul(_characterTPose[0], forwardLocalVector);
         var targetWorldUp = math.mul(_characterTPose[0], upLocalVector);
-        var sourceWorldForward = math.mul(_animationTPose[0], mmData.HipsForwardLocalVector);
-        var sourceWorldUp = math.mul(_animationTPose[0], mmData.HipsUpLocalVector);
+        var sourceWorldForward = math.mul(_animationTPose[0], mmData.hipsForwardLocalVector);
+        var sourceWorldUp = math.mul(_animationTPose[0], mmData.hipsUpLocalVector);
         var targetLookAt = quaternion.LookRotation(targetWorldForward, targetWorldUp);
         var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
         _hipsCorrection = math.mul(sourceLookAt, math.inverse(targetLookAt));

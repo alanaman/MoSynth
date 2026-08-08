@@ -86,12 +86,12 @@ namespace MotionMatching
             EditorGUILayout.BeginVertical(GUI.skin.box);
             EditorGUILayout.LabelField(name);
             int offset = 0;
-            for (int t = 0; t < mmData.TrajectoryFeatures.Count; t++)
+            for (int t = 0; t < mmData.trajectoryFeatures.Count; t++)
             {
-                var feature = mmData.TrajectoryFeatures[t];
+                var feature = mmData.trajectoryFeatures[t];
                 int featureSize = feature.GetSize();
-                EditorGUILayout.LabelField(feature.Name);
-                for (int p = 0; p < feature.FramesPrediction.Length; p++)
+                EditorGUILayout.LabelField(feature.name);
+                for (int p = 0; p < feature.framesPrediction.Length; p++)
                 {
                     EditorGUILayout.BeginHorizontal();
                     for (int i = 0; i < featureSize; i++)
@@ -102,10 +102,10 @@ namespace MotionMatching
                     offset += featureSize;
                 }
             }
-            for (int p = 0; p < mmData.PoseFeatures.Count; p++)
+            for (int p = 0; p < mmData.poseFeatures.Count; p++)
             {
-                var feature = mmData.PoseFeatures[p];
-                EditorGUILayout.LabelField(feature.Name);
+                var feature = mmData.poseFeatures[p];
+                EditorGUILayout.LabelField(feature.name);
                 EditorGUILayout.BeginHorizontal();
                 EditorGUILayout.LabelField(vector[offset + 0].ToString("F3"), style, GUILayout.ExpandWidth(false), GUILayout.MaxWidth(60));
                 EditorGUILayout.LabelField(vector[offset + 1].ToString("F3"), style, GUILayout.ExpandWidth(false), GUILayout.MaxWidth(60));

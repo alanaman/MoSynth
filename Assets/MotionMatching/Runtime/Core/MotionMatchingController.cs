@@ -166,8 +166,8 @@ public class MotionMatchingController : MotionSynthesizer
         // }
 
         // Other initialization
-        var numberFeatures = mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count +
-                             mmData.EnvironmentFeatures.Count;
+        var numberFeatures = mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count +
+                             mmData.environmentFeatures.Count;
         if (featureWeights == null || featureWeights.Length != numberFeatures)
         {
             var newWeights = new float[numberFeatures];
@@ -335,10 +335,10 @@ public class MotionMatchingController : MotionSynthesizer
     public void FillQueryVector()
     {
         var offset = 0;
-        for (var i = 0; i < mmData.TrajectoryFeatures.Count; i++)
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            var feature = mmData.TrajectoryFeatures[i];
-            for (var p = 0; p < feature.FramesPrediction.Length; ++p)
+            var feature = mmData.trajectoryFeatures[i];
+            for (var p = 0; p < feature.framesPrediction.Length; ++p)
             {
                 var featureSize = feature.GetSize();
                 Debug.Assert(featureSize > 0, "Trajectory feature size must be larger than 0");
@@ -359,10 +359,10 @@ public class MotionMatchingController : MotionSynthesizer
         if (FeatureSet.EnvironmentOffset.Length > 0)
         {
             offset = FeatureSet.EnvironmentOffset[0];
-            for (var i = 0; i < mmData.EnvironmentFeatures.Count; i++)
+            for (var i = 0; i < mmData.environmentFeatures.Count; i++)
             {
-                var feature = mmData.EnvironmentFeatures[i];
-                for (var p = 0; p < feature.FramesPrediction.Length; p++)
+                var feature = mmData.environmentFeatures[i];
+                for (var p = 0; p < feature.framesPrediction.Length; p++)
                 {
                     var featureSize = feature.GetSize();
                     Debug.Assert(featureSize > 0, "Environment feature size must be larger than 0");
@@ -475,7 +475,7 @@ public class MotionMatchingController : MotionSynthesizer
         // transition to the locked contact state
         // Also, make sure the inertialization returns an almost 0 velocity before locking
         if (!IsLeftFootContact && targetPose.leftFootContact &&
-            math.length(leftContactVelocity) < mmData.ContactVelocityThreshold)
+            math.length(leftContactVelocity) < mmData.contactVelocityThreshold)
         {
             // Contact point is the current position of the foot
             // projected onto the ground + foot height
@@ -516,7 +516,7 @@ public class MotionMatchingController : MotionSynthesizer
 
         // Same for Right Foot
         if (!IsRightFootContact && targetPose.rightFootContact &&
-            math.length(rightContactVelocity) < mmData.ContactVelocityThreshold)
+            math.length(rightContactVelocity) < mmData.contactVelocityThreshold)
         {
             IsRightFootContact = true;
             _rightFootContact = rightContactPosition;
@@ -677,12 +677,12 @@ public class MotionMatchingController : MotionSynthesizer
     public NativeArray<float> UpdateAndGetFeatureWeights()
     {
         var offset = 0;
-        for (var i = 0; i < mmData.TrajectoryFeatures.Count; i++)
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            var feature = mmData.TrajectoryFeatures[i];
+            var feature = mmData.trajectoryFeatures[i];
             var featureSize = feature.GetSize();
             var weight = featureWeights[i] * responsiveness;
-            for (var p = 0; p < feature.FramesPrediction.Length; ++p)
+            for (var p = 0; p < feature.framesPrediction.Length; ++p)
             {
                 for (var f = 0; f < featureSize; f++)
                 {
@@ -693,21 +693,21 @@ public class MotionMatchingController : MotionSynthesizer
             }
         }
 
-        for (var i = 0; i < mmData.PoseFeatures.Count; i++)
+        for (var i = 0; i < mmData.poseFeatures.Count; i++)
         {
-            var weight = featureWeights[i + mmData.TrajectoryFeatures.Count] * quality;
+            var weight = featureWeights[i + mmData.trajectoryFeatures.Count] * quality;
             _featuresWeightsNativeArray[offset + 0] = weight;
             _featuresWeightsNativeArray[offset + 1] = weight;
             _featuresWeightsNativeArray[offset + 2] = weight;
             offset += 3;
         }
 
-        for (var i = 0; i < mmData.EnvironmentFeatures.Count; i++)
+        for (var i = 0; i < mmData.environmentFeatures.Count; i++)
         {
-            var feature = mmData.EnvironmentFeatures[i];
+            var feature = mmData.environmentFeatures[i];
             var featureSize = feature.GetSize();
-            var baseWeight = featureWeights[i + mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count];
-            for (var p = 0; p < feature.FramesPrediction.Length; ++p)
+            var baseWeight = featureWeights[i + mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count];
+            for (var p = 0; p < feature.framesPrediction.Length; ++p)
             {
                 for (var f = 0; f < featureSize; f++)
                 {
@@ -728,9 +728,9 @@ public class MotionMatchingController : MotionSynthesizer
         var characterRot = quaternion.LookRotation(characterForward, math.up());
         // Find Main Position Trajectory Index
         var t = -1;
-        for (var i = 0; i < mmData.TrajectoryFeatures.Count; i++)
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            if (mmData.TrajectoryFeatures[i].IsMainPositionFeature)
+            if (mmData.trajectoryFeatures[i].isMainPositionFeature)
             {
                 t = i;
                 break;
@@ -743,7 +743,7 @@ public class MotionMatchingController : MotionSynthesizer
             return characterOrigin;
         }
 
-        var value = FeatureSet.Get3DValuePositionOrDirectionFeature(mmData.TrajectoryFeatures[t], CurrentFrame, t,
+        var value = FeatureSet.Get3DValuePositionOrDirectionFeature(mmData.trajectoryFeatures[t], CurrentFrame, t,
             trajectoryIndex, isEnvironment: false);
         value = characterOrigin + math.mul(characterRot, value);
         return value;
@@ -754,9 +754,9 @@ public class MotionMatchingController : MotionSynthesizer
         float3 characterForward = SkeletonTransforms[0].forward;
         var characterRot = quaternion.LookRotation(characterForward, math.up());
         var t = -1;
-        for (var i = 0; i < mmData.EnvironmentFeatures.Count; i++)
+        for (var i = 0; i < mmData.environmentFeatures.Count; i++)
         {
-            if (mmData.EnvironmentFeatures[i].Name == featureName)
+            if (mmData.environmentFeatures[i].name == featureName)
             {
                 t = i;
                 break;
@@ -783,7 +783,6 @@ public class MotionMatchingController : MotionSynthesizer
     {
         if (_isDestroyed) return;
         _isDestroyed = true;
-        mmData.Dispose();
         mmSearch.Dispose();
         if (_queryFeature.IsCreated) _queryFeature.Dispose();
         if (FeaturesWeightsNativeArray.IsCreated) FeaturesWeightsNativeArray.Dispose();

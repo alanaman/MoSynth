@@ -104,11 +104,11 @@ public class SpringControlInput : MoSynthControlInput, IPlayerInputCharacterCont
         // Get the feature indices
         TrajectoryPosFeatureIndex = -1;
         TrajectoryRotFeatureIndex = -1;
-        for (var i = 0; i < motionSynthesizer.MmData.TrajectoryFeatures.Count; ++i)
+        for (var i = 0; i < motionSynthesizer.MmData.trajectoryFeatures.Count; ++i)
         {
-            if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName)
+            if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryPositionFeatureName)
                 TrajectoryPosFeatureIndex = i;
-            if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName)
+            if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryDirectionFeatureName)
                 TrajectoryRotFeatureIndex = i;
         }
 
@@ -116,9 +116,9 @@ public class SpringControlInput : MoSynthControlInput, IPlayerInputCharacterCont
         Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
         TrajectoryPosPredictionFrames =
-            motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
+            motionSynthesizer.MmData.trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
         TrajectoryRotPredictionFrames =
-            motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            motionSynthesizer.MmData.trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
         // TODO: generalize this... allow different number of prediction frames for different features
         Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length,
             "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
@@ -328,14 +328,14 @@ public class SpringControlInput : MoSynthControlInput, IPlayerInputCharacterCont
         Transform character, Span<float> output
     )
     {
-        if (feature.Name == "FutureSphere")
+        if (feature.name == "FutureSphere")
         {
             output[0] = 0.0f;
         }
         else
         {
-            if (!feature.SimulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
-            switch (feature.FeatureType)
+            if (!feature.simulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
+            switch (feature.featureType)
             {
                 case TrajectoryFeature.Type.Position:
                     var world = PredictedPosition[index];
@@ -351,7 +351,7 @@ public class SpringControlInput : MoSynthControlInput, IPlayerInputCharacterCont
                     output[1] = localDir.z;
                     break;
                 default:
-                    Debug.Assert(false, "Unknown feature type: " + feature.FeatureType);
+                    Debug.Assert(false, "Unknown feature type: " + feature.featureType);
                     break;
             }
         }

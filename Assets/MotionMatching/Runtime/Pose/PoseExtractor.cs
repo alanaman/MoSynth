@@ -14,22 +14,21 @@ public static class PoseExtractor
     /// poseSet is not cleared, it will add bvhAnimation the the existing poses
     /// Returns true if the bvhAnimation was added to the poseSet, false otherwise
     /// </summary>
-    public static bool Extract(AnimationData animation, PoseSet poseSet, MotionMatchingData mmData)
+    public static bool Extract(AnnotatedAnimationClip animationClip, PoseSet poseSet, MotionMatchingData mmData)
     {
-        var bvhAnimation = animation.GetAnimation();
         // Set Poses
-        var nFrames = bvhAnimation.Frames.Length;
+        var nFrames = animationClip.Frames.Length;
         var poses = new PoseVector[nFrames - 1];
-        var nBvhJoints = bvhAnimation.Skeleton.Joints.Count;
+        var nBvhJoints = animationClip.Skeleton.Joints.Count;
         var nPoseSetJoints = nBvhJoints + 1; // +1 for SimulationBone
 
-        if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.LeftToes, out var leftToesJoint))
+        if (!animationClip.Skeleton.TryFind(HumanBodyBones.LeftToes, out var leftToesJoint))
         {
             Debug.LogError("LeftToes not found in BVHAnimation");
         }
 
         var leftToesIndex = leftToesJoint.index + 1; // +1 for SimulationBone
-        if (!bvhAnimation.Skeleton.TryFind(HumanBodyBones.RightToes, out var rightToesJoint))
+        if (!animationClip.Skeleton.TryFind(HumanBodyBones.RightToes, out var rightToesJoint))
         {
             Debug.LogError("RightToes not found in BVHAnimation");
         }
@@ -39,31 +38,31 @@ public static class PoseExtractor
         for (var i = 0; i < nFrames - 1; i++)
         {
             poses[i] = new PoseVector(nPoseSetJoints);
-            ExtractPose(ref poses[i], bvhAnimation, i, mmData);
+            ExtractPose(ref poses[i], animationClip, i, mmData);
         }
 
         for (var i = 0; i < nFrames - 2; i++)
         {
-            ExtractPoseVelocities(ref poses[i], poses[i + 1], bvhAnimation);
+            ExtractPoseVelocities(ref poses[i], poses[i + 1], animationClip);
         }
         var lastPose = new PoseVector(nPoseSetJoints);
-        ExtractPose(ref lastPose, bvhAnimation, nFrames - 1, mmData);
-        ExtractPoseVelocities(ref poses[^1], lastPose, bvhAnimation);
+        ExtractPose(ref lastPose, animationClip, nFrames - 1, mmData);
+        ExtractPoseVelocities(ref poses[^1], lastPose, animationClip);
 
         for (var i = 0; i < nFrames - 1; i++)
         {
             // Note: this requires velocities to be pre-calculated
             ExtractPoseContacts(ref poses[i],
-                bvhAnimation.Skeleton,
+                animationClip.Skeleton,
                 leftToesIndex,
                 rightToesIndex,
-                mmData.ContactVelocityThreshold);
+                mmData.contactVelocityThreshold);
         }
 
 
         SmoothContacts(poses);
 
-        if (poseSet.AddClip(poses, bvhAnimation.FrameTime, animation.Tags))
+        if (poseSet.AddClip(poses, animationClip.FrameTime, animationClip.tags))
         {
             return true;
         }
@@ -209,14 +208,14 @@ public static class PoseExtractor
         throw new NotImplementedException();
     }
 
-    private static void ExtractPose(ref PoseVector pose, BvhAnimation bvhAnimation, int frameIndex,
+    private static void ExtractPose(ref PoseVector pose, AnnotatedAnimationClip animationClip, int frameIndex,
         MotionMatchingData mmData)
     {
-        var frame = bvhAnimation.Frames[frameIndex];
+        var frame = animationClip.Frames[frameIndex];
         // Joints
         for (var i = 1; i < pose.jointLocalPositions.Length; i++)
         {
-            pose.jointLocalPositions[i] = bvhAnimation.Skeleton.Joints[i - 1].localOffset;
+            pose.jointLocalPositions[i] = animationClip.Skeleton.Joints[i - 1].localOffset;
             pose.jointLocalRotations[i] = frame.localRotations[i - 1];
         }
 
@@ -224,7 +223,7 @@ public static class PoseExtractor
         // position and direction are hips projected on the ground
         var frameRootMotion = frame.rootMotion;
         var sbPos = new Vector3(frameRootMotion.x, 0.0f, frameRootMotion.z);
-        var hipsForwardDir = frame.localRotations[0] * mmData.HipsForwardLocalVector;
+        var hipsForwardDir = frame.localRotations[0] * mmData.hipsForwardLocalVector;
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);
@@ -237,22 +236,22 @@ public static class PoseExtractor
         pose.jointLocalRotations[1] = math.mul(inverseSbRot, frame.localRotations[0]);
     }
 
-    private static void ExtractPoseVelocities(ref PoseVector pose, in PoseVector nextPose, BvhAnimation bvhAnimation)
+    private static void ExtractPoseVelocities(ref PoseVector pose, in PoseVector nextPose, AnnotatedAnimationClip animationClip)
     {
         for (var jointIdx = 0; jointIdx < pose.jointLocalPositions.Length; jointIdx++)
         {
             var nextPos = nextPose.jointLocalPositions[jointIdx];
             var pos = pose.jointLocalPositions[jointIdx];
-            pose.jointLocalVelocities[jointIdx] = (nextPos - pos) / bvhAnimation.FrameTime;
+            pose.jointLocalVelocities[jointIdx] = (nextPos - pos) / animationClip.FrameTime;
 
             var nextRot = nextPose.jointLocalRotations[jointIdx];
             var rot = pose.jointLocalRotations[jointIdx];
             pose.jointLocalAngularVelocities[jointIdx] =
-                MathExtensions.AngularVelocity(rot, nextRot, bvhAnimation.FrameTime);
+                MathExtensions.AngularVelocity(rot, nextRot, animationClip.FrameTime);
         }
 
         // root motion
-        var vel = (nextPose.jointLocalPositions[0] - pose.jointLocalPositions[0]) / bvhAnimation.FrameTime;
+        var vel = (nextPose.jointLocalPositions[0] - pose.jointLocalPositions[0]) / animationClip.FrameTime;
 
         // transform the root velocity so that it is
         // with respect to the root space of the current pose

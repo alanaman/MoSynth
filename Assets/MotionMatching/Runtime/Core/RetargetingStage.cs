@@ -39,7 +39,7 @@ public class RetargetingStage : MoSynthStage
         var poseSet = mmData.GetOrImportPoseSet();
         var poseJoints = poseSet.Skeleton.Joints;
 
-        var tPoseAnimation = mmData.AnimationDataTPose.GetAnimation();
+        var tPoseAnimation = mmData.tPoseAnimationClip;
         var animJoints = tPoseAnimation.Skeleton.Joints;
 
         _animationTPose = new quaternion[animJoints.Count];
@@ -47,7 +47,7 @@ public class RetargetingStage : MoSynthStage
 
         for (var i = 0; i < animJoints.Count; i++)
         {
-            _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], 0);
+            _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], tPoseAnimation.Frames[0]);
         }
 
         var tPoseSkeleton = _animator.avatar.humanDescription.skeleton;
@@ -81,8 +81,8 @@ public class RetargetingStage : MoSynthStage
             _characterTPose[i] = cumulativeRotation;
         }
 
-        var sourceWorldForward = math.mul(_animationTPose[0], mmData.HipsForwardLocalVector);
-        var sourceWorldUp = math.mul(_animationTPose[0], mmData.HipsUpLocalVector);
+        var sourceWorldForward = math.mul(_animationTPose[0], mmData.hipsForwardLocalVector);
+        var sourceWorldUp = math.mul(_animationTPose[0], mmData.hipsUpLocalVector);
         var sourceLookAt = quaternion.LookRotation(sourceWorldForward, sourceWorldUp);
         _hipsCorrection = sourceLookAt;
     }

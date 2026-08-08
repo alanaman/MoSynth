@@ -85,16 +85,16 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (var i = 0; i < motionSynthesizer.MmData.TrajectoryFeatures.Count; ++i)
+            for (var i = 0; i < motionSynthesizer.MmData.trajectoryFeatures.Count; ++i)
             {
-                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (motionSynthesizer.MmData.TrajectoryFeatures[i].Name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryPosFeatureIndex].FramesPrediction;
-            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.TrajectoryFeatures[TrajectoryRotFeatureIndex].FramesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
+            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
             // TODO: generalize this... allow different number of prediction frames for different features
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
             for (var i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
@@ -390,8 +390,8 @@ namespace MotionMatching
 
         public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
         {
-            if (!feature.SimulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
-            switch (feature.FeatureType)
+            if (!feature.simulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
+            switch (feature.featureType)
             {
                 case TrajectoryFeature.Type.Position:
                     var world = PredictedPosition[index];
@@ -406,7 +406,7 @@ namespace MotionMatching
                     span[1] = localDir.z;
                     break;
                 default:
-                    Debug.Assert(false, "Unknown feature type: " + feature.FeatureType);
+                    Debug.Assert(false, "Unknown feature type: " + feature.featureType);
                     break;
             }
         }
@@ -508,20 +508,20 @@ namespace MotionMatching
         // TODO: maybe get dynamic feature could return something more generic that allows to send custom data like the obstacle arrays
         public override void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
         {
-            if (feature.Name == "FutureEllipse")
+            if (feature.name == "FutureEllipse")
             {
                 span[0] = 0.0f;
                 span[1] = 0.0f;
                 span[2] = 0.0f;
             }
-            else if (feature.Name == "FutureHeight")
+            else if (feature.name == "FutureHeight")
             {
                 span[0] = 0.0f;
                 span[1] = 0.0f;
             }
             else
             {
-                Debug.Assert(false, "Unknown feature name: " + feature.Name);
+                Debug.Assert(false, "Unknown feature name: " + feature.name);
             }
         }
 

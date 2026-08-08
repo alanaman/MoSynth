@@ -9,7 +9,7 @@ using System;
 
 namespace MotionMatching
 {
-    using Tag = AnimationData.Tag;
+    using Tag = AnnotatedAnimationClip.Tag;
 
     /* More info on how to create a new scene: https://gist.github.com/ulrikdamm/338392c3b0900de225ec6dd10864cab4 */
     public class AnimationViewerEditorWindow : EditorWindow
@@ -19,7 +19,7 @@ namespace MotionMatching
 
         private Transform[] Skeleton;
         private int CurrentFrame = 0;
-        private AnimationData AnimationData;
+        private AnnotatedAnimationClip _animationClip;
         private int TargetFramerate;
         private double LastUpdateTime;
 
@@ -58,7 +58,7 @@ namespace MotionMatching
         private static readonly Color LightGray = new Color(0.4f, 0.4f, 0.4f, 1.0f);
         private static readonly Color DarkGray = new Color(0.3f, 0.3f, 0.3f, 1.0f);
 
-        private int NumberFrames { get { return AnimationData.GetAnimation().Frames.Length; } }
+        private int NumberFrames { get { return _animationClip.GetRawAnimationClip().Frames.Length; } }
 
         [MenuItem("MotionMatching/Animation Viewer")]
         public static void ShowWindow()
@@ -91,7 +91,7 @@ namespace MotionMatching
 
         private void OnGUI()
         {
-            if (AnimationData == null) return;
+            if (_animationClip == null) return;
 
             // Check if the spacebar key is pressed
             if (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Space)
@@ -105,14 +105,14 @@ namespace MotionMatching
             ObjectField animationDataField = new ObjectField
             {
                 label = "Animation Data",
-                objectType = typeof(AnimationData)
+                objectType = typeof(AnnotatedAnimationClip)
             };
             animationDataField.RegisterValueChangedCallback(x =>
             {
-                AnimationData = null;
+                _animationClip = null;
                 if (x.newValue != null && x.newValue != x.previousValue)
                 {
-                    AnimationData = (AnimationData)x.newValue;
+                    _animationClip = (AnnotatedAnimationClip)x.newValue;
                     CreateBVHFields();
                     ImportBVH();
                     CreateTimeline(rootVisualElement);
@@ -332,9 +332,9 @@ namespace MotionMatching
             TagRangesStart.Clear();
             TagRangesEnd.Clear();
             RangesContainer.Clear();
-            for (int tagIndex = 0; tagIndex < AnimationData.Tags.Count; ++tagIndex)
+            for (int tagIndex = 0; tagIndex < _animationClip.tags.Count; ++tagIndex)
             {
-                Tag tag = AnimationData.Tags[tagIndex];
+                Tag tag = _animationClip.tags[tagIndex];
                 TagRangesLines.Add(new List<VisualElement>());
                 TagRangesStart.Add(new List<VisualElement>());
                 TagRangesEnd.Add(new List<VisualElement>());
@@ -367,7 +367,7 @@ namespace MotionMatching
                 // Tag name
                 TextField textField = new TextField
                 {
-                    value = tag.Name,
+                    value = tag.name,
                     isDelayed = true,
                     style =
                     {
@@ -381,11 +381,11 @@ namespace MotionMatching
                 int tagIndexCopy = tagIndex;
                 textField.RegisterValueChangedCallback(x =>
                 {
-                    Tag tag = AnimationData.Tags[tagIndexCopy];
-                    tag.Name = GetAvailableTagName(x.newValue);
-                    textField.SetValueWithoutNotify(tag.Name);
-                    AnimationData.Tags[tagIndexCopy] = tag;
-                    AnimationData.SaveEditor();
+                    Tag tag = _animationClip.tags[tagIndexCopy];
+                    tag.name = GetAvailableTagName(x.newValue);
+                    textField.SetValueWithoutNotify(tag.name);
+                    _animationClip.tags[tagIndexCopy] = tag;
+                    _animationClip.SaveEditor();
                     QueryTagExpressionChanged(QueryTagTextField.value);
                 });
                 leftContainer.Add(textField);
@@ -410,7 +410,7 @@ namespace MotionMatching
                         OnUpdatePoseStopped = null;
                     }
                     QueryTagExpressionChanged(QueryTagTextField.value);
-                    AnimationData.RemoveTag(tagIndexCopy2);
+                    _animationClip.RemoveTag(tagIndexCopy2);
                     root.Remove(tagsContainer);
                     root.Remove(newTagButton);
                     root.Remove(queryContainer);
@@ -477,7 +477,7 @@ namespace MotionMatching
             }
             newTagButton.clicked += () =>
             {
-                AnimationData.AddTag(GetAvailableTagName(""));
+                _animationClip.AddTag(GetAvailableTagName(""));
                 root.Remove(tagsContainer);
                 root.Remove(newTagButton);
                 root.Remove(queryContainer);
@@ -610,8 +610,8 @@ namespace MotionMatching
             };
             rangesContainer.Add(rangeAuxLine);
 
-            Tag tag = AnimationData.Tags[tagIndex];
-            int tagSize = tag.Start == null ? 0 : tag.Start.Length;
+            Tag tag = _animationClip.tags[tagIndex];
+            int tagSize = tag.start == null ? 0 : tag.start.Length;
             for (int rangeIndex = 0; rangeIndex < tagSize; ++rangeIndex)
             {
                 // Range line
@@ -752,9 +752,9 @@ namespace MotionMatching
         {
             for (int rangeIndex = 0; rangeIndex < TagRangesLines[tagIndex].Count; ++rangeIndex)
             {
-                Tag tag = AnimationData.Tags[tagIndex];
-                int startFrame = tag.Start[rangeIndex];
-                int endFrame = tag.End[rangeIndex];
+                Tag tag = _animationClip.tags[tagIndex];
+                int startFrame = tag.start[rangeIndex];
+                int endFrame = tag.end[rangeIndex];
                 VisualElement rangeLine = TagRangesLines[tagIndex][rangeIndex];
                 float rangesContainerWidth = rangeLine.parent.resolvedStyle.width;
                 float left = rangesContainerWidth * ((float)startFrame / NumberFrames);
@@ -771,7 +771,7 @@ namespace MotionMatching
                 rangeEnd.style.right = rightEnd;
             }
 
-            if (CurrentQueryTag != null) CurrentQueryTag.ComputeRanges(null, AnimationData.Tags, force: true);
+            if (CurrentQueryTag != null) CurrentQueryTag.ComputeRanges(null, _animationClip.tags, force: true);
 
             CreateQueryRangesVisual();
         }
@@ -812,9 +812,9 @@ namespace MotionMatching
                 foreach (string tagName in queryTag.GetTags())
                 {
                     bool found = false;
-                    foreach (Tag tag in AnimationData.Tags)
+                    foreach (Tag tag in _animationClip.tags)
                     {
-                        if (tag.Name == tagName)
+                        if (tag.name == tagName)
                         {
                             found = true;
                             break;
@@ -827,7 +827,7 @@ namespace MotionMatching
                     }
                 }
                 // Process query tag
-                queryTag.ComputeRanges(null, AnimationData.Tags, force: true);
+                queryTag.ComputeRanges(null, _animationClip.tags, force: true);
                 CurrentQueryTag = queryTag;
             }
             CreateQueryRangesVisual();
@@ -835,17 +835,17 @@ namespace MotionMatching
 
         private void OnPointerDownRangesContainer(PointerDownEvent e, int tagIndex, VisualElement element)
         {
-            Tag tag = AnimationData.Tags[tagIndex];
+            Tag tag = _animationClip.tags[tagIndex];
             int GetRangeIndex(int tagIndex, int startFrame, int endFrame)
             {
                 startFrame = Mathf.Max(0, startFrame);
                 endFrame = Mathf.Min(endFrame, NumberFrames - 1);
-                if (tag.Start != null)
+                if (tag.start != null)
                 {
-                    for (int rangeIndex = 0; rangeIndex < tag.Start.Length; ++rangeIndex)
+                    for (int rangeIndex = 0; rangeIndex < tag.start.Length; ++rangeIndex)
                     {
                         // Check if the current range intersects with the startFrame and endFrame
-                        bool isIntersect = !(tag.Start[rangeIndex] > endFrame || tag.End[rangeIndex] < startFrame);
+                        bool isIntersect = !(tag.start[rangeIndex] > endFrame || tag.end[rangeIndex] < startFrame);
 
                         if (isIntersect) return rangeIndex;
                     }
@@ -876,7 +876,7 @@ namespace MotionMatching
                 else
                 {
                     // Show Start and End
-                    dropdownMenu.AddDisabledItem("[" + tag.Start[rangeIndex] + ", " + tag.End[rangeIndex] + "]", false);
+                    dropdownMenu.AddDisabledItem("[" + tag.start[rangeIndex] + ", " + tag.end[rangeIndex] + "]", false);
                     dropdownMenu.AddSeparator("");
                     // Remove range
                     dropdownMenu.AddItem("Remove range", false, () => RemoveRange(tagIndex, rangeIndex));
@@ -973,13 +973,13 @@ namespace MotionMatching
             {
                 UpdateFrameFromPointer(e.position);
                 UpdateStartTagFromPointer(e.position);
-                AnimationData.SaveEditor();
+                _animationClip.SaveEditor();
             }
             if (SelectedTag != -1 && SelectedEndRange != -1)
             {
                 UpdateFrameFromPointer(e.position);
                 UpdateEndTagFromPointer(e.position);
-                AnimationData.SaveEditor();
+                _animationClip.SaveEditor();
             }
         }
         private void UpdateFrameFromPointer(Vector2 pointer)
@@ -998,25 +998,25 @@ namespace MotionMatching
             int leftRadius = Mathf.Max(0, frame - radius);
             int rightRadius = Mathf.Min(NumberFrames - 1, frame + radius);
 
-            Tag tag = AnimationData.Tags[tagIndex];
-            if (tag.Start == null)
+            Tag tag = _animationClip.tags[tagIndex];
+            if (tag.start == null)
             {
                 // If no ranges yet just initialize the first one
-                tag.Start = new int[1] { leftRadius };
-                tag.End = new int[1] { rightRadius };
+                tag.start = new int[1] { leftRadius };
+                tag.end = new int[1] { rightRadius };
             }
             else
             {
                 // Otherwise add a new range and find it's sorted position in the ranges array
-                Array.Resize<int>(ref tag.Start, tag.Start.Length + 1);
-                Array.Resize<int>(ref tag.End, tag.End.Length + 1);
-                int rangeIndex = tag.Start.Length - 2;
+                Array.Resize<int>(ref tag.start, tag.start.Length + 1);
+                Array.Resize<int>(ref tag.end, tag.end.Length + 1);
+                int rangeIndex = tag.start.Length - 2;
                 for (; rangeIndex >= 0; --rangeIndex)
                 {
-                    if (tag.Start[rangeIndex] > frame)
+                    if (tag.start[rangeIndex] > frame)
                     {
-                        tag.Start[rangeIndex + 1] = tag.Start[rangeIndex];
-                        tag.End[rangeIndex + 1] = tag.End[rangeIndex];
+                        tag.start[rangeIndex + 1] = tag.start[rangeIndex];
+                        tag.end[rangeIndex + 1] = tag.end[rangeIndex];
                     }
                     else
                     {
@@ -1028,17 +1028,17 @@ namespace MotionMatching
                 // Expand tag according to left and right radius and without overlapping with neighbor ranges
                 if (rangeIndex > 0)
                 {
-                    leftRadius = Mathf.Max(leftRadius, tag.End[rangeIndex - 1] + 1);
+                    leftRadius = Mathf.Max(leftRadius, tag.end[rangeIndex - 1] + 1);
                 }
-                if (rangeIndex < tag.Start.Length - 1)
+                if (rangeIndex < tag.start.Length - 1)
                 {
-                    rightRadius = Mathf.Min(rightRadius, tag.Start[rangeIndex + 1] - 1);
+                    rightRadius = Mathf.Min(rightRadius, tag.start[rangeIndex + 1] - 1);
                 }
-                tag.Start[rangeIndex] = leftRadius;
-                tag.End[rangeIndex] = rightRadius;
+                tag.start[rangeIndex] = leftRadius;
+                tag.end[rangeIndex] = rightRadius;
             }
-            AnimationData.Tags[tagIndex] = tag;
-            AnimationData.SaveEditor();
+            _animationClip.tags[tagIndex] = tag;
+            _animationClip.SaveEditor();
 
             CreateRangesVisual(tagIndex);
             UpdateRangesContainer(tagIndex);
@@ -1046,30 +1046,30 @@ namespace MotionMatching
 
         private void RemoveRange(int tagIndex, int rangeIndex)
         {
-            Tag tag = AnimationData.Tags[tagIndex];
-            if (tag.Start != null)
+            Tag tag = _animationClip.tags[tagIndex];
+            if (tag.start != null)
             {
                 // Create new arrays with a size reduced by 1
-                int[] newStart = new int[tag.Start.Length - 1];
-                int[] newEnd = new int[tag.End.Length - 1];
+                int[] newStart = new int[tag.start.Length - 1];
+                int[] newEnd = new int[tag.end.Length - 1];
 
                 // Copy the range data over to the new arrays, skipping the range to be removed
-                for (int i = 0, j = 0; i < tag.Start.Length; ++i)
+                for (int i = 0, j = 0; i < tag.start.Length; ++i)
                 {
                     if (i != rangeIndex)
                     {
-                        newStart[j] = tag.Start[i];
-                        newEnd[j] = tag.End[i];
+                        newStart[j] = tag.start[i];
+                        newEnd[j] = tag.end[i];
                         ++j;
                     }
                 }
 
                 // Replace the old range arrays with the new ones
-                tag.Start = newStart;
-                tag.End = newEnd;
+                tag.start = newStart;
+                tag.end = newEnd;
 
-                AnimationData.Tags[tagIndex] = tag;
-                AnimationData.SaveEditor();
+                _animationClip.tags[tagIndex] = tag;
+                _animationClip.SaveEditor();
 
                 CreateRangesVisual(tagIndex);
                 UpdateRangesContainer(tagIndex);
@@ -1078,50 +1078,50 @@ namespace MotionMatching
 
         private void UpdateStartTagFromPointer(Vector2 pointer)
         {
-            Tag tag = AnimationData.Tags[SelectedTag];
+            Tag tag = _animationClip.tags[SelectedTag];
 
-            int max = tag.End[SelectedStartRange] - 1;
+            int max = tag.end[SelectedStartRange] - 1;
             int min = 0;
-            for (int rangeIndex = 0; rangeIndex < tag.End.Length; ++rangeIndex)
+            for (int rangeIndex = 0; rangeIndex < tag.end.Length; ++rangeIndex)
             {
                 if (rangeIndex == SelectedStartRange) continue;
 
-                if (tag.End[rangeIndex] < tag.Start[SelectedStartRange])
+                if (tag.end[rangeIndex] < tag.start[SelectedStartRange])
                 {
-                    min = Math.Max(min, tag.End[rangeIndex] + 1);
+                    min = Math.Max(min, tag.end[rangeIndex] + 1);
                 }
             }
 
             VisualElement startRange = TagRangesStart[SelectedTag][SelectedStartRange];
             int frame = GetFrameFromPointer(pointer, startRange.parent);
-            tag.Start[SelectedStartRange] = Mathf.Min(Mathf.Max(frame, min), max);
+            tag.start[SelectedStartRange] = Mathf.Min(Mathf.Max(frame, min), max);
 
-            AnimationData.Tags[SelectedTag] = tag;
+            _animationClip.tags[SelectedTag] = tag;
 
             UpdateRangesContainer(SelectedTag);
         }
 
         private void UpdateEndTagFromPointer(Vector2 pointer)
         {
-            Tag tag = AnimationData.Tags[SelectedTag];
+            Tag tag = _animationClip.tags[SelectedTag];
 
             int max = NumberFrames - 1;
-            int min = tag.Start[SelectedEndRange] + 1;
-            for (int rangeIndex = 0; rangeIndex < tag.Start.Length; ++rangeIndex)
+            int min = tag.start[SelectedEndRange] + 1;
+            for (int rangeIndex = 0; rangeIndex < tag.start.Length; ++rangeIndex)
             {
                 if (rangeIndex == SelectedEndRange) continue;
 
-                if (tag.Start[rangeIndex] > tag.End[SelectedEndRange])
+                if (tag.start[rangeIndex] > tag.end[SelectedEndRange])
                 {
-                    max = Math.Min(max, tag.Start[rangeIndex] - 1);
+                    max = Math.Min(max, tag.start[rangeIndex] - 1);
                 }
             }
 
             VisualElement endRange = TagRangesEnd[SelectedTag][SelectedEndRange];
             int frame = GetFrameFromPointer(pointer, endRange.parent);
-            tag.End[SelectedEndRange] = Mathf.Min(Mathf.Max(frame, min), max);
+            tag.end[SelectedEndRange] = Mathf.Min(Mathf.Max(frame, min), max);
 
-            AnimationData.Tags[SelectedTag] = tag;
+            _animationClip.tags[SelectedTag] = tag;
 
             UpdateRangesContainer(SelectedTag);
         }
@@ -1186,17 +1186,17 @@ namespace MotionMatching
 
         private void UpdateTagRangeFrameIndicator()
         {
-            for (int tagIndex = 0; tagIndex < AnimationData.Tags.Count; ++tagIndex)
+            for (int tagIndex = 0; tagIndex < _animationClip.tags.Count; ++tagIndex)
             {
-                Tag tag = AnimationData.Tags[tagIndex];
-                if (tag.Start != null)
+                Tag tag = _animationClip.tags[tagIndex];
+                if (tag.start != null)
                 {
-                    for (int rangeIndex = 0; rangeIndex < tag.Start.Length; ++rangeIndex)
+                    for (int rangeIndex = 0; rangeIndex < tag.start.Length; ++rangeIndex)
                     {
                         TagRangesLines[tagIndex][rangeIndex].style.backgroundColor = TagColor;
                         TagRangesStart[tagIndex][rangeIndex].style.backgroundColor = TagColor;
                         TagRangesEnd[tagIndex][rangeIndex].style.backgroundColor = TagColor;
-                        if (CurrentFrame >= tag.Start[rangeIndex] && CurrentFrame <= tag.End[rangeIndex])
+                        if (CurrentFrame >= tag.start[rangeIndex] && CurrentFrame <= tag.end[rangeIndex])
                         {
                             TagRangesLines[tagIndex][rangeIndex].style.backgroundColor = HighlightColor;
                             TagRangesStart[tagIndex][rangeIndex].style.backgroundColor = HighlightColor;
@@ -1236,12 +1236,12 @@ namespace MotionMatching
             while (!available)
             {
                 available = true;
-                foreach (var tag in AnimationData.Tags)
+                foreach (var tag in _animationClip.tags)
                 {
-                    if (tag.Name == tagName)
+                    if (tag.name == tagName)
                     {
                         int num = 1;
-                        string[] splitName = tag.Name.Split(".");
+                        string[] splitName = tag.name.Split(".");
                         if (splitName.Length > 1 && int.TryParse(splitName[splitName.Length - 1], out int candidateNum))
                         {
                             num = candidateNum + 1;
@@ -1271,7 +1271,7 @@ namespace MotionMatching
         private void ImportBVH()
         {
             RemoveSkeleton();
-            BvhAnimation animation = AnimationData.GetAnimation();
+            BvhAnimation animation = _animationClip.GetRawAnimationClip();
             UpdateTargetFramerate(Mathf.RoundToInt(1.0f / animation.FrameTime));
             // Create skeleton
             Skeleton = new Transform[animation.Skeleton.Joints.Count];
@@ -1324,7 +1324,7 @@ namespace MotionMatching
 
         private void UpdateCurrentFrame(int newValue)
         {
-            newValue = Mathf.Clamp(newValue, 0, AnimationData.GetAnimation().Frames.Length - 1);
+            newValue = Mathf.Clamp(newValue, 0, _animationClip.GetRawAnimationClip().Frames.Length - 1);
             CurrentFrame = newValue;
             CurrentFrameField.value = CurrentFrame;
             UpdateCurrentFrameIndicator();
@@ -1349,7 +1349,7 @@ namespace MotionMatching
 
         private void UpdatePose(bool forward = true, int tagIndex = -1, bool queryTag = false)
         {
-            BvhAnimation animation = AnimationData.GetAnimation();
+            BvhAnimation animation = _animationClip.GetRawAnimationClip();
             if (animation != null && LastUpdateTime + (1.0 / TargetFramerate) < EditorApplication.timeSinceStartup)
             {
                 // Update skeleton
@@ -1368,15 +1368,15 @@ namespace MotionMatching
                     }
                     else if (!queryTag)
                     {
-                        Tag tag = AnimationData.Tags[tagIndex];
+                        Tag tag = _animationClip.tags[tagIndex];
                         bool found = false;
-                        for (int rangeIndex = 0; rangeIndex < tag.Start.Length && !found; ++rangeIndex)
+                        for (int rangeIndex = 0; rangeIndex < tag.start.Length && !found; ++rangeIndex)
                         {
-                            if (CurrentFrame <= tag.End[rangeIndex])
+                            if (CurrentFrame <= tag.end[rangeIndex])
                             {
-                                if (CurrentFrame < tag.Start[rangeIndex])
+                                if (CurrentFrame < tag.start[rangeIndex])
                                 {
-                                    UpdateCurrentFrame(tag.Start[rangeIndex]);
+                                    UpdateCurrentFrame(tag.start[rangeIndex]);
                                 }
                                 else
                                 {
@@ -1387,7 +1387,7 @@ namespace MotionMatching
                         }
                         if (!found)
                         {
-                            UpdateCurrentFrame(tag.Start[0]);
+                            UpdateCurrentFrame(tag.start[0]);
                         }
                     }
                     else

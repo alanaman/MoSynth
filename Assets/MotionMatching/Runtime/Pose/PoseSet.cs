@@ -36,11 +36,11 @@ public class PoseSet
         _tagNameToIndex = new Dictionary<string, int>();
         FrameTime = -1.0f;
         MaximumFramesPrediction = 0;
-        foreach (var t in mmData.TrajectoryFeatures)
+        foreach (var t in mmData.trajectoryFeatures)
         {
-            if (t.FramesPrediction[^1] > MaximumFramesPrediction)
+            if (t.framesPrediction[^1] > MaximumFramesPrediction)
             {
-                MaximumFramesPrediction = t.FramesPrediction[^1];
+                MaximumFramesPrediction = t.framesPrediction[^1];
             }
         }
     }
@@ -84,7 +84,7 @@ public class PoseSet
     /// Add the animation clip to the current pose set
     /// Returns true if the clip was added, false if the skeleton is not compatible and the clip was not added
     /// </summary>
-    public bool AddClip(PoseVector[] poses, float frameTime, List<AnimationData.Tag> tags)
+    public bool AddClip(PoseVector[] poses, float frameTime, List<AnnotatedAnimationClip.Tag> tags)
     {
         // Check if the skeleton and frameTime are compatible
         Debug.Assert(Skeleton != null, "Skeleton should be set first. Use SetSkeleton(...)");
@@ -124,22 +124,22 @@ public class PoseSet
     /// Add a tag to the current pose set
     /// The corresponding animation clip should be added before using AddTag(...)
     /// </summary>
-    private void AddTag(int animationClip, AnimationData.Tag dataTag)
+    private void AddTag(int animationClip, AnnotatedAnimationClip.Tag dataTag)
     {
         // Tag Index
-        if (!_tagNameToIndex.TryGetValue(dataTag.Name, out int tagIndex))
+        if (!_tagNameToIndex.TryGetValue(dataTag.name, out int tagIndex))
         {
             tagIndex = _tags.Count;
-            _tagNameToIndex[dataTag.Name] = tagIndex;
-            _tags.Add(new AnimationTag(dataTag.Name));
+            _tagNameToIndex[dataTag.name] = tagIndex;
+            _tags.Add(new AnimationTag(dataTag.name));
         }
 
         // Write tag ranges
         AnimationTag animationTag = _tags[tagIndex];
         int frameOffset = _clips[animationClip].Start;
-        for (int i = 0; i < dataTag.Start.Length; ++i)
+        for (int i = 0; i < dataTag.start.Length; ++i)
         {
-            animationTag.AddRange(dataTag.Start[i] + frameOffset, dataTag.End[i] + frameOffset);
+            animationTag.AddRange(dataTag.start[i] + frameOffset, dataTag.end[i] + frameOffset);
         }
     }
 

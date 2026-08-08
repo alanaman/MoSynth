@@ -55,20 +55,20 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
         {
             // Find Main Position Trajectory
             MotionMatchingData.TrajectoryFeature feature = null;
-            for (int i = 0; i < mmc.mmData.TrajectoryFeatures.Count; i++)
+            for (int i = 0; i < mmc.mmData.trajectoryFeatures.Count; i++)
             {
-                if (mmc.mmData.TrajectoryFeatures[i].IsMainPositionFeature)
+                if (mmc.mmData.trajectoryFeatures[i].isMainPositionFeature)
                 {
-                    feature = mmc.mmData.TrajectoryFeatures[i];
+                    feature = mmc.mmData.trajectoryFeatures[i];
                 }
             }
 
             if (feature != null)
             {
-                for (int p = 0; p < feature.FramesPrediction.Length; p++)
+                for (int p = 0; p < feature.framesPrediction.Length; p++)
                 {
-                    Gizmos.color = Color.red + Color.cyan * ((float)p / feature.FramesPrediction.Length);
-                    int frame = currentFrame + feature.FramesPrediction[p];
+                    Gizmos.color = Color.red + Color.cyan * ((float)p / feature.framesPrediction.Length);
+                    int frame = currentFrame + feature.framesPrediction[p];
                     mmc.PoseSet.GetPose(frame, out PoseVector futurePose);
                     var simulationBoneTransform = mmc.GetSimulationBoneWorldSpaceTransform(futurePose);
                     var worldPositions = mmc.PoseSet.GetWorldPositions(futurePose, simulationBoneTransform);

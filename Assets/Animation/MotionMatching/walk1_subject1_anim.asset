@@ -12,5 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b81a3691c81c50d41858624eac4a6299, type: 3}
   m_Name: walk1_subject1_anim
   m_EditorClassIdentifier: MotionMatching::MotionMatching.AnimationData
-  Animation: {fileID: 5022602860645237092, guid: 5b9ba3ce1f331a943a539df7fd8bb8eb, type: 3}
-  Tags: []
+  animation: {fileID: 5022602860645237092, guid: 5b9ba3ce1f331a943a539df7fd8bb8eb, type: 3}
+  tags: []
+  startFrame: 0
+  endFrame: 7840

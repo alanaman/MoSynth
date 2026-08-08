@@ -7,7 +7,7 @@ namespace MotionMatching.MotionField
 public class MotionFieldData : ScriptableObject
 {
     [SerializeField]
-    private List<AnimationData> animationDataList = new List<AnimationData>();
+    private List<AnnotatedAnimationClip> animationDataList = new List<AnnotatedAnimationClip>();
     
     
     

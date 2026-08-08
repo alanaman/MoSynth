@@ -189,10 +189,10 @@ public class MotionMatchingStage : MoSynthStage
         
         // Trajectory features
         var offset = 0;
-        foreach (var featureDef in mmData.TrajectoryFeatures)
+        foreach (var featureDef in mmData.trajectoryFeatures)
         {
             var featureSize = featureDef.GetSize();
-            for (var p = 0; p < featureDef.FramesPrediction.Length; ++p)
+            for (var p = 0; p < featureDef.framesPrediction.Length; ++p)
             {
                 var feature = queryFeatureSpan.Slice(offset, featureSize);
                 controlInput.GetTrajectoryFeature(featureDef, p, simulationBone, feature);
@@ -244,9 +244,9 @@ public class MotionMatchingStage : MoSynthStage
         if (featureSet.EnvironmentOffset.Length > 0)
         {
             offset = featureSet.EnvironmentOffset[0];
-            foreach (var featureDef in mmData.EnvironmentFeatures)
+            foreach (var featureDef in mmData.environmentFeatures)
             {
-                for (var p = 0; p < featureDef.FramesPrediction.Length; p++)
+                for (var p = 0; p < featureDef.framesPrediction.Length; p++)
                 {
                     var featureSize = featureDef.GetSize();
                     var feature = queryFeatureSpan.Slice(offset, featureSize);
@@ -280,12 +280,12 @@ public class MotionMatchingStage : MoSynthStage
     public void UpdateFeatureWeights()
     {
         var offset = 0;
-        for (var i = 0; i < mmData.TrajectoryFeatures.Count; i++)
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            var feature = mmData.TrajectoryFeatures[i];
+            var feature = mmData.trajectoryFeatures[i];
             var featureSize = feature.GetSize();
             var weight = _featureWeights[i] * responsiveness;
-            for (var p = 0; p < feature.FramesPrediction.Length; ++p)
+            for (var p = 0; p < feature.framesPrediction.Length; ++p)
             {
                 for (var f = 0; f < featureSize; f++)
                 {
@@ -296,21 +296,21 @@ public class MotionMatchingStage : MoSynthStage
             }
         }
 
-        for (var i = 0; i < mmData.PoseFeatures.Count; i++)
+        for (var i = 0; i < mmData.poseFeatures.Count; i++)
         {
-            var weight = _featureWeights[i + mmData.TrajectoryFeatures.Count] * quality;
+            var weight = _featureWeights[i + mmData.trajectoryFeatures.Count] * quality;
             _featureWeights[offset + 0] = weight;
             _featureWeights[offset + 1] = weight;
             _featureWeights[offset + 2] = weight;
             offset += 3;
         }
 
-        for (var i = 0; i < mmData.EnvironmentFeatures.Count; i++)
+        for (var i = 0; i < mmData.environmentFeatures.Count; i++)
         {
-            var feature = mmData.EnvironmentFeatures[i];
+            var feature = mmData.environmentFeatures[i];
             var featureSize = feature.GetSize();
-            var baseWeight = _featureWeights[i + mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count];
-            for (var p = 0; p < feature.FramesPrediction.Length; ++p)
+            var baseWeight = _featureWeights[i + mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count];
+            for (var p = 0; p < feature.framesPrediction.Length; ++p)
             {
                 for (var f = 0; f < featureSize; f++)
                 {

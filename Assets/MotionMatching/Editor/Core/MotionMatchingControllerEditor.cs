@@ -22,7 +22,7 @@ namespace MotionMatching
             if (controller.mmData == null) { return; }
 
             // Feature Weights
-            int featuresCount = controller.mmData.TrajectoryFeatures.Count + controller.mmData.PoseFeatures.Count + controller.mmData.EnvironmentFeatures.Count;
+            int featuresCount = controller.mmData.trajectoryFeatures.Count + controller.mmData.poseFeatures.Count + controller.mmData.environmentFeatures.Count;
             if (controller.featureWeights.Length != featuresCount)
             {
                 float[] newWeights = new float[featuresCount];
@@ -35,25 +35,25 @@ namespace MotionMatching
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.mmData.TrajectoryFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.trajectoryFeatures.Count; ++i)
                 {
-                    string name = controller.mmData.TrajectoryFeatures[i].Name;
+                    string name = controller.mmData.trajectoryFeatures[i].name;
                     controller.featureWeights[i] = EditorGUILayout.FloatField(name, controller.featureWeights[i]);
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.mmData.PoseFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.poseFeatures.Count; ++i)
                 {
-                    string name = controller.mmData.PoseFeatures[i].Name;
-                    int index = controller.mmData.TrajectoryFeatures.Count + i;
+                    string name = controller.mmData.poseFeatures[i].name;
+                    int index = controller.mmData.trajectoryFeatures.Count + i;
                     controller.featureWeights[index] = EditorGUILayout.FloatField(name, controller.featureWeights[index]);
                 }
                 EditorGUILayout.EndVertical();
                 EditorGUILayout.BeginVertical(GUI.skin.box);
-                for (int i = 0; i < controller.mmData.EnvironmentFeatures.Count; ++i)
+                for (int i = 0; i < controller.mmData.environmentFeatures.Count; ++i)
                 {
-                    string name = controller.mmData.EnvironmentFeatures[i].Name;
-                    int index = controller.mmData.TrajectoryFeatures.Count + controller.mmData.PoseFeatures.Count + i;
+                    string name = controller.mmData.environmentFeatures[i].name;
+                    int index = controller.mmData.trajectoryFeatures.Count + controller.mmData.poseFeatures.Count + i;
                     controller.featureWeights[index] = EditorGUILayout.FloatField(name, controller.featureWeights[index]);
                 }
                 EditorGUILayout.EndVertical();

@@ -12,18 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 55cf7c996f1876c488c1aa7622b5b34f, type: 3}
   m_Name: MotionMatchingData
   m_EditorClassIdentifier: JLPM.MotionMatching::MotionMatching.MotionMatchingData
-  AnimationDatas:
+  animationClips:
   - {fileID: 11400000, guid: 3242dfa08bb3cf248987ae6021c3666a, type: 2}
-  AnimationDataTPose: {fileID: 11400000, guid: 3242dfa08bb3cf248987ae6021c3666a, type: 2}
-  HipsForwardLocalVector:
+  tPoseAnimationClip: {fileID: 11400000, guid: 67765493bb861ae4fa48573bc0c54ebc, type: 2}
+  hipsForwardLocalVector:
     x: -0.011357397
     y: 0.99932635
     z: 0.0348987
-  HipsUpLocalVector:
+  hipsUpLocalVector:
     x: 0.99991333
     y: 0.01111716
     z: 0.007068366
-  ContactVelocityThreshold: 0.15
+  contactVelocityThreshold: 0.15
   animationChannelToMecanim:
   - name: Hips
     mecanimBone: 0
@@ -69,44 +69,44 @@ MonoBehaviour:
     mecanimBone: 16
   - name: RightHand
     mecanimBone: 18
-  TrajectoryFeatures:
-  - Name: FuturePosition
-    FeatureType: 0
-    FramesPrediction: 14000000280000003c000000
-    SimulationBone: 1
-    Bone: 0
-    ZeroX: 0
-    ZeroY: 1
-    ZeroZ: 0
-    FeatureExtractor: {fileID: 0}
-    IsMainPositionFeature: 1
-  - Name: FutureDirection
-    FeatureType: 1
-    FramesPrediction: 14000000280000003c000000
-    SimulationBone: 1
-    Bone: 0
-    ZeroX: 0
-    ZeroY: 1
-    ZeroZ: 0
-    FeatureExtractor: {fileID: 0}
-    IsMainPositionFeature: 0
-  PoseFeatures:
-  - Name: LeftFootPosition
-    FeatureType: 0
-    Bone: 5
-  - Name: LeftFootVelocity
-    FeatureType: 1
-    Bone: 5
-  - Name: RightFootPosition
-    FeatureType: 0
-    Bone: 6
-  - Name: RightFootVelocity
-    FeatureType: 1
-    Bone: 6
-  - Name: HipsVelocity
-    FeatureType: 1
-    Bone: 0
-  EnvironmentFeatures: []
+  trajectoryFeatures:
+  - name: FuturePosition
+    featureType: 0
+    framesPrediction: 14000000280000003c000000
+    simulationBone: 1
+    bone: 0
+    zeroX: 0
+    zeroY: 1
+    zeroZ: 0
+    featureExtractor: {fileID: 0}
+    isMainPositionFeature: 1
+  - name: FutureDirection
+    featureType: 1
+    framesPrediction: 14000000280000003c000000
+    simulationBone: 1
+    bone: 0
+    zeroX: 0
+    zeroY: 1
+    zeroZ: 0
+    featureExtractor: {fileID: 0}
+    isMainPositionFeature: 0
+  poseFeatures:
+  - name: LeftFootPosition
+    featureType: 0
+    bone: 5
+  - name: LeftFootVelocity
+    featureType: 1
+    bone: 5
+  - name: RightFootPosition
+    featureType: 0
+    bone: 6
+  - name: RightFootVelocity
+    featureType: 1
+    bone: 6
+  - name: HipsVelocity
+    featureType: 1
+    bone: 0
+  environmentFeatures: []
   jointsLocalForward:
   - x: 0
     y: 0

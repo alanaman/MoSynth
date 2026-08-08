@@ -68,7 +68,7 @@ namespace MotionMatching
             NumberFeatureVectors = numberFeatureVectors;
 
             // Trajectory Features
-            NumberTrajectoryFeatures = mmData.TrajectoryFeatures.Count;
+            NumberTrajectoryFeatures = mmData.trajectoryFeatures.Count;
             _numberPredictionsTrajectory = new int[NumberTrajectoryFeatures];
             _numberFloatsTrajectory = new int[NumberTrajectoryFeatures];
             _trajectoryOffset = new int[NumberTrajectoryFeatures];
@@ -76,28 +76,28 @@ namespace MotionMatching
             for (var i = 0; i < NumberTrajectoryFeatures; i++)
             {
                 _trajectoryOffset[i] = offset;
-                _numberPredictionsTrajectory[i] = mmData.TrajectoryFeatures[i].FramesPrediction.Length;
-                _numberFloatsTrajectory[i] = mmData.TrajectoryFeatures[i].GetSize();
+                _numberPredictionsTrajectory[i] = mmData.trajectoryFeatures[i].framesPrediction.Length;
+                _numberFloatsTrajectory[i] = mmData.trajectoryFeatures[i].GetSize();
                 offset += _numberPredictionsTrajectory[i] * _numberFloatsTrajectory[i];
             }
 
             // Pose Features
             PoseOffset = offset;
-            PoseFeatureCount = mmData.PoseFeatures.Count;
+            PoseFeatureCount = mmData.poseFeatures.Count;
             offset += PoseFloatCount; // + Pose
 
             FeatureStaticSize = offset;
 
             // Environment Features
-            NumberEnvironmentFeatures = mmData.EnvironmentFeatures.Count;
+            NumberEnvironmentFeatures = mmData.environmentFeatures.Count;
             var numberPredictionsEnvironment = new int[NumberEnvironmentFeatures];
             _numberFloatsEnvironment = new int[NumberEnvironmentFeatures];
             EnvironmentOffset = new int[NumberEnvironmentFeatures];
             for (var i = 0; i < NumberEnvironmentFeatures; i++)
             {
                 EnvironmentOffset[i] = offset;
-                numberPredictionsEnvironment[i] = mmData.EnvironmentFeatures[i].FramesPrediction.Length;
-                _numberFloatsEnvironment[i] = mmData.EnvironmentFeatures[i].GetSize();
+                numberPredictionsEnvironment[i] = mmData.environmentFeatures[i].framesPrediction.Length;
+                _numberFloatsEnvironment[i] = mmData.environmentFeatures[i].GetSize();
                 offset += numberPredictionsEnvironment[i] * _numberFloatsEnvironment[i];
             }
 
@@ -526,32 +526,32 @@ namespace MotionMatching
             // Check skeleton has all needed joints
             var jointsTrajectory = new Joint[NumberTrajectoryFeatures];
             var i = 0;
-            foreach (var trajectoryFeature in mmData.TrajectoryFeatures)
+            foreach (var trajectoryFeature in mmData.trajectoryFeatures)
             {
-                if ((trajectoryFeature.FeatureType == TrajectoryFeature.Type.Position ||
-                    trajectoryFeature.FeatureType == TrajectoryFeature.Type.Direction)
-                    && !trajectoryFeature.SimulationBone)
+                if ((trajectoryFeature.featureType == TrajectoryFeature.Type.Position ||
+                    trajectoryFeature.featureType == TrajectoryFeature.Type.Direction)
+                    && !trajectoryFeature.simulationBone)
                 {
-                    if (!poseSet.Skeleton.TryFind(trajectoryFeature.Bone, out jointsTrajectory[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + trajectoryFeature.Bone);
+                    if (!poseSet.Skeleton.TryFind(trajectoryFeature.bone, out jointsTrajectory[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + trajectoryFeature.bone);
                 }
                 i += 1;
             }
             var jointsPose = new Joint[PoseFeatureCount];
             i = 0;
-            foreach (var poseFeature in mmData.PoseFeatures)
+            foreach (var poseFeature in mmData.poseFeatures)
             {
-                if (!poseSet.Skeleton.TryFind(poseFeature.Bone, out jointsPose[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + poseFeature.Bone);
+                if (!poseSet.Skeleton.TryFind(poseFeature.bone, out jointsPose[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + poseFeature.bone);
                 i += 1;
             }
             var jointsEnvironment = new Joint[NumberEnvironmentFeatures];
             i = 0;
-            foreach (var environmentFeature in mmData.EnvironmentFeatures)
+            foreach (var environmentFeature in mmData.environmentFeatures)
             {
-                if ((environmentFeature.FeatureType == TrajectoryFeature.Type.Position ||
-                    environmentFeature.FeatureType == TrajectoryFeature.Type.Direction)
-                    && !environmentFeature.SimulationBone)
+                if ((environmentFeature.featureType == TrajectoryFeature.Type.Position ||
+                    environmentFeature.featureType == TrajectoryFeature.Type.Direction)
+                    && !environmentFeature.simulationBone)
                 {
-                    if (!poseSet.Skeleton.TryFind(environmentFeature.Bone, out jointsEnvironment[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + environmentFeature.Bone);
+                    if (!poseSet.Skeleton.TryFind(environmentFeature.bone, out jointsEnvironment[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + environmentFeature.bone);
                 }
                 i += 1;
             }
@@ -588,16 +588,16 @@ namespace MotionMatching
             // Trajectory Features -------------------------------------------------------------
             for (var i = 0; i < NumberTrajectoryFeatures; i++)
             {
-                var trajectoryFeature = mmData.TrajectoryFeatures[i];
+                var trajectoryFeature = mmData.trajectoryFeatures[i];
                 var featureOffset = featureIndex + _trajectoryOffset[i];
                 var nextFeatureOffset = nextFeatureIndex + _trajectoryOffset[i];
                 var isStartFeature = true;
-                for (var p = 0; p < trajectoryFeature.FramesPrediction.Length; ++p)
+                for (var p = 0; p < trajectoryFeature.framesPrediction.Length; ++p)
                 {
                     var predictionOffset = featureOffset + p * _numberFloatsTrajectory[i];
                     var nextPredictionOffset = nextFeatureOffset + p * _numberFloatsTrajectory[i];
-                    var futurePoseIndex = poseIndex + trajectoryFeature.FramesPrediction[p];
-                    var nextFuturePoseIndex = nextPose + trajectoryFeature.FramesPrediction[p];
+                    var futurePoseIndex = poseIndex + trajectoryFeature.framesPrediction[p];
+                    var nextFuturePoseIndex = nextPose + trajectoryFeature.framesPrediction[p];
 
                     isStartFeature = ExtractTrajectoryFeature(trajectoryFeature, poseSet, futurePoseIndex, nextFuturePoseIndex,
                                                               jointsTrajectory, i, predictionOffset, characterOrigin, characterForward,
@@ -608,10 +608,10 @@ namespace MotionMatching
             // Pose Features -------------------------------------------------------------
             for (var i = 0; i < PoseFeatureCount; i++)
             {
-                var poseFeature = mmData.PoseFeatures[i];
+                var poseFeature = mmData.poseFeatures[i];
                 var featureOffset = featureIndex + PoseOffset + i * FloatsPerPoseFeature;
                 float3 feature = new();
-                switch (poseFeature.FeatureType)
+                switch (poseFeature.featureType)
                 {
                     case MotionMatchingData.PoseFeature.Type.Position:
                         feature = GetJointPosition(pose, poseSet.Skeleton, jointsPose[i], characterOrigin, characterForward);
@@ -620,7 +620,7 @@ namespace MotionMatching
                         feature = GetJointVelocity(pose, poseNext, poseSet.Skeleton, jointsPose[i], characterOrigin, characterForward, poseSet.FrameTime);
                         break;
                     default:
-                        Debug.Assert(false, "Unknown PoseFeature.Type: " + poseFeature.FeatureType);
+                        Debug.Assert(false, "Unknown PoseFeature.Type: " + poseFeature.featureType);
                         break;
                 }
                 _features[featureOffset + 0] = feature.x;
@@ -631,16 +631,16 @@ namespace MotionMatching
             // Environment Features -------------------------------------------------------------
             for (var i = 0; i < NumberEnvironmentFeatures; i++)
             {
-                var environmentFeature = mmData.EnvironmentFeatures[i];
+                var environmentFeature = mmData.environmentFeatures[i];
                 var featureOffset = featureIndex + EnvironmentOffset[i];
                 var nextFeatureOffset = nextFeatureIndex + EnvironmentOffset[i];
                 var isStartFeature = true;
-                for (var p = 0; p < environmentFeature.FramesPrediction.Length; ++p)
+                for (var p = 0; p < environmentFeature.framesPrediction.Length; ++p)
                 {
                     var predictionOffset = featureOffset + p * _numberFloatsEnvironment[i];
                     var nextPredictionOffset = nextFeatureOffset + p * _numberFloatsEnvironment[i];
-                    var futurePoseIndex = poseIndex + environmentFeature.FramesPrediction[p];
-                    var nextFuturePoseIndex = nextPose + environmentFeature.FramesPrediction[p];
+                    var futurePoseIndex = poseIndex + environmentFeature.framesPrediction[p];
+                    var nextFuturePoseIndex = nextPose + environmentFeature.framesPrediction[p];
 
                     isStartFeature = ExtractTrajectoryFeature(environmentFeature, poseSet, futurePoseIndex, nextFuturePoseIndex,
                                                               jointsEnvironment, i, predictionOffset, characterOrigin, characterForward,
@@ -657,27 +657,27 @@ namespace MotionMatching
             poseSet.GetPose(nextFuturePoseIndex, out var nextFuturePose, out var nextAnimationClip);
 
             float3 value = new();
-            switch (feature.FeatureType)
+            switch (feature.featureType)
             {
                 case TrajectoryFeature.Type.Position:
                     {
-                        GetTrajectoryPosition(futurePose, poseSet.Skeleton, feature.SimulationBone, joints[featureIt], characterOrigin, characterForward,
+                        GetTrajectoryPosition(futurePose, poseSet.Skeleton, feature.simulationBone, joints[featureIt], characterOrigin, characterForward,
                                               out value);
                     }
                     break;
                 case TrajectoryFeature.Type.Direction:
                     {
-                        GetTrajectoryDirection(futurePose, poseSet.Skeleton, feature.SimulationBone, joints[featureIt], characterForward, mmData,
+                        GetTrajectoryDirection(futurePose, poseSet.Skeleton, feature.simulationBone, joints[featureIt], characterForward, mmData,
                                                out value);
-                        if (feature.ZeroX) value.x = 0;
-                        if (feature.ZeroY) value.y = 0;
-                        if (feature.ZeroZ) value.z = 0;
+                        if (feature.zeroX) value.x = 0;
+                        if (feature.zeroY) value.y = 0;
+                        if (feature.zeroZ) value.z = 0;
                         value = math.normalize(value);
                     }
                     break;
                 case TrajectoryFeature.Type.Custom1D:
                     {
-                        var extractor1D = feature.FeatureExtractor as Feature1DExtractor;
+                        var extractor1D = feature.featureExtractor as Feature1DExtractor;
                         Assert.IsNotNull(extractor1D);
                         if (isStartFeature)
                         {
@@ -690,7 +690,7 @@ namespace MotionMatching
                     break;
                 case TrajectoryFeature.Type.Custom2D:
                     {
-                        var extractor2D = feature.FeatureExtractor as Feature2DExtractor;
+                        var extractor2D = feature.featureExtractor as Feature2DExtractor;
                         Assert.IsNotNull(extractor2D);
                         if (isStartFeature)
                         {
@@ -704,7 +704,7 @@ namespace MotionMatching
                     break;
                 case TrajectoryFeature.Type.Custom3D:
                     {
-                        var extractor3D = feature.FeatureExtractor as Feature3DExtractor;
+                        var extractor3D = feature.featureExtractor as Feature3DExtractor;
                         Assert.IsNotNull(extractor3D);
                         if (isStartFeature)
                         {
@@ -719,7 +719,7 @@ namespace MotionMatching
                     break;
                 case TrajectoryFeature.Type.Custom4D:
                     {
-                        var extractor4D = feature.FeatureExtractor as Feature4DExtractor;
+                        var extractor4D = feature.featureExtractor as Feature4DExtractor;
                         Assert.IsNotNull(extractor4D);
                         if (isStartFeature)
                         {
@@ -734,19 +734,19 @@ namespace MotionMatching
                     }
                     break;
                 default:
-                    Debug.Assert(false, "Unsupported Feature Type: " + feature.FeatureType);
+                    Debug.Assert(false, "Unsupported Feature Type: " + feature.featureType);
                     break;
             }
-            if (feature.FeatureType == TrajectoryFeature.Type.Position ||
-                feature.FeatureType == TrajectoryFeature.Type.Direction)
+            if (feature.featureType == TrajectoryFeature.Type.Position ||
+                feature.featureType == TrajectoryFeature.Type.Direction)
             {
                 var offsetIndex = 0;
                 var valueIndex = 0;
                 var size = feature.GetSize();
                 for (var f = 0; f < size; ++f)
                 {
-                    if (valueIndex == 0 && feature.ZeroX) valueIndex += 1;
-                    if (valueIndex == 1 && feature.ZeroY) valueIndex += 1;
+                    if (valueIndex == 0 && feature.zeroX) valueIndex += 1;
+                    if (valueIndex == 1 && feature.zeroY) valueIndex += 1;
                     _features[predictionOffset + offsetIndex] = value[valueIndex];
                     valueIndex += 1;
                     offsetIndex += 1;
@@ -851,36 +851,36 @@ namespace MotionMatching
             var p = predictionIndex;
 
             float3 value;
-            if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
+            if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroY && !trajectoryFeature.zeroZ)
             {
                 value = isEnvironment ? Get3DEnvironmentFeature(currentFrame, t, p) : Get3DTrajectoryFeature(currentFrame, t, p, true);
             }
-            else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroY)
+            else if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroY)
             {
                 var value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(value2D.x, value2D.y, 0);
             }
-            else if (!trajectoryFeature.ZeroX && !trajectoryFeature.ZeroZ)
+            else if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroZ)
             {
                 var value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(value2D.x, 0.0f, value2D.y);
             }
-            else if (!trajectoryFeature.ZeroY && !trajectoryFeature.ZeroZ)
+            else if (!trajectoryFeature.zeroY && !trajectoryFeature.zeroZ)
             {
                 var value2D = isEnvironment ? Get2DEnvironmentFeature(currentFrame, t, p) : Get2DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(0.0f, value2D.x, value2D.y);
             }
-            else if (!trajectoryFeature.ZeroX)
+            else if (!trajectoryFeature.zeroX)
             {
                 var value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(value1D, 0.0f, 0.0f);
             }
-            else if (!trajectoryFeature.ZeroY)
+            else if (!trajectoryFeature.zeroY)
             {
                 var value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(0.0f, value1D, 0.0f);
             }
-            else if (!trajectoryFeature.ZeroZ)
+            else if (!trajectoryFeature.zeroZ)
             {
                 var value1D = isEnvironment ? Get1DEnvironmentFeature(currentFrame, t, p) : Get1DTrajectoryFeature(currentFrame, t, p, true);
                 value = new float3(0.0f, 0.0f, value1D);

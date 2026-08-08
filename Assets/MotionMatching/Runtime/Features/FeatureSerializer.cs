@@ -39,26 +39,26 @@ namespace MotionMatching
                     }
 
                     // Serialize Features
-                    for (int t = 0; t < mmData.TrajectoryFeatures.Count; ++t)
+                    for (int t = 0; t < mmData.trajectoryFeatures.Count; ++t)
                     {
-                        var trajectoryFeature = mmData.TrajectoryFeatures[t];
-                        writer.Write(trajectoryFeature.Name);
+                        var trajectoryFeature = mmData.trajectoryFeatures[t];
+                        writer.Write(trajectoryFeature.name);
                         writer.Write(trajectoryFeature.GetSize());
-                        writer.Write((uint)trajectoryFeature.FramesPrediction.Length);
+                        writer.Write((uint)trajectoryFeature.framesPrediction.Length);
                     }
-                    for (int p = 0; p < mmData.PoseFeatures.Count; ++p)
+                    for (int p = 0; p < mmData.poseFeatures.Count; ++p)
                     {
-                        var poseFeature = mmData.PoseFeatures[p];
-                        writer.Write(poseFeature.Name);
+                        var poseFeature = mmData.poseFeatures[p];
+                        writer.Write(poseFeature.name);
                         writer.Write(3u);
                         writer.Write(1u);
                     }
-                    for (int d = 0; d < mmData.EnvironmentFeatures.Count; ++d)
+                    for (int d = 0; d < mmData.environmentFeatures.Count; ++d)
                     {
-                        var environmentFeature = mmData.EnvironmentFeatures[d];
-                        writer.Write(environmentFeature.Name);
+                        var environmentFeature = mmData.environmentFeatures[d];
+                        writer.Write(environmentFeature.name);
                         writer.Write(environmentFeature.GetSize());
-                        writer.Write((uint)environmentFeature.FramesPrediction.Length);
+                        writer.Write((uint)environmentFeature.framesPrediction.Length);
                     }
 
                     // Serialize Feature Vectors
@@ -66,11 +66,11 @@ namespace MotionMatching
                     {
                         writer.Write(featureSet.IsValidFeature(i) ? 1u : 0u);
                         // Trajectory
-                        for (int t = 0; t < mmData.TrajectoryFeatures.Count; ++t)
+                        for (int t = 0; t < mmData.trajectoryFeatures.Count; ++t)
                         {
-                            var trajectoryFeature = mmData.TrajectoryFeatures[t];
+                            var trajectoryFeature = mmData.trajectoryFeatures[t];
                             int featureSize = trajectoryFeature.GetSize();
-                            for (int p = 0; p < trajectoryFeature.FramesPrediction.Length; ++p)
+                            for (int p = 0; p < trajectoryFeature.framesPrediction.Length; ++p)
                             {
                                 if (featureSize == 4)
                                 {
@@ -99,16 +99,16 @@ namespace MotionMatching
                             }
                         }
                         // Pose
-                        for (int p = 0; p < mmData.PoseFeatures.Count; ++p)
+                        for (int p = 0; p < mmData.poseFeatures.Count; ++p)
                         {
                             WriteFloat3(writer, featureSet.GetPoseFeature(i, p));
                         }
                         // Environment
-                        for (int d = 0; d < mmData.EnvironmentFeatures.Count; ++d)
+                        for (int d = 0; d < mmData.environmentFeatures.Count; ++d)
                         {
-                            var environmentFeature = mmData.EnvironmentFeatures[d];
+                            var environmentFeature = mmData.environmentFeatures[d];
                             int featureSize = environmentFeature.GetSize();
-                            for (int p = 0; p < environmentFeature.FramesPrediction.Length; ++p)
+                            for (int p = 0; p < environmentFeature.framesPrediction.Length; ++p)
                             {
                                 if (featureSize == 4)
                                 {
@@ -177,36 +177,36 @@ namespace MotionMatching
                         }
 
                         // Deserialize Features (basically check that everything is correct)
-                        Debug.Assert(numberFeatures == (mmData.TrajectoryFeatures.Count + mmData.PoseFeatures.Count + mmData.EnvironmentFeatures.Count), "Number of features in file does not match number of features in Motion Matching Data");
-                        for (int t = 0; t < mmData.TrajectoryFeatures.Count; ++t)
+                        Debug.Assert(numberFeatures == (mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count + mmData.environmentFeatures.Count), "Number of features in file does not match number of features in Motion Matching Data");
+                        for (int t = 0; t < mmData.trajectoryFeatures.Count; ++t)
                         {
-                            var trajectoryFeature = mmData.TrajectoryFeatures[t];
+                            var trajectoryFeature = mmData.trajectoryFeatures[t];
                             string name = reader.ReadString();
                             uint nFloatsType = reader.ReadUInt32();
                             uint nElements = reader.ReadUInt32();
-                            Debug.Assert(name == trajectoryFeature.Name, "Name of trajectory feature does not match");
+                            Debug.Assert(name == trajectoryFeature.name, "Name of trajectory feature does not match");
                             Debug.Assert(nFloatsType == (uint)trajectoryFeature.GetSize(), "Projection type of trajectory feature does not match");
-                            Debug.Assert(nElements == (uint)trajectoryFeature.FramesPrediction.Length, "Number of frames prediction of trajectory feature does not match");
+                            Debug.Assert(nElements == (uint)trajectoryFeature.framesPrediction.Length, "Number of frames prediction of trajectory feature does not match");
                         }
-                        for (int p = 0; p < mmData.PoseFeatures.Count; ++p)
+                        for (int p = 0; p < mmData.poseFeatures.Count; ++p)
                         {
-                            var poseFeature = mmData.PoseFeatures[p];
+                            var poseFeature = mmData.poseFeatures[p];
                             string name = reader.ReadString();
                             uint nFloatsType = reader.ReadUInt32();
                             uint nElements = reader.ReadUInt32();
-                            Debug.Assert(name == poseFeature.Name, "Name of pose feature does not match");
+                            Debug.Assert(name == poseFeature.name, "Name of pose feature does not match");
                             Debug.Assert(nFloatsType == 3u, "Projection type of pose feature does not match");
                             Debug.Assert(nElements == 1u, "Number of frames prediction of pose feature does not match");
                         }
-                        for (int t = 0; t < mmData.EnvironmentFeatures.Count; ++t)
+                        for (int t = 0; t < mmData.environmentFeatures.Count; ++t)
                         {
-                            var environmentFeature = mmData.EnvironmentFeatures[t];
+                            var environmentFeature = mmData.environmentFeatures[t];
                             string name = reader.ReadString();
                             uint nFloatsType = reader.ReadUInt32();
                             uint nElements = reader.ReadUInt32();
-                            Debug.Assert(name == environmentFeature.Name, "Name of environment feature does not match");
+                            Debug.Assert(name == environmentFeature.name, "Name of environment feature does not match");
                             Debug.Assert(nFloatsType == (uint)environmentFeature.GetSize(), "Projection type of environment feature does not match");
-                            Debug.Assert(nElements == (uint)environmentFeature.FramesPrediction.Length, "Number of frames prediction of environment feature does not match");
+                            Debug.Assert(nElements == (uint)environmentFeature.framesPrediction.Length, "Number of frames prediction of environment feature does not match");
                         }
 
                         // Deserialize Feature Vectors

@@ -52,7 +52,7 @@ namespace MotionMatching
             return EndRanges;
         }
 
-        public void ComputeRanges(PoseSet poseSet, List<MotionMatching.AnimationData.Tag> tags=null, bool force=false)
+        public void ComputeRanges(PoseSet poseSet, List<MotionMatching.AnnotatedAnimationClip.Tag> tags=null, bool force=false)
         {
             if (!Dirty && !force) return;
 
@@ -71,10 +71,10 @@ namespace MotionMatching
                         Debug.Assert(tags != null);
                         foreach (var tag in tags)
                         {
-                            if (tag.Name == Tags[g] && tag.Start != null)
+                            if (tag.name == Tags[g] && tag.start != null)
                             {
-                                start = new NativeArray<int>(tag.Start, Allocator.Temp);
-                                end = new NativeArray<int>(tag.End, Allocator.Temp);
+                                start = new NativeArray<int>(tag.start, Allocator.Temp);
+                                end = new NativeArray<int>(tag.end, Allocator.Temp);
                                 toDelete.Add(start);
                                 toDelete.Add(end);
                                 return true;
