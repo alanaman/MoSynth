@@ -197,6 +197,7 @@ def train(data_dir: str,
           tug_ratio: float = 0.1,
           pos_weight: float = 0.2,
           vel_weight: float = 0.9,
+          bone_weights=None,
           device: str = 'auto',
           knn_chunk: int = 64,
           state_chunk: int = DEFAULT_STATE_CHUNK,
@@ -210,6 +211,9 @@ def train(data_dir: str,
     :param out_path: destination `.mffield.npz`, normally under StreamingAssets
     :param cache_path: optional `.mftables.npz` rebuild cache. Belongs in
         `Library/`, not in Assets -- it is tens of MB and useless at runtime.
+    :param bone_weights: optional per-joint emphasis on the similarity metric,
+        see `MotionField.resolve_bone_weights`. Changing it invalidates both the
+        table cache and any previously trained value function.
     :param force: rebuild the transition tables even if the cache is valid
     :param progress: optional callable(stage_name, fraction_0_to_1)
     :return: a summary dict (also useful as the value Unity logs)
@@ -223,7 +227,7 @@ def train(data_dir: str,
     motion_field = MotionField(poses_x, poses_v, poses_y, skeleton, frame_time,
                                device=device, pos_weight=pos_weight, vel_weight=vel_weight,
                                k_neighbors=k_neighbors, tug_ratio=tug_ratio,
-                               knn_chunk=knn_chunk)
+                               knn_chunk=knn_chunk, bone_weights=bone_weights)
 
     signature = mfio.database_signature(data_dir, db_name)
     table_params = {
@@ -232,6 +236,9 @@ def train(data_dir: str,
         'tug_mode': mfio.TUG_MODE,
         'pos_weight': float(pos_weight),
         'vel_weight': float(vel_weight),
+        # Part of the metric, so part of what makes a cached transition table or
+        # a trained value function stale.
+        'bone_weights_sha1': mfio.bone_weights_signature(motion_field.bone_weights),
         'frame_time': float(frame_time),
         'states_count': int(motion_field.states_count),
     }
@@ -296,6 +303,8 @@ def _parse_args(argv=None):
     parser.add_argument('--tug-ratio', type=float, default=0.1)
     parser.add_argument('--pos-weight', type=float, default=0.2)
     parser.add_argument('--vel-weight', type=float, default=0.9)
+    parser.add_argument('--bone-weights', default=None,
+                        help='JSON file of {"JointName": [pos, vel]} per-joint metric weights')
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--knn-chunk', type=int, default=64)
     parser.add_argument('--state-chunk', type=int, default=DEFAULT_STATE_CHUNK)
@@ -316,6 +325,7 @@ def main(argv=None) -> int:
           k_neighbors=args.k_neighbors, theta_count=args.theta_count,
           epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
           pos_weight=args.pos_weight, vel_weight=args.vel_weight,
+          bone_weights=mfio.load_bone_weights_file(args.bone_weights),
           device=args.device, knn_chunk=args.knn_chunk,
           state_chunk=args.state_chunk, force=args.force, progress=report)
     return 0

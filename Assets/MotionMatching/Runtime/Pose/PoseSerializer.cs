@@ -91,22 +91,22 @@ public class PoseSerializer
     }
 
     /// <summary>
-    /// Reads the full pose representation of all poses for Motion Matching from a binary format
-    /// in the specified path with name filename and extension .mmpose and .mmskeleton
-    /// Returns true if poseSet was successfully deserialized, false otherwise
+    /// Reads only the .mmskeleton file, without touching the far larger .mmpose alongside it.
+    /// Returns false if the file is not there.
     /// </summary>
-    public bool Deserialize(string path, string fileName, IPoseSetSource source, out PoseSet poseSet)
+    /// <remarks>
+    /// Split out of <see cref="Deserialize"/> for callers that want the joint hierarchy on its own
+    /// -- an inspector listing bone names, for instance, which would otherwise pay for megabytes of
+    /// pose data on every repaint.
+    /// </remarks>
+    public static bool TryDeserializeSkeleton(string path, string fileName, out Skeleton skeleton)
     {
-        poseSet = new PoseSet(source);
+        skeleton = new Skeleton();
 
-        // --------------------
-        // Read Skeleton File
-        // --------------------
         string skeletonPath = Path.Combine(path, fileName + ".mmskeleton");
         if (!File.Exists(skeletonPath))
             return false;
 
-        Skeleton skeleton = new Skeleton();
         byte[] skeletonData = File.ReadAllBytes(skeletonPath);
         using (var ms = new MemoryStream(skeletonData))
         {
@@ -126,6 +126,24 @@ public class PoseSerializer
                 }
             }
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Reads the full pose representation of all poses for Motion Matching from a binary format
+    /// in the specified path with name filename and extension .mmpose and .mmskeleton
+    /// Returns true if poseSet was successfully deserialized, false otherwise
+    /// </summary>
+    public bool Deserialize(string path, string fileName, IPoseSetSource source, out PoseSet poseSet)
+    {
+        poseSet = new PoseSet(source);
+
+        // --------------------
+        // Read Skeleton File
+        // --------------------
+        if (!TryDeserializeSkeleton(path, fileName, out Skeleton skeleton))
+            return false;
 
         poseSet.SetSkeletonFromFile(skeleton);
 

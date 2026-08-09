@@ -31,6 +31,16 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
     private Transform _rootTransform;
 
+    /// <summary>
+    /// Sink for the Python side's own diagnostics.
+    /// </summary>
+    /// <remarks>
+    /// Python logs to stdout, which PythonNET does not forward anywhere Unity shows, so anything it
+    /// says about a rejected artefact would otherwise vanish. Static so the delegate stays rooted
+    /// for as long as Python might hold it.
+    /// </remarks>
+    private static readonly Action<string> PythonLog = message => Debug.Log(message);
+
     [Tooltip("Animation database and motion field hyperparameters. Train the value function from " +
              "this asset's inspector.")]
     [SerializeField]
@@ -147,8 +157,12 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
             using (Py.GIL())
             {
-                _actionPredictor = PythonRuntime.Import("action_predictor", reloadPythonModules);
-                dynamic motionFieldModule = PythonRuntime.Import("MotionField", reloadPythonModules);
+                // Once, up front, rather than per import: every module pulled in below then comes
+                // from the same generation of the source, sharing one copy of each shared class.
+                if (reloadPythonModules) PythonRuntime.InvalidateProjectModules();
+
+                _actionPredictor = PythonRuntime.Import("action_predictor");
+                dynamic motionFieldModule = PythonRuntime.Import("MotionField");
 
                 string dataPath = config.GetAssetPath();
                 var animData = _actionPredictor.load_animations(dataPath, config.name);
@@ -159,6 +173,8 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 dynamic poseContacts = animData[4];
                 dynamic frameTime = animData[5];
 
+                using PyDict boneWeights = MotionFieldBoneWeights.ToPython(config);
+
                 _motionField = motionFieldModule.MotionField(
                     poseX, poseV, poseY, _skeleton, frameTime,
                     device: config.DeviceName,
@@ -166,14 +182,27 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                     vel_weight: config.velWeight,
                     k_neighbors: config.kNeighbors,
                     tug_ratio: config.tugRatio,
-                    knn_chunk: config.knnChunk);
+                    knn_chunk: config.knnChunk,
+                    bone_weights: boneWeights);
 
                 // A stale or absent value function degrades to greedy control rather than throwing.
                 // Failing hard here would surface as an opaque managed exception in a player build.
                 string valuePath = config.GetValueFunctionPath();
                 if (File.Exists(valuePath))
                 {
-                    _motionField.load_value_function(valuePath, dataPath, config.name);
+                    bool loaded = (bool)_motionField.load_value_function(
+                        valuePath, dataPath, config.name, PythonLog);
+
+                    // Silence here would read as the policy changing its mind on its own. Editing
+                    // the bone weights or any other metric parameter invalidates the training, and
+                    // that has to be visible or the character just quietly gets worse.
+                    if (!loaded)
+                    {
+                        Debug.LogWarning(
+                            "[MotionField] The trained value function does not match this config " +
+                            "(reason logged above), so the stage is running the one-step-greedy " +
+                            "policy. Press Train Motion Field on the config to rebuild it.");
+                    }
                 }
                 else
                 {
@@ -222,22 +251,22 @@ public class MotionFieldStage : MoSynthStage, IDisposable
             return;
         }
 
-        dynamic embeddingModule = PythonRuntime.Import("motion_field_embedding", reloadPythonModules);
+        // Init has already invalidated the module cache if it was going to, and re-invalidating
+        // here would hand this module a second copy of MotionField's classes.
+        dynamic embeddingModule = PythonRuntime.Import("motion_field_embedding");
 
-        // Python's own logging goes to stdout, which PythonNET does not forward, so a rejected
-        // embedding would otherwise fail completely silently. Route it into the Unity console.
-        // The Python messages already carry their own [MotionField] prefix.
-        Action<string> log = message => Debug.Log(message);
-
+        // The field's already-resolved table goes back across so Python can report a projection
+        // fitted under different bone weights. That only warns -- the cloud still maps state for
+        // state, and blanking it every time a weight is nudged would take the tool away exactly
+        // when it is being used.
         dynamic arrays = embeddingModule.load_embedding_arrays(
-            embeddingPath, dataPath, config.name, stateCount, log);
+            embeddingPath, dataPath, config.name, stateCount, PythonLog,
+            bone_weights: _motionField.bone_weights);
 
         var flat = (float[])arrays[0];
         int[] edges = (int[])arrays[1];
         var speeds = (float[])arrays[2];
         int embeddedStates = (int)arrays[3];
-
-        GC.KeepAlive(log);
 
         if (embeddedStates == 0 || flat.Length < embeddedStates * 3)
         {

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using MotionMatching;
 using Python.Runtime;
 using UnityEditor;
@@ -22,6 +24,25 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 {
     private MotionMatchingData _importSource;
     private bool _showImport;
+    private bool _showBoneWeights = true;
+
+    // Skeleton of the generated database, cached because OnInspectorGUI repaints constantly and
+    // this comes off disk. Dropped on enable and whenever the database is regenerated.
+    private Skeleton _skeleton;
+    private int[] _jointDepths;
+    private bool _skeletonRead;
+
+    private void OnEnable()
+    {
+        InvalidateSkeleton();
+    }
+
+    private void InvalidateSkeleton()
+    {
+        _skeleton = null;
+        _jointDepths = null;
+        _skeletonRead = false;
+    }
 
     public override void OnInspectorGUI()
     {
@@ -34,6 +55,9 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
         EditorGUILayout.Space();
         DrawDatabaseSection(config);
+
+        EditorGUILayout.Space();
+        DrawBoneWeightSection(config);
 
         EditorGUILayout.Space();
         DrawTrainingSection(config);
@@ -102,8 +126,176 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             if (GUILayout.Button("Generate Pose Database", GUILayout.Height(24)))
             {
                 GeneratePoseDatabase(config);
+                InvalidateSkeleton(); // the joint list the bone weight rows are drawn from
             }
         }
+    }
+
+    /// <summary>
+    /// Per-joint weights, drawn as the skeleton hierarchy.
+    /// </summary>
+    /// <remarks>
+    /// The list on the asset is name-keyed and sparse, so a default list drawer would show a
+    /// handful of anonymous elements in whatever order they were edited. Here every joint of the
+    /// database gets a row, indented by its depth, whether or not it carries a stored weight.
+    /// </remarks>
+    private void DrawBoneWeightSection(MotionFieldConfig config)
+    {
+        _showBoneWeights = EditorGUILayout.Foldout(
+            _showBoneWeights, "Bone Weights (similarity metric)", true);
+        if (!_showBoneWeights) return;
+
+        if (!TryReadSkeleton(config))
+        {
+            EditorGUILayout.HelpBox(
+                "Generate the pose database first. The bone list is read from the generated " +
+                ".mmskeleton, which is the skeleton the similarity metric is computed over.",
+                MessageType.Warning);
+            return;
+        }
+
+        EditorGUILayout.HelpBox(
+            "Multiplies each joint's contribution to the k-NN distance, on top of the global " +
+            "Pos Weight and Vel Weight. The metric sums over joints, so lowering one stops it " +
+            "outvoting the joints you care about; 0 removes it from matching entirely.\n" +
+            "This changes the metric, so retrain the value function afterwards -- until then " +
+            "the stage rejects the stale one and falls back to greedy control.",
+            MessageType.None);
+
+        DrawBoneWeightRows(config);
+        DrawBoneWeightFooter(config);
+    }
+
+    private void DrawBoneWeightRows(MotionFieldConfig config)
+    {
+        const float fieldWidth = 54f;
+        List<Skeleton.Joint> joints = _skeleton.Joints;
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            EditorGUILayout.LabelField("Joint", EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField("Pos", EditorStyles.miniBoldLabel, GUILayout.Width(fieldWidth));
+            EditorGUILayout.LabelField("Vel", EditorStyles.miniBoldLabel, GUILayout.Width(fieldWidth));
+        }
+
+        for (int i = 0; i < joints.Count; i++)
+        {
+            Skeleton.Joint joint = joints[i];
+            MotionFieldConfig.BoneWeight weight = config.GetBoneWeight(joint.name);
+
+            // Row 0 is the simulation bone. Forward kinematics pins it to the origin with identity
+            // rotation before the feature is built, so its position and velocity are structurally
+            // zero and no weight can change them. Shown for orientation, not editable.
+            bool isRoot = i == 0;
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Space(_jointDepths[i] * 12f);
+
+                var label = new GUIContent(joint.name, isRoot
+                    ? "The root is pinned to the origin when the metric is built, so its rows are " +
+                      "always zero and its weight has no effect."
+                    : $"{joint.type} (joint {i})");
+                EditorGUILayout.LabelField(label,
+                    weight.IsNeutral ? EditorStyles.label : EditorStyles.boldLabel);
+
+                using (new EditorGUI.DisabledScope(isRoot))
+                {
+                    float position = EditorGUILayout.FloatField(
+                        weight.position, GUILayout.Width(fieldWidth));
+                    float velocity = EditorGUILayout.FloatField(
+                        weight.velocity, GUILayout.Width(fieldWidth));
+
+                    if (isRoot) continue;
+                    if (Mathf.Approximately(position, weight.position) &&
+                        Mathf.Approximately(velocity, weight.velocity)) continue;
+
+                    Undo.RecordObject(config, "Edit bone weight");
+                    config.SetBoneWeight(new MotionFieldConfig.BoneWeight(
+                        joint.name, Mathf.Max(0f, position), Mathf.Max(0f, velocity)));
+                    EditorUtility.SetDirty(config);
+                }
+            }
+        }
+    }
+
+    private void DrawBoneWeightFooter(MotionFieldConfig config)
+    {
+        string[] weighted = config.boneWeights
+            .Where(w => !w.IsNeutral)
+            .Select(w => $"{w.name} ({w.position:0.##}/{w.velocity:0.##})")
+            .ToArray();
+
+        EditorGUILayout.LabelField(
+            weighted.Length == 0 ? "All joints at 1 -- metric unchanged." : string.Join(", ", weighted),
+            EditorStyles.wordWrappedMiniLabel);
+
+        using (new EditorGUILayout.HorizontalScope())
+        {
+            using (new EditorGUI.DisabledScope(weighted.Length == 0))
+            {
+                if (GUILayout.Button("Reset All To 1"))
+                {
+                    Undo.RecordObject(config, "Reset bone weights");
+                    config.boneWeights.Clear();
+                    EditorUtility.SetDirty(config);
+                }
+            }
+
+            if (GUILayout.Button("Reload Skeleton"))
+            {
+                InvalidateSkeleton();
+            }
+        }
+
+        // Entries naming joints the current skeleton does not have. They are ignored at runtime
+        // (Python logs them), but silently keeping them would make the summary above lie.
+        var orphans = config.boneWeights
+            .Where(w => _skeleton.Joints.All(j => j.name != w.name))
+            .ToList();
+        if (orphans.Count == 0) return;
+
+        EditorGUILayout.HelpBox(
+            $"{orphans.Count} weight(s) name joints this skeleton does not have and are ignored: " +
+            string.Join(", ", orphans.Select(w => w.name)), MessageType.Warning);
+
+        if (GUILayout.Button("Remove Stale Entries"))
+        {
+            Undo.RecordObject(config, "Remove stale bone weights");
+            config.boneWeights.RemoveAll(w => _skeleton.Joints.All(j => j.name != w.name));
+            EditorUtility.SetDirty(config);
+        }
+    }
+
+    /// <summary>Read and cache the database skeleton, with each joint's depth for indentation.</summary>
+    private bool TryReadSkeleton(MotionFieldConfig config)
+    {
+        if (_skeletonRead) return _skeleton != null;
+        _skeletonRead = true;
+
+        if (!config.TryGetDatabaseSkeleton(out Skeleton skeleton) || skeleton.Joints.Count == 0)
+        {
+            return false;
+        }
+
+        _skeleton = skeleton;
+        _jointDepths = new int[skeleton.Joints.Count];
+
+        for (int i = 0; i < skeleton.Joints.Count; i++)
+        {
+            int depth = 0;
+            int parent = skeleton.Joints[i].parentIndex;
+            // Bounded by the joint count so a cyclic parentIndex cannot hang the inspector.
+            while (parent >= 0 && parent < skeleton.Joints.Count && depth < skeleton.Joints.Count)
+            {
+                depth++;
+                parent = skeleton.Joints[parent].parentIndex;
+            }
+
+            _jointDepths[i] = depth;
+        }
+
+        return true;
     }
 
     private void DrawTrainingSection(MotionFieldConfig config)
@@ -237,6 +429,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 kwargs["tug_ratio"] = ((double)config.tugRatio).ToPython();
                 kwargs["pos_weight"] = ((double)config.posWeight).ToPython();
                 kwargs["vel_weight"] = ((double)config.velWeight).ToPython();
+                kwargs["bone_weights"] = MotionFieldBoneWeights.ToPython(config);
                 kwargs["device"] = config.DeviceName.ToPython();
                 kwargs["knn_chunk"] = config.knnChunk.ToPython();
                 kwargs["state_chunk"] = config.stateChunk.ToPython();
@@ -295,6 +488,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 kwargs["knn_chunk"] = config.knnChunk.ToPython();
                 kwargs["pos_weight"] = ((double)config.posWeight).ToPython();
                 kwargs["vel_weight"] = ((double)config.velWeight).ToPython();
+                kwargs["bone_weights"] = MotionFieldBoneWeights.ToPython(config);
                 kwargs["progress"] = report.ToPython();
 
                 using PyObject summary = embedding.InvokeMethod("compute_embedding", args, kwargs);

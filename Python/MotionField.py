@@ -6,7 +6,8 @@ import torch
 from Pose import Pose, PoseDelta
 from Skeleton import Skeleton
 from motion_field_io import (DELTA_YAW_CONVENTION, TUG_MODE, ValueFunctionData,
-                             database_signature, load_value_function)
+                             bone_weights_signature, database_signature,
+                             load_value_function)
 
 # Packed pose layout: row 0 root position, row 1 hip position, row 2 the root
 # bone quaternion, rows 3+ the remaining joint quaternions.
@@ -43,6 +44,75 @@ def resolve_device(preference=None) -> str:
     return preference
 
 
+def _weight_pair(value) -> tuple[float, float]:
+    """One bone's (position, velocity) weight, from a scalar or a 2-sequence."""
+    if isinstance(value, (int, float, np.floating, np.integer)):
+        return float(value), float(value)
+
+    pair = list(value)
+    if len(pair) != 2:
+        raise ValueError(f'a bone weight must be a scalar or (pos, vel), got {value!r}')
+    return float(pair[0]), float(pair[1])
+
+
+def resolve_bone_weights(skeleton: Skeleton, bone_weights, log=print) -> np.ndarray | None:
+    """
+    Normalise a per-bone weight table onto the feature row order.
+
+    The similarity metric is a *sum* of per-joint distances, so scaling one
+    joint's rows scales how much that joint can move the k-NN. That is the knob
+    for stopping the field matching on limbs that happen to agree while the part
+    of the body you care about does not.
+
+    Weights are keyed by joint name rather than by index. The feature rows follow
+    `list(skeleton)`, a depth-first walk, which happens to match the order joints
+    are serialised in but is not guaranteed to -- resolving by name means a
+    reordered skeleton moves the weights with it instead of silently applying
+    them to the wrong bones.
+
+    :param bone_weights: `None`, a `{joint name: weight}` mapping (weight being a
+        scalar or a `(position, velocity)` pair), or an array already shaped
+        `(joint_count, 2)` in feature-row order.
+    :return: `(joint_count, 2)` float32, or `None` when every weight is 1 --
+        callers treat `None` as "uniform" and skip the multiply entirely.
+    """
+    if bone_weights is None:
+        return None
+
+    names = [joint.name for joint in skeleton]
+    count = len(names)
+
+    if hasattr(bone_weights, 'keys'):
+        table = np.ones((count, 2), dtype=np.float32)
+        slot_of = {name: i for i, name in enumerate(names)}
+        unknown = []
+        for key in bone_weights.keys():
+            slot = slot_of.get(str(key))
+            if slot is None:
+                unknown.append(str(key))
+                continue
+            table[slot] = _weight_pair(bone_weights[key])
+        if unknown:
+            log(f'[MotionField] bone weights name joints this skeleton does not '
+                f'have, ignored: {sorted(unknown)}')
+    else:
+        table = np.asarray(bone_weights, dtype=np.float32)
+        if table.shape != (count, 2):
+            raise ValueError(f'bone_weights must be ({count}, 2) for this skeleton, '
+                             f'got {table.shape}')
+        table = np.ascontiguousarray(table, dtype=np.float32)
+
+    # Row 0 is the root, which `fk_root_space` pins to the origin with identity
+    # rotation -- its position and velocity are structurally zero, so its weight
+    # cannot change the feature. Normalising it to 1 keeps that from perturbing
+    # the signature below and needlessly invalidating a trained value function.
+    table[0] = 1.0
+
+    if np.all(np.abs(table - 1.0) <= 1e-6):
+        return None
+    return table
+
+
 class MotionField:
     def __init__(self,
                  poses_x: np.ndarray,
@@ -55,6 +125,7 @@ class MotionField:
                  k_neighbors: int = 15,
                  tug_ratio: float = 0.1,
                  knn_chunk: int = 64,
+                 bone_weights=None,
                  value_function_path: str = None):
         """
         Initialize the MotionField.
@@ -71,6 +142,8 @@ class MotionField:
         :param tug_ratio: Drift correction strength toward the database, per step.
         :param knn_chunk: Queries per batched k-NN chunk. Bounds VRAM at roughly
             chunk * state_count * feature_count * 3 * 4 bytes.
+        :param bone_weights: Optional per-joint emphasis on top of
+            `pos_weight`/`vel_weight`. See `resolve_bone_weights`.
         :param value_function_path: Optional `.mffield.npz` enabling `optimal_action`.
         """
         self.current_frame = None
@@ -92,6 +165,7 @@ class MotionField:
         self.skeleton = skeleton
         self.states_count = poses_x.shape[0]
         self.bone_count = poses_x.shape[-2] - 2
+        self.bone_weights = resolve_bone_weights(skeleton, bone_weights)
 
         self.state_features = self.features(poses_x, poses_v)
         self.feature_shape = self.state_features.shape[-2:]
@@ -115,7 +189,8 @@ class MotionField:
         """Similarity feature for one or many packed states."""
         return MotionField.build_motion_states(
             x, v, self.skeleton, self.frame_time,
-            pos_weight=self.pos_weight, vel_weight=self.vel_weight)
+            pos_weight=self.pos_weight, vel_weight=self.vel_weight,
+            bone_weights=self.bone_weights)
 
     def get_batched_knn(self, queries: np.ndarray, k: int = None, chunk: int = None):
         """
@@ -292,7 +367,7 @@ class MotionField:
     # ------------------------------------------------------------------ #
 
     def load_value_function(self, path: str, data_dir: str = None,
-                            db_name: str = None) -> bool:
+                            db_name: str = None, log=None) -> bool:
         """
         Load a trained value function, gating it against this field's own
         parameters. Returns False (and leaves the field in greedy mode) when the
@@ -303,7 +378,13 @@ class MotionField:
         trained on exactly the pose database now loaded. Every index in the
         value function is a row of that database, so a regenerated `.mmpose`
         with the same frame count would otherwise address the wrong poses.
+
+        :param log: optional `callable(str)` for the accept/reject reason.
+            Defaults to `print`, which under PythonNET goes to a stdout Unity
+            does not display -- so Unity passes its own, otherwise a rejected
+            value function looks like the policy silently changing its mind.
         """
+        log = log or print
         expect = {
             'delta_yaw_convention': DELTA_YAW_CONVENTION,
             'states_count': self.states_count,
@@ -313,20 +394,21 @@ class MotionField:
             'tug_mode': TUG_MODE,
             'pos_weight': self.pos_weight,
             'vel_weight': self.vel_weight,
+            'bone_weights_sha1': bone_weights_signature(self.bone_weights),
             'frame_time': self.frame_time,
         }
         if data_dir and db_name:
             try:
                 expect.update(database_signature(data_dir, db_name))
             except OSError as exc:
-                print(f'[MotionField] could not hash the pose database: {exc}')
+                log(f'[MotionField] could not hash the pose database: {exc}')
 
-        self.value_function = load_value_function(path, expect=expect)
+        self.value_function = load_value_function(path, expect=expect, log=log)
         if self.value_function is not None:
-            print(f'[MotionField] loaded value function {path} '
-                  f'({self.value_function.values.shape[0]} states x '
-                  f'{self.value_function.theta_count} headings, '
-                  f'final residual {self.value_function.final_residual:.6f})')
+            log(f'[MotionField] loaded value function {path} '
+                f'({self.value_function.values.shape[0]} states x '
+                f'{self.value_function.theta_count} headings, '
+                f'final residual {self.value_function.final_residual:.6f})')
         return self.value_function is not None
 
     @property
@@ -523,7 +605,7 @@ class MotionField:
 
     @staticmethod
     def build_motion_states(x, v, skeleton: Skeleton, frame_time: float,
-                            pos_weight=0.2, vel_weight=0.9):
+                            pos_weight=0.2, vel_weight=0.9, bone_weights=None):
         """
         Build motion states from pose and velocity. Used to construct the motion field.
 
@@ -544,6 +626,10 @@ class MotionField:
         :param frame_time: Seconds per frame of the source database
         :param pos_weight: Weight on the position half of the feature
         :param vel_weight: Weight on the velocity half of the feature
+        :param bone_weights: Optional `(bone_count, 2)` per-joint multipliers on
+            top of the two global weights, already resolved onto feature-row
+            order by `resolve_bone_weights`. Column 0 scales that joint's
+            position row, column 1 its velocity row.
         :return: (..., bone_count * 2, 3)
         """
         current_pose = Pose.from_array(x)
@@ -556,6 +642,13 @@ class MotionField:
 
         velocity = (p_b - p_a) / frame_time  # m/s
 
+        position_scale = pos_weight
+        velocity_scale = vel_weight
+        if bone_weights is not None:
+            # (bone_count, 1) broadcasts across xyz and across the batch axes.
+            position_scale = pos_weight * bone_weights[:, 0:1]
+            velocity_scale = vel_weight * bone_weights[:, 1:2]
+
         return np.concatenate(
-            [pos_weight * p_a, vel_weight * velocity],
+            [position_scale * p_a, velocity_scale * velocity],
             axis=-2).astype(np.float32)  # (batch, bone_count*2, 3)

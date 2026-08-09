@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using MotionMatching;
@@ -49,11 +50,98 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
              "regions it has no data for; too high and it just replays the database.")]
     [Range(0f, 1f)] public float tugRatio = 0.1f;
 
-    [Tooltip("Weight on the joint-position half of the similarity metric.")]
+    [Tooltip("Overall weight on the joint-position half of the similarity metric. Per-bone " +
+             "weights multiply on top of this.")]
     public float posWeight = 0.2f;
 
-    [Tooltip("Weight on the joint-velocity half of the similarity metric.")]
+    [Tooltip("Overall weight on the joint-velocity half of the similarity metric. Per-bone " +
+             "weights multiply on top of this.")]
     public float velWeight = 0.9f;
+
+    /// <summary>
+    /// Per-joint emphasis in the similarity metric, keyed by skeleton joint name.
+    /// </summary>
+    /// <remarks>
+    /// Hidden from the default inspector on purpose: as a raw list this is 23 nameless elements
+    /// with no indication of which bone each one is. <c>MotionFieldConfigEditor</c> draws it as the
+    /// skeleton hierarchy instead. Only entries that differ from 1 need to be stored, and joints
+    /// absent from the list are simply left at 1.
+    /// </remarks>
+    [HideInInspector] public List<BoneWeight> boneWeights = new();
+
+    /// <summary>
+    /// How much one joint counts toward the k-NN distance.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by <see cref="name"/> rather than by index because the metric sums over joints in
+    /// depth-first order, which is not guaranteed to survive a skeleton being re-extracted with a
+    /// different hierarchy. Resolving by name on the Python side means a moved joint takes its
+    /// weight with it instead of silently applying it to whatever now sits at that index.
+    /// </remarks>
+    [Serializable]
+    public struct BoneWeight
+    {
+        [Tooltip("Skeleton joint name, as stored in the .mmskeleton.")]
+        public string name;
+
+        [Tooltip("Scales this joint's position contribution to the distance.")] [Min(0f)]
+        public float position;
+
+        [Tooltip("Scales this joint's velocity contribution to the distance.")] [Min(0f)]
+        public float velocity;
+
+        public BoneWeight(string name, float position = 1f, float velocity = 1f)
+        {
+            this.name = name;
+            this.position = position;
+            this.velocity = velocity;
+        }
+
+        public bool IsNeutral => Mathf.Approximately(position, 1f) && Mathf.Approximately(velocity, 1f);
+    }
+
+    /// <summary>This joint's weight, or a neutral one when the list does not mention it.</summary>
+    public BoneWeight GetBoneWeight(string jointName)
+    {
+        for (int i = 0; i < boneWeights.Count; i++)
+        {
+            if (boneWeights[i].name == jointName) return boneWeights[i];
+        }
+
+        return new BoneWeight(jointName);
+    }
+
+    /// <summary>
+    /// Store a joint's weight, dropping the entry again once it is back at 1/1 so the asset does
+    /// not accumulate rows that say nothing.
+    /// </summary>
+    public void SetBoneWeight(BoneWeight weight)
+    {
+        int existing = boneWeights.FindIndex(w => w.name == weight.name);
+
+        if (weight.IsNeutral)
+        {
+            if (existing >= 0) boneWeights.RemoveAt(existing);
+            return;
+        }
+
+        if (existing >= 0) boneWeights[existing] = weight;
+        else boneWeights.Add(weight);
+    }
+
+    /// <summary>True when at least one joint is weighted away from 1.</summary>
+    public bool HasBoneWeights
+    {
+        get
+        {
+            for (int i = 0; i < boneWeights.Count; i++)
+            {
+                if (!boneWeights[i].IsNeutral) return true;
+            }
+
+            return false;
+        }
+    }
 
     [Header("Training")]
     [Tooltip("Goal headings the value function is fitted over, spanning a full turn.")]
@@ -207,5 +295,17 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     {
         _poseSet = null;
     }
+
+    /// <summary>
+    /// The joint hierarchy of the generated database, read without the pose data beside it.
+    /// False before the database has been generated.
+    /// </summary>
+    /// <remarks>
+    /// This is the skeleton the similarity metric is actually computed over, which is why the bone
+    /// weight editor reads it here rather than from the source animation clips: the clips carry a
+    /// BVH hierarchy with no simulation bone, so its joint list would not line up.
+    /// </remarks>
+    public bool TryGetDatabaseSkeleton(out Skeleton skeleton) =>
+        PoseSerializer.TryDeserializeSkeleton(GetAssetPath(), name, out skeleton);
 }
 }

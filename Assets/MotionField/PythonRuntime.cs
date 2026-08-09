@@ -86,16 +86,64 @@ public static class PythonRuntime
     /// </summary>
     /// <param name="moduleName"></param>
     /// <param name="reload">
-    /// Re-execute the module so edits to the .py file take effect without restarting Unity. Handy
-    /// while iterating; it also discards any module-level state the previous version held.
+    /// Pick up edits to the .py files without restarting Unity, by dropping the whole project
+    /// module graph first -- see <see cref="InvalidateProjectModules"/>. Call it once before a
+    /// group of related imports rather than on each one, so they all end up sharing one generation
+    /// of the code.
     /// </param>
     public static dynamic Import(string moduleName, bool reload = false)
     {
-        dynamic module = Py.Import(moduleName);
-        if (!reload) return module;
-
-        dynamic importlib = Py.Import("importlib");
-        return importlib.reload(module);
+        if (reload) InvalidateProjectModules();
+        return Py.Import(moduleName);
     }
+
+    /// <summary>
+    /// Forget every already-imported module that lives under <see cref="ScriptsFolder"/>, so the
+    /// next import re-reads them from disk. Returns how many were dropped.
+    /// </summary>
+    /// <remarks>
+    /// This replaces a per-module <c>importlib.reload</c>, which only re-executes the one module it
+    /// is handed. Its dependencies stay cached, so reloading <c>MotionField</c> after adding a
+    /// symbol to <c>motion_field_io</c> re-runs the new import line against the old dependency and
+    /// dies on ImportError -- editing a shared module was effectively impossible without restarting
+    /// the editor.
+    ///
+    /// Dropping the graph wholesale also means a group of imports issued after one call sees a
+    /// single consistent generation of the code. Reloading module by module does not: each reload
+    /// rebinds only that module's classes, so two modules can end up holding different class
+    /// objects for the same class.
+    ///
+    /// Live Python objects created before the call keep working -- they hold a reference to the
+    /// class they were built from, which simply is no longer the one a fresh import returns. Call
+    /// this only where everything downstream is about to be rebuilt.
+    /// </remarks>
+    public static int InvalidateProjectModules()
+    {
+        using PyModule scope = Py.CreateScope();
+        scope.Set("root", ScriptsFolder.ToPython());
+        scope.Exec(InvalidateScript);
+        return scope.Get<int>("dropped");
+    }
+
+    // Kept as source rather than a .py file in ScriptsFolder: a module that purges the project's
+    // modules should not be one of the modules it purges.
+    private const string InvalidateScript = @"
+import os
+import sys
+
+prefix = os.path.normcase(os.path.abspath(root)) + os.sep
+stale = []
+for name, module in list(sys.modules.items()):
+    path = getattr(module, '__file__', None)
+    if not path:
+        continue
+    if os.path.normcase(os.path.abspath(path)).startswith(prefix):
+        stale.append(name)
+
+for name in stale:
+    del sys.modules[name]
+
+dropped = len(stale)
+";
 }
 }

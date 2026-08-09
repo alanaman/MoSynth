@@ -17,6 +17,14 @@ namespace MotionField
 /// the tug is pulling it toward. A policy that stalls shows up immediately -- the trail stops
 /// sweeping the cloud and collapses to a knot.
 ///
+/// Overlay legend: yellow is the live pose, cyan its nearest state, magenta the tug target, green
+/// the rest of the neighbourhood with size and brightness following the similarity weight.
+///
+/// Two things to keep in mind when reading distances off the picture. The tug is the neighbour the
+/// *chosen action* emphasises, and actions are chosen on value, so it is routinely not the nearest
+/// state. And UMAP preserves neighbourhood structure, not distance -- two states adjacent in the
+/// real metric can land far apart on screen, so judge closeness by the markers, not by the gap.
+///
 /// Add it to the same GameObject as the <see cref="MotionSynthesisComponent"/> whose stage list
 /// contains a <see cref="MotionFieldStage"/>, and enable <c>collectDebugData</c> on that stage.
 /// </summary>
@@ -65,6 +73,11 @@ public class MotionFieldVisualizer : MonoBehaviour
     [Tooltip("The live pose, its k nearest neighbours and the tug target.")] [SerializeField]
     private bool showOverlay = true;
 
+    [Tooltip("Lines from the live pose to each neighbour, plus the trail. Off by default: on a " +
+             "dense cloud they hide the markers they are meant to explain.")]
+    [SerializeField]
+    private bool showLinks;
+
     [Tooltip("Frames of history behind the live pose. A stalled policy piles this into one spot.")]
     [SerializeField]
     [Range(0, 600)]
@@ -85,6 +98,7 @@ public class MotionFieldVisualizer : MonoBehaviour
 
     private static readonly Color CurrentColor = new(1f, 0.95f, 0.2f);
     private static readonly Color TugColor = new(1f, 0.2f, 0.85f);
+    private static readonly Color NearestColor = new(0.25f, 0.8f, 1f);
     private static readonly Color NeighborColor = new(0.2f, 1f, 0.45f);
     private static readonly Color LinkColor = new(1f, 1f, 1f, 1f);
 
@@ -181,7 +195,7 @@ public class MotionFieldVisualizer : MonoBehaviour
 
         BuildOverlay();
         if (_overlayTriangles.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayTriangles, 0, toWorld);
-        // if (_overlayLines.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayLines, 0, toWorld);
+        if (showLinks && _overlayLines.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayLines, 0, toWorld);
     }
 
     private void OnValidate()
@@ -335,13 +349,23 @@ public class MotionFieldVisualizer : MonoBehaviour
 
                     var point = _points[neighbors[i]];
                     var relative = heaviest > 1e-6f ? weights[i] / heaviest : 0f;
-                    var isTug = i == chosen;
 
-                    var colour = isTug ? TugColor : NeighborColor * Mathf.Lerp(0.25f, 1f, relative);
+                    // Slot 0 is the closest state in the field's own metric -- get_knn returns the
+                    // neighbourhood sorted nearest first. The tug is whichever slot the policy
+                    // picked, which is a value judgement, not a distance one, so the two are
+                    // usually different states and need to be told apart on sight. When they do
+                    // coincide the tug colour wins, at the nearest marker's larger size.
+                    var isTug = i == chosen;
+                    var isNearest = i == 0;
+
+                    var colour = isTug ? TugColor
+                        : isNearest ? NearestColor
+                        : NeighborColor * Mathf.Lerp(0.25f, 1f, relative);
                     colour.a = 1f;
 
-                    _overlayTriangleBuffer.AddCube(point, unit * (Mathf.Lerp(0.9f, 1.8f, relative)),
-                        colour);
+                    var scale = isNearest ? 2.2f : Mathf.Lerp(0.9f, 1.8f, relative);
+
+                    _overlayTriangleBuffer.AddCube(point, unit * scale, colour);
                     _overlayLineBuffer.AddLine(current, point, LinkColor * 0.1f, colour);
                 }
 

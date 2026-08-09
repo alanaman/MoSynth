@@ -42,6 +42,42 @@ DELTA_YAW_CONVENTION = 'root_quat_pure_yaw_xyzw'
 # actions nearly indistinguishable.
 TUG_MODE = 'emphasized'
 
+# Signature of an all-ones per-bone weight table. Spelled out rather than hashed
+# so a file written before per-bone weights existed -- which had uniform weights
+# by definition -- still matches a runtime that has not set any.
+UNIFORM_BONE_WEIGHTS = 'uniform'
+
+
+def bone_weights_signature(bone_weights) -> str:
+    """
+    Stable identifier for a per-bone weight table.
+
+    Bone weights change the similarity metric, so they change which neighbours a
+    state has, so they invalidate every transition and value trained under the
+    old table. Hashed rather than compared elementwise because the gate stores
+    one scalar per key and a 23x2 table is not a scalar.
+    """
+    if bone_weights is None:
+        return UNIFORM_BONE_WEIGHTS
+
+    table = np.ascontiguousarray(bone_weights, dtype=np.float32)
+    if table.size == 0 or np.all(np.abs(table - 1.0) <= 1e-6):
+        return UNIFORM_BONE_WEIGHTS
+    return hashlib.sha1(table.tobytes()).hexdigest()
+
+
+def load_bone_weights_file(path: str | None):
+    """
+    Read a `{"JointName": [pos, vel], ...}` JSON file for the CLIs.
+
+    Unity passes the same mapping straight across PythonNET, so this exists only
+    to give the headless entry points parity with the Editor buttons.
+    """
+    if not path:
+        return None
+    with open(path, 'r', encoding='utf-8') as handle:
+        return json.load(handle)
+
 
 def file_sha1(path: str) -> str:
     h = hashlib.sha1()
@@ -74,8 +110,16 @@ _GATE_KEYS = (
     'tug_mode',
     'pos_weight',
     'vel_weight',
+    'bone_weights_sha1',
     'frame_time',
 )
+
+# Gate keys a file is allowed to omit, and what to assume when it does. Only for
+# keys added after the format shipped, where the old behaviour is a known
+# constant -- anything else missing is a mismatch.
+_GATE_MISSING_DEFAULTS = {
+    'bone_weights_sha1': UNIFORM_BONE_WEIGHTS,
+}
 
 _FLOAT_GATE_TOLERANCE = 1e-6
 
@@ -126,6 +170,7 @@ def save_value_function(out_path: str, values: np.ndarray, scores: np.ndarray,
         'frame_time': np.float32(params['frame_time']),
         'pos_weight': np.float32(params['pos_weight']),
         'vel_weight': np.float32(params['vel_weight']),
+        'bone_weights_sha1': np.str_(params.get('bone_weights_sha1', UNIFORM_BONE_WEIGHTS)),
         'feature_shape': np.asarray(params['feature_shape'], dtype=np.int64),
         'k_neighbors': np.int64(params['k_neighbors']),
         'tug_ratio': np.float32(params['tug_ratio']),
@@ -182,12 +227,16 @@ def load_value_function(path: str, expect: dict | None = None,
     for key, expected in (expect or {}).items():
         if key not in _GATE_KEYS or expected is None:
             continue
-        if key not in data:
+        if key in data:
+            found = scalar(key)
+        elif key in _GATE_MISSING_DEFAULTS:
+            found = _GATE_MISSING_DEFAULTS[key]
+        else:
             log(f'[MotionField] value function {path} is missing "{key}".')
             return None
-        if _mismatch(scalar(key), expected):
+        if _mismatch(found, expected):
             log(f'[MotionField] value function {path} is stale: {key} is '
-                f'{scalar(key)!r} but the runtime expects {expected!r}. '
+                f'{found!r} but the runtime expects {expected!r}. '
                 f'Retrain the motion field.')
             return None
 
