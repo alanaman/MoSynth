@@ -33,54 +33,98 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
     [Tooltip("Animation database and motion field hyperparameters. Train the value function from " +
              "this asset's inspector.")]
-    [SerializeField] public MotionFieldConfig config;
+    [SerializeField]
+    public MotionFieldConfig config;
 
-    [Tooltip("Database state the character starts from.")]
-    [SerializeField] [Min(0)] public int startStateIndex = 700;
+    [Tooltip("Database state the character starts from.")] [SerializeField] [Min(0)]
+    public int startStateIndex = 700;
 
-    [Tooltip("Re-execute the Python modules on start so .py edits apply without restarting Unity.")]
-    [SerializeField] public bool reloadPythonModules = true;
+    [Tooltip("Re-execute the Python modules on start so .py edits apply without restarting Unity.")] [SerializeField]
+    public bool reloadPythonModules = true;
 
     public enum Policy
     {
         /// <summary>Trained value function when available, greedy otherwise.</summary>
-        Automatic,
+        Optimal,
+
         /// <summary>Force the one-step-greedy policy, ignoring any trained value function.</summary>
         Greedy,
+
         /// <summary>Debug: play the database back frame by frame.</summary>
         Playback,
+
         /// <summary>Debug: snap to the successor of the nearest database state.</summary>
         NearestNeighbour
     }
 
-    [SerializeField] public Policy policy = Policy.Automatic;
+    [SerializeField] public Policy policy = Policy.Optimal;
 
     public enum SteeringSource
     {
         /// <summary>Hold a fixed heading in world space.</summary>
         FixedDirection,
+
         /// <summary>Walk toward a target transform.</summary>
         TowardsTarget,
+
         /// <summary>WASD / left stick, interpreted relative to the camera when one is set.</summary>
         PlayerInput
     }
 
-    [Header("Steering")]
-    [SerializeField] public SteeringSource steering = SteeringSource.PlayerInput;
+    [Header("Steering")] [SerializeField] public SteeringSource steering = SteeringSource.PlayerInput;
 
-    [Tooltip("World-space heading for FixedDirection, and the fallback when input is idle.")]
-    [SerializeField] public Vector3 fixedDirection = Vector3.forward;
+    [Tooltip("World-space heading for FixedDirection, and the fallback when input is idle.")] [SerializeField]
+    public Vector3 fixedDirection = Vector3.forward;
 
     [SerializeField] public Transform target;
 
-    [Tooltip("Input is taken relative to this transform's facing. Falls back to the main camera.")]
-    [SerializeField] public Transform inputReference;
+    [Tooltip("Input is taken relative to this transform's facing. Falls back to the main camera.")] [SerializeField]
+    public Transform inputReference;
 
     /// <summary>Last desired heading in world space, for gizmos and debugging.</summary>
     public Vector3 DesiredWorldDirection { get; private set; } = Vector3.forward;
 
     /// <summary>Last goal heading handed to Python, in radians, in the character's frame.</summary>
     public float Theta { get; private set; }
+
+    [Header("Debug")]
+    [Tooltip("Publish the UMAP embedding and the per-frame neighbourhood for MotionFieldVisualizer. " +
+             "Costs one extra Python call per frame; turn it off when not debugging.")]
+    [SerializeField]
+    public bool collectDebugData = true;
+
+    // Bulk debug data is exposed through methods rather than properties on purpose. These arrays
+    // run to thousands of entries, and anything that walks the component's properties by
+    // reflection -- a debug inspector, a scene serializer, an editor bridge -- will stall or dump
+    // megabytes if they look like cheap getters.
+    private Vector3[] _embedding;
+    private int[] _embeddingEdges;
+    private float[] _stateSpeeds;
+
+    /// <summary>True once a matching UMAP embedding has been loaded.</summary>
+    public bool HasEmbedding => _embedding != null;
+
+    /// <summary>UMAP projection of the database, one point per state. Null when unavailable.</summary>
+    public Vector3[] GetEmbedding() => _embedding;
+
+    /// <summary>Flat (from, to) state index pairs for consecutive frames within a clip.</summary>
+    public int[] GetEmbeddingEdges() => _embeddingEdges;
+
+    /// <summary>Root speed per state, m/s. Used to colour the point cloud.</summary>
+    public float[] GetStateSpeeds() => _stateSpeeds;
+
+    /// <summary>Database states nearest the live pose on the last step.</summary>
+    public int[] LastNeighbors { get; private set; } = Array.Empty<int>();
+
+    /// <summary>Similarity weights matching <see cref="LastNeighbors"/>; sums to 1.</summary>
+    public float[] LastNeighborWeights { get; private set; } = Array.Empty<float>();
+
+    /// <summary>
+    /// Index into <see cref="LastNeighbors"/> of the neighbour the chosen action emphasised, which
+    /// is also the state the tug pulled toward. -1 before the first step, and in the playback and
+    /// nearest-neighbour policies, which make no choice.
+    /// </summary>
+    public int LastChosenSlot { get; private set; } = -1;
 
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
@@ -143,6 +187,11 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 _currentX = poseX[index].copy();
                 _currentV = poseV[index].copy();
                 _currentContacts = poseContacts[index];
+
+                if (collectDebugData)
+                {
+                    LoadEmbedding(dataPath, stateCount);
+                }
             }
 
             _isInitialized = true;
@@ -154,6 +203,74 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                            "Check the Python DLL and venv paths on the MotionFieldConfig.");
             Debug.LogException(e);
         }
+    }
+
+    /// <summary>
+    /// Pull the UMAP projection across for the visualizer. Must be called with the GIL held.
+    ///
+    /// The embedding is optional debug data, so every failure path here leaves <see cref="Embedding"/>
+    /// null and lets synthesis carry on -- the visualizer simply draws nothing.
+    /// </summary>
+    private void LoadEmbedding(string dataPath, int stateCount)
+    {
+        string embeddingPath = config.GetEmbeddingPath();
+        if (!File.Exists(embeddingPath))
+        {
+            Debug.LogWarning(
+                $"[MotionField] No UMAP embedding at '{embeddingPath}'. MotionFieldVisualizer will " +
+                "draw nothing. Press Compute UMAP Embedding on the config to generate it.");
+            return;
+        }
+
+        dynamic embeddingModule = PythonRuntime.Import("motion_field_embedding", reloadPythonModules);
+
+        // Python's own logging goes to stdout, which PythonNET does not forward, so a rejected
+        // embedding would otherwise fail completely silently. Route it into the Unity console.
+        // The Python messages already carry their own [MotionField] prefix.
+        Action<string> log = message => Debug.Log(message);
+
+        dynamic arrays = embeddingModule.load_embedding_arrays(
+            embeddingPath, dataPath, config.name, stateCount, log);
+
+        var flat = (float[])arrays[0];
+        int[] edges = (int[])arrays[1];
+        var speeds = (float[])arrays[2];
+        int embeddedStates = (int)arrays[3];
+
+        GC.KeepAlive(log);
+
+        if (embeddedStates == 0 || flat.Length < embeddedStates * 3)
+        {
+            Debug.LogWarning(
+                $"[MotionField] The embedding at '{embeddingPath}' was rejected, so the visualizer " +
+                "will draw nothing. See the reason logged just above; recompute it from the config " +
+                "if the pose database changed.");
+            return;
+        }
+
+        var points = new Vector3[embeddedStates];
+        for (int i = 0; i < embeddedStates; i++)
+        {
+            points[i] = new Vector3(flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2]);
+        }
+
+        _embedding = points;
+        _embeddingEdges = edges;
+        _stateSpeeds = speeds;
+    }
+
+    /// <summary>
+    /// Capture the neighbourhood the policy just used. Must be called with the GIL held.
+    ///
+    /// Taken from Python rather than recomputed in C# so the highlight shows the decision that was
+    /// actually made; a second k-NN here could disagree with the one that produced the pose.
+    /// </summary>
+    private void CaptureDebugArrays()
+    {
+        dynamic debug = _motionField.get_debug_arrays();
+        LastNeighbors = (int[])debug[0];
+        LastNeighborWeights = (float[])debug[1];
+        LastChosenSlot = (int)debug[2];
     }
 
     public override bool Apply(PoseVector pose, float deltaTime)
@@ -174,7 +291,12 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 _currentX = nextPose[0];
                 _currentV = nextPose[1];
 
-                dynamic poseArrays = _actionPredictor.get_pose_arrays(
+                if (collectDebugData)
+                {
+                    CaptureDebugArrays();
+                }
+
+                var poseArrays = _actionPredictor.get_pose_arrays(
                     _skeleton, _currentX, _currentV, _currentContacts);
 
                 float[] posArray = (float[])poseArrays[0];
@@ -217,7 +339,8 @@ public class MotionFieldStage : MoSynthStage, IDisposable
         Policy.Greedy => "greedy",
         Policy.Playback => "playback",
         Policy.NearestNeighbour => "nearest",
-        _ => null // let Python pick: value function if loaded, greedy otherwise
+        Policy.Optimal => "optimal",
+        _ => throw new NotImplementedException($"Unknown policy {policy}."),
     };
 
     /// <summary>
@@ -263,7 +386,8 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 Vector2 stick = ReadMoveInput();
                 if (stick.sqrMagnitude < 1e-4f) return DesiredWorldDirection;
 
-                Transform reference = inputReference != null ? inputReference
+                Transform reference = inputReference != null
+                    ? inputReference
                     : (Camera.main != null ? Camera.main.transform : null);
                 if (reference == null) return new Vector3(stick.x, 0f, stick.y);
 
@@ -275,7 +399,7 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
             case SteeringSource.FixedDirection:
                 return fixedDirection;
-            
+
             default:
                 throw new NotImplementedException();
         }

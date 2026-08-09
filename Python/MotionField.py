@@ -101,6 +101,12 @@ class MotionField:
         if value_function_path:
             self.load_value_function(value_function_path)
 
+        # Last decision, for the Unity debug visualizer. Written by
+        # optimal_action / greedy_action, read via get_debug_arrays().
+        self.last_indices = None
+        self.last_weights = None
+        self.last_action = None
+
     # ------------------------------------------------------------------ #
     # Similarity features and nearest-neighbour search
     # ------------------------------------------------------------------ #
@@ -420,6 +426,7 @@ class MotionField:
                                          tug_indices=indices)
 
         best = int(np.argmax(self.value_rewards(theta, xs, vs)))
+        self._record_decision(indices, weights, best)
         return xs[best:best + 1], vs[best:best + 1]
 
     def greedy_action(self, theta: float,
@@ -439,7 +446,38 @@ class MotionField:
 
         rewards = -np.abs(wrap_angle(theta + root_yaw(xs)))
         best = int(np.argmax(rewards))
+        self._record_decision(indices, weights, best)
         return xs[best:best + 1], vs[best:best + 1]
+
+    # ------------------------------------------------------------------ #
+    # Debug introspection (consumed by MotionFieldVisualizer in Unity)
+    # ------------------------------------------------------------------ #
+
+    def _record_decision(self, indices, weights, best: int) -> None:
+        """Remember the neighbourhood and the action the policy just chose."""
+        self.last_indices = np.ravel(indices)
+        self.last_weights = np.ravel(weights)
+        self.last_action = int(best)
+
+    def get_debug_arrays(self):
+        """
+        The last policy decision, as flat lists for PythonNET marshalling.
+
+        `chosen_slot` indexes into the returned neighbour list, so the pose the
+        tug pulled toward is `indices[chosen_slot]` -- that is exactly the value
+        handed to `compute_new_states(tug_indices=...)`, not a re-derivation of
+        it, so the Unity highlight cannot drift out of sync with the policy.
+
+        :return: (neighbour_indices, similarity_weights, chosen_slot).
+            ([], [], -1) before the first `optimal_action`/`greedy_action` call
+            -- the playback and nearest modes never populate it.
+        """
+        if self.last_indices is None or self.last_action is None:
+            return [], [], -1
+
+        return (np.asarray(self.last_indices, dtype=np.int32).tolist(),
+                np.asarray(self.last_weights, dtype=np.float32).tolist(),
+                self.last_action)
 
     def get_next_pose(self, current_x: np.ndarray, current_v: np.ndarray, delta_time):
         """Debug playback: walk the database frame by frame from the nearest match."""

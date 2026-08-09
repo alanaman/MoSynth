@@ -38,6 +38,9 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         EditorGUILayout.Space();
         DrawTrainingSection(config);
 
+        EditorGUILayout.Space();
+        DrawVisualizationSection(config);
+
         if (GUI.changed)
         {
             EditorUtility.SetDirty(config);
@@ -142,6 +145,39 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         }
     }
 
+    private void DrawVisualizationSection(MotionFieldConfig config)
+    {
+        EditorGUILayout.LabelField("Debug Visualization", EditorStyles.boldLabel);
+
+        string embeddingPath = config.GetEmbeddingPath();
+        bool databaseExists = File.Exists(Path.Combine(config.GetAssetPath(), config.name + ".mmpose"));
+        bool embedded = File.Exists(embeddingPath);
+
+        EditorGUILayout.LabelField("Embedding",
+            embedded
+                ? $"{ProjectRelative(embeddingPath)}  ({new FileInfo(embeddingPath).Length / 1024} KB)"
+                : "not computed yet");
+
+        if (!databaseExists)
+        {
+            EditorGUILayout.HelpBox("Generate the pose database first.", MessageType.Warning);
+        }
+
+        EditorGUILayout.HelpBox(
+            "Projects the motion field to 3D so MotionFieldVisualizer can draw it. Independent of " +
+            "training -- the value function does not need it, and deleting it only turns the " +
+            "visualizer off. Expect ~20 s: the first UMAP import pays a one-off numba warm-up.",
+            MessageType.None);
+
+        using (new EditorGUI.DisabledScope(!databaseExists || EditorApplication.isPlayingOrWillChangePlaymode))
+        {
+            if (GUILayout.Button("Compute UMAP Embedding", GUILayout.Height(30)))
+            {
+                ComputeEmbedding(config);
+            }
+        }
+    }
+
     private static void GeneratePoseDatabase(MotionFieldConfig config)
     {
         try
@@ -208,6 +244,60 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 kwargs["progress"] = report.ToPython();
 
                 using PyObject summary = trainer.InvokeMethod("train", args, kwargs);
+                Debug.Log($"[MotionField] {summary}");
+            }
+
+            GC.KeepAlive(report);
+        }
+        catch (Exception e)
+        {
+            Debug.LogException(e);
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+            EditorApplication.UnlockReloadAssemblies();
+            AssetDatabase.Refresh();
+        }
+    }
+
+    /// <summary>
+    /// Fit the UMAP projection of the database. Same execution model as
+    /// <see cref="TrainMotionField"/>: in-process, synchronous, reloads locked out.
+    /// </summary>
+    private static void ComputeEmbedding(MotionFieldConfig config)
+    {
+        EditorApplication.LockReloadAssemblies();
+        try
+        {
+            PythonRuntime.EnsureInitialized(config.pythonDllPath, config.pythonVenvPath);
+
+            Action<string, double> report = (stage, fraction) =>
+                EditorUtility.DisplayProgressBar("Embedding Motion Field", stage, (float)fraction);
+
+            using (Py.GIL())
+            {
+                PyObject embedding = PythonRuntime.Import("motion_field_embedding", reload: true);
+
+                using var args = new PyTuple(new[]
+                {
+                    config.GetAssetPath().ToPython(),
+                    config.name.ToPython(),
+                    config.GetEmbeddingPath().ToPython(),
+                });
+
+                using var kwargs = new PyDict();
+                kwargs["n_components"] = config.umapComponents.ToPython();
+                kwargs["n_neighbors"] = config.umapNeighbors.ToPython();
+                kwargs["min_dist"] = ((double)config.umapMinDist).ToPython();
+                kwargs["device"] = config.DeviceName.ToPython();
+                kwargs["seed"] = config.umapSeed.ToPython();
+                kwargs["knn_chunk"] = config.knnChunk.ToPython();
+                kwargs["pos_weight"] = ((double)config.posWeight).ToPython();
+                kwargs["vel_weight"] = ((double)config.velWeight).ToPython();
+                kwargs["progress"] = report.ToPython();
+
+                using PyObject summary = embedding.InvokeMethod("compute_embedding", args, kwargs);
                 Debug.Log($"[MotionField] {summary}");
             }
 

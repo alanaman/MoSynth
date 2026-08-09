@@ -76,6 +76,21 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Tooltip("Database states integrated per precompute chunk. Bounds host RAM.")]
     [Min(1)] public int stateChunk = 512;
 
+    [Header("Debug Visualization")]
+    [Tooltip("UMAP neighbourhood size. Larger values favour the global shape of the field over " +
+             "local detail; 80 matches the reference notebook.")]
+    [Min(2)] public int umapNeighbors = 80;
+
+    [Tooltip("How tightly UMAP is allowed to pack points. Lower separates clusters more sharply.")]
+    [Range(0f, 1f)] public float umapMinDist = 0.1f;
+
+    [Tooltip("Embedding dimensions. 3 draws a volume in the scene; 2 flattens it to a plane.")]
+    [Range(2, 3)] public int umapComponents = 3;
+
+    [Tooltip("UMAP is stochastic. A fixed seed keeps the picture stable between rebuilds so a " +
+             "change on screen means a change in the data.")]
+    public int umapSeed = 42;
+
     private PoseSet _poseSet;
 
     // --- IPoseSetSource ---------------------------------------------------------------------
@@ -120,6 +135,12 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
 
     /// <summary>The trained value function, shipped with the player.</summary>
     public string GetValueFunctionPath() => Path.Combine(GetAssetPath(), name + ".mffield.npz");
+
+    /// <summary>
+    /// UMAP projection of the database, read by <see cref="MotionFieldVisualizer"/>. Debug-only, so
+    /// it is safe to delete; the visualizer just draws nothing without it.
+    /// </summary>
+    public string GetEmbeddingPath() => Path.Combine(GetAssetPath(), name + ".mfembed.npz");
 
     /// <summary>
     /// Rebuild cache for the precomputed transitions. Tens of megabytes and useless at runtime, so
