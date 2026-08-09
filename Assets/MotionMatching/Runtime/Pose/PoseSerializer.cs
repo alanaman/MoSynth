@@ -95,9 +95,9 @@ public class PoseSerializer
     /// in the specified path with name filename and extension .mmpose and .mmskeleton
     /// Returns true if poseSet was successfully deserialized, false otherwise
     /// </summary>
-    public bool Deserialize(string path, string fileName, MotionMatchingData mmData, out PoseSet poseSet)
+    public bool Deserialize(string path, string fileName, IPoseSetSource source, out PoseSet poseSet)
     {
-        poseSet = new PoseSet(mmData);
+        poseSet = new PoseSet(source);
 
         // --------------------
         // Read Skeleton File

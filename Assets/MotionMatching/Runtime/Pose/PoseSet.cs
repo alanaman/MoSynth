@@ -28,21 +28,18 @@ public class PoseSet
     private readonly List<AnimationTag> _tags;
     private readonly Dictionary<string, int> _tagNameToIndex;
 
-    public PoseSet(MotionMatchingData mmData)
+    public PoseSet(IPoseSetSource source) : this(source.MaximumFramesPrediction)
+    {
+    }
+
+    public PoseSet(int maximumFramesPrediction)
     {
         _poses = new List<PoseVector>();
         _clips = new List<AnimationClip>();
         _tags = new List<AnimationTag>();
         _tagNameToIndex = new Dictionary<string, int>();
         FrameTime = -1.0f;
-        MaximumFramesPrediction = 0;
-        foreach (var t in mmData.trajectoryFeatures)
-        {
-            if (t.framesPrediction[^1] > MaximumFramesPrediction)
-            {
-                MaximumFramesPrediction = t.framesPrediction[^1];
-            }
-        }
+        MaximumFramesPrediction = maximumFramesPrediction;
     }
 
     /// <summary>

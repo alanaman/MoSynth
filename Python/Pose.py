@@ -139,17 +139,30 @@ class Pose:
 
     @staticmethod
     def blend(poses: Pose, weights: np.ndarray) -> Pose:
-        """Weighted blend across multiple pose states."""
+        """
+        Weighted blend across axis 0.
+
+        `poses` is a single Pose whose leading axis is the blend axis, so pair
+        this with `Pose.concatenate`. Any remaining batch axes are preserved:
+        blending (N_blend, B, ...) leaves a batch of B. `weights` is 1-D of
+        length N_blend and is reshaped for broadcast the same way
+        `blend_quaternions` does it -- indexing it with `[..., np.newaxis]`
+        would align it against the *trailing* axes and fail on batched input.
+        """
         weights = np.asarray(weights, dtype=np.float32)
 
-        # poses.rootPos (..., 3), poses.hipPos (..., 3), poses.quats (..., num_bones, 4)
-        roots = np.sum(poses.rootPos * weights[..., np.newaxis], axis=0)
-        hips = np.sum(poses.hipPos * weights[..., np.newaxis], axis=0)
+        # poses.rootPos (N, ..., 3), poses.hipPos (N, ..., 3), poses.quats (N, ..., num_bones, 4)
+        w = weights.reshape((-1,) + (1,) * (poses.rootPos.ndim - 1))
+        roots = np.sum(poses.rootPos * w, axis=0)
+        hips = np.sum(poses.hipPos * w, axis=0)
         quats = blend_quaternions(poses.quats, weights, axis=0)
 
-        roots = np.expand_dims(roots, axis=0)
-        hips = np.expand_dims(hips, axis=0)
-        quats = np.expand_dims(quats, axis=0)
+        # Collapsing the blend axis of an unbatched input leaves (3,) / (B, 4);
+        # Pose requires an explicit batch axis. Batched input already has one.
+        if roots.ndim == 1:
+            roots = np.expand_dims(roots, axis=0)
+            hips = np.expand_dims(hips, axis=0)
+            quats = np.expand_dims(quats, axis=0)
 
         return Pose(roots, hips, quats)
 
@@ -159,6 +172,20 @@ class Pose:
         roots = np.concatenate([p.rootPos for p in poses], axis=0)
         hips = np.concatenate([p.hipPos for p in poses], axis=0)
         quats = np.concatenate([p.quats for p in poses], axis=0)
+        return Pose(roots, hips, quats)
+
+    @staticmethod
+    def stack(poses: List[Pose]) -> Pose:
+        """
+        Stacks poses on a NEW leading axis, preserving each one's batch shape.
+
+        This is the input `blend` wants when the operands are themselves
+        batched: `concatenate` would fold the batch into the blend axis, so
+        blending two batches of A poses would produce one pose rather than A.
+        """
+        roots = np.stack([p.rootPos for p in poses], axis=0)
+        hips = np.stack([p.hipPos for p in poses], axis=0)
+        quats = np.stack([p.quats for p in poses], axis=0)
         return Pose(roots, hips, quats)
 
 
@@ -235,19 +262,27 @@ class PoseDelta:
 
     @staticmethod
     def blend(deltas: PoseDelta, weights: np.ndarray) -> PoseDelta:
-        """Weighted blend across multiple delta states (batch axis 0)."""
+        """
+        Weighted blend across axis 0. Mirrors Pose.blend: `deltas` is a single
+        PoseDelta whose leading axis is the blend axis, and any remaining batch
+        axes are preserved.
+        """
         weights = np.asarray(weights, dtype=np.float32)
 
-        root_vel = np.sum(deltas.rootVel * weights[..., np.newaxis], axis=0)
-        hip_vel = np.sum(deltas.hipVel * weights[..., np.newaxis], axis=0)
+        w_vel = weights.reshape((-1,) + (1,) * (deltas.rootVel.ndim - 1))
+        root_vel = np.sum(deltas.rootVel * w_vel, axis=0)
+        hip_vel = np.sum(deltas.hipVel * w_vel, axis=0)
         # Rotation vectors blend linearly - that is the correct operation for
         # angular rates, and needs no nlerp/renormalisation.
         w = weights.reshape((-1,) + (1,) * (deltas.rotvecs.ndim - 1))
         rotvecs = np.sum(deltas.rotvecs * w, axis=0)
 
-        return PoseDelta(np.expand_dims(root_vel, axis=0),
-                         np.expand_dims(hip_vel, axis=0),
-                         np.expand_dims(rotvecs, axis=0))
+        if root_vel.ndim == 1:
+            root_vel = np.expand_dims(root_vel, axis=0)
+            hip_vel = np.expand_dims(hip_vel, axis=0)
+            rotvecs = np.expand_dims(rotvecs, axis=0)
+
+        return PoseDelta(root_vel, hip_vel, rotvecs)
 
     @staticmethod
     def concatenate(deltas: List[PoseDelta]) -> PoseDelta:
@@ -255,5 +290,13 @@ class PoseDelta:
         root_vels = np.concatenate([d.rootVel for d in deltas], axis=0)
         hip_vels = np.concatenate([d.hipVel for d in deltas], axis=0)
         rotvecs = np.concatenate([d.rotvecs for d in deltas], axis=0)
+        return PoseDelta(root_vels, hip_vels, rotvecs)
+
+    @staticmethod
+    def stack(deltas: List[PoseDelta]) -> PoseDelta:
+        """Stacks deltas on a new leading axis. See Pose.stack."""
+        root_vels = np.stack([d.rootVel for d in deltas], axis=0)
+        hip_vels = np.stack([d.hipVel for d in deltas], axis=0)
+        rotvecs = np.stack([d.rotvecs for d in deltas], axis=0)
         return PoseDelta(root_vels, hip_vels, rotvecs)
 

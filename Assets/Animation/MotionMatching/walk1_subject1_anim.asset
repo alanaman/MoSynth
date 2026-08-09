@@ -14,5 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: MotionMatching::MotionMatching.AnimationData
   animation: {fileID: 5022602860645237092, guid: 5b9ba3ce1f331a943a539df7fd8bb8eb, type: 3}
   tags: []
-  startFrame: 0
-  endFrame: 7840
+  startFrame: 100
+  endFrame: 2800

@@ -71,9 +71,9 @@ public class AnnotatedAnimationClip : ScriptableObject
 #endif
     }
 
-    public void UpdateMecanimInformation(MotionMatchingData mmData)
+    public void UpdateMecanimInformation(IPoseSetSource source)
     {
-        animation.UpdateMecanimInformation(mmData);
+        animation.UpdateMecanimInformation(source);
     }
 
     private void OnValidate()

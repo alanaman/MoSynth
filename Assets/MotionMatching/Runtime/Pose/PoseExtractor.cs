@@ -14,7 +14,7 @@ public static class PoseExtractor
     /// poseSet is not cleared, it will add bvhAnimation the the existing poses
     /// Returns true if the bvhAnimation was added to the poseSet, false otherwise
     /// </summary>
-    public static bool Extract(AnnotatedAnimationClip animationClip, PoseSet poseSet, MotionMatchingData mmData)
+    public static bool Extract(AnnotatedAnimationClip animationClip, PoseSet poseSet, IPoseSetSource source)
     {
         // Set Poses
         var nFrames = animationClip.Frames.Length;
@@ -38,7 +38,7 @@ public static class PoseExtractor
         for (var i = 0; i < nFrames - 1; i++)
         {
             poses[i] = new PoseVector(nPoseSetJoints);
-            ExtractPose(ref poses[i], animationClip, i, mmData);
+            ExtractPose(ref poses[i], animationClip, i, source);
         }
 
         for (var i = 0; i < nFrames - 2; i++)
@@ -46,7 +46,7 @@ public static class PoseExtractor
             ExtractPoseVelocities(ref poses[i], poses[i + 1], animationClip);
         }
         var lastPose = new PoseVector(nPoseSetJoints);
-        ExtractPose(ref lastPose, animationClip, nFrames - 1, mmData);
+        ExtractPose(ref lastPose, animationClip, nFrames - 1, source);
         ExtractPoseVelocities(ref poses[^1], lastPose, animationClip);
 
         for (var i = 0; i < nFrames - 1; i++)
@@ -56,7 +56,7 @@ public static class PoseExtractor
                 animationClip.Skeleton,
                 leftToesIndex,
                 rightToesIndex,
-                mmData.contactVelocityThreshold);
+                source.ContactVelocityThreshold);
         }
 
 
@@ -209,7 +209,7 @@ public static class PoseExtractor
     }
 
     private static void ExtractPose(ref PoseVector pose, AnnotatedAnimationClip animationClip, int frameIndex,
-        MotionMatchingData mmData)
+        IPoseSetSource source)
     {
         var frame = animationClip.Frames[frameIndex];
         // Joints
@@ -223,7 +223,7 @@ public static class PoseExtractor
         // position and direction are hips projected on the ground
         var frameRootMotion = frame.rootMotion;
         var sbPos = new Vector3(frameRootMotion.x, 0.0f, frameRootMotion.z);
-        var hipsForwardDir = frame.localRotations[0] * mmData.hipsForwardLocalVector;
+        var hipsForwardDir = frame.localRotations[0] * source.HipsForwardLocalVector;
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);

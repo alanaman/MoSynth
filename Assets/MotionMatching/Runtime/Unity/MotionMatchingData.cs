@@ -12,7 +12,7 @@ namespace MotionMatching
 /// Contains animation clips, mapping between the skeleton and Mecanim, and other data
 /// </summary>
 [CreateAssetMenu(fileName = "MotionMatchingData", menuName = "MotionMatching/MotionMatchingData")]
-public class MotionMatchingData : ScriptableObject
+public class MotionMatchingData : ScriptableObject, IPoseSetSource
 {
     // TODO: DefaultHipsForward... detect/suggest automatically? try to fix automatically at BVHAnimation level? 
     // (if it is fixed some code can be deleted... all code related to DefaultHipsForward and in the UpdateTransform() when correcting the hips forward)
@@ -66,6 +66,34 @@ public class MotionMatchingData : ScriptableObject
 
     private FeatureSet _featureSet;
     public bool JointsLocalForwardError => jointsLocalForward == null;
+
+    // IPoseSetSource --- the subset of this asset the pose-database pipeline actually reads.
+    // Exposed as properties so a consumer that only wants a pose database (MotionField's config)
+    // can supply one without also being a full Motion Matching asset.
+    public List<AnnotatedAnimationClip> AnimationClips => animationClips;
+    public float3 HipsForwardLocalVector => hipsForwardLocalVector;
+    public float ContactVelocityThreshold => contactVelocityThreshold;
+
+    /// <summary>
+    /// Frames of lookahead the longest trajectory feature needs. Poses closer than this to the end
+    /// of a clip cannot be used for prediction.
+    /// </summary>
+    public int MaximumFramesPrediction
+    {
+        get
+        {
+            int maximum = 0;
+            foreach (var t in trajectoryFeatures)
+            {
+                if (t.framesPrediction.Length > 0 && t.framesPrediction[^1] > maximum)
+                {
+                    maximum = t.framesPrediction[^1];
+                }
+            }
+
+            return maximum;
+        }
+    }
 
     private void ImportAnimations()
     {

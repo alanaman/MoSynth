@@ -50,12 +50,12 @@ public class BvhAnimation : ScriptableObject
         EndSites.Add(endSite);
     }
 
-    public void UpdateMecanimInformation(MotionMatchingData motionMatchingData)
+    public void UpdateMecanimInformation(IPoseSetSource source)
     {
         for (var i = 0; i < Skeleton.Joints.Count; i++)
         {
             var joint = Skeleton.Joints[i];
-            if (motionMatchingData.TryGetMecanimBone(joint.name, out var bone))
+            if (source.TryGetMecanimBone(joint.name, out HumanBodyBones bone))
             {
                 joint.type = bone;
                 Skeleton.Joints[i] = joint;

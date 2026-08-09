@@ -1,4 +1,5 @@
 import json
+import os
 
 import numpy as np
 
@@ -13,22 +14,48 @@ from pose_set_importer import deserialize_pose_set
 
 from debugging.python_net import connect_debugger
 
-connect_debugger()
+# Attaching costs a socket timeout per import and injects a PyCharm egg into
+# sys.path, which is pure overhead for batch work such as training. Opt in.
+if os.environ.get('MOSYNTH_PYCHARM_DEBUG', '1') != '0':
+    connect_debugger()
 
 
-def load_animations(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchingData'):
-    pose_set: PoseSet = deserialize_pose_set(data_dir, 'MotionMatchingData')
+def build_state_indices(clips, n_poses):
+    """
+    Frame indices that can serve as motion field states.
+
+    A state at frame i needs its own velocity `lv[i]` *and* the next frame's
+    velocity `lv[i + 1]` (which becomes pose_y). Frame i + 1 must therefore
+    belong to the same clip, so the last frame of every clip is dropped --
+    otherwise a state would predict its successor from the first frame of an
+    unrelated animation.
+    """
+    if not clips:
+        return np.arange(max(0, n_poses - 1), dtype=np.int64)
+
+    ranges = [np.arange(c['start'], min(c['end'], n_poses) - 1, dtype=np.int64)
+              for c in clips]
+    ranges = [r for r in ranges if r.size > 0]
+    if not ranges:
+        return np.zeros(0, dtype=np.int64)
+    return np.concatenate(ranges)
+
+
+def load_animations(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchingData',
+                    db_name='MotionMatchingData'):
+    pose_set: PoseSet = deserialize_pose_set(data_dir, db_name)
 
     skeleton: Skeleton = pose_set.skeleton
     bone_count = len(list(skeleton))
-
-    n_src_poses = pose_set.local_positions.shape[0]
-    n_target_poses = n_src_poses - 1  # need (i, i+1) i has x, v and i+1 has y
 
     pos = pose_set.local_positions  # (n_poses, n_joints, 3)
     quats = pose_set.local_rotations  # (n_poses, n_joints, 4)
     lv = pose_set.local_velocities  # (n_poses, n_joints, 3) — m/s
     lav = pose_set.local_angular_velocities  # (n_poses, n_joints, 3) — rotation vectors, rad/s, xyz
+
+    idx = build_state_indices(pose_set.clips, pos.shape[0])
+    nxt = idx + 1
+    n_target_poses = idx.shape[0]
 
     # NOTE: lv/lav are per-SECOND rates (PoseExtractor divides by FrameTime), and
     # they are stored here as-is. Integrating them requires an explicit time step:
@@ -42,28 +69,28 @@ def load_animations(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchi
     #   slot 2 — root bone quat: identity (yaw-invariant)
     #   slots 3+ — remaining joint quats
     pose_x = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_x[:, 1, :3] = pos[:n_target_poses, 1, :]  # hip
+    pose_x[:, 1, :3] = pos[idx, 1, :]  # hip
     pose_x[:, 2, :] = [0., 0., 0., 1.]  # identity quaternion [x,y,z,w]
-    pose_x[:, 3:, :] = quats[:n_target_poses, 1:, :]
+    pose_x[:, 3:, :] = quats[idx, 1:, :]
 
     # pose_v: velocity at frame i  =  (Pose(i+1) − Pose(i)) / frame_time
     #   slot 0 — root translational rate (root-local space)
     #   slot 1 — hip translational rate
     #   slots 2+ — joint angular rates as rotation vectors (trailing component unused)
     pose_v = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_v[:, 0, :3] = lv[:n_target_poses, 0, :]
-    pose_v[:, 1, :3] = lv[:n_target_poses, 1, :]
-    pose_v[:, 2:, :3] = lav[:n_target_poses, :, :]
+    pose_v[:, 0, :3] = lv[idx, 0, :]
+    pose_v[:, 1, :3] = lv[idx, 1, :]
+    pose_v[:, 2:, :3] = lav[idx, :, :]
 
     # pose_y: future velocity at frame i+1  =  (Pose(i+2) − Pose(i+1)) / frame_time
     #   Same layout as pose_v, shifted one frame forward.
     pose_y = np.zeros((n_target_poses, bone_count + 2, 4), dtype=np.float32)
-    pose_y[:, 0, :3] = lv[1:n_target_poses + 1, 0, :]
-    pose_y[:, 1, :3] = lv[1:n_target_poses + 1, 1, :]
-    pose_y[:, 2:, :3] = lav[1:n_target_poses + 1, :, :]
+    pose_y[:, 0, :3] = lv[nxt, 0, :]
+    pose_y[:, 1, :3] = lv[nxt, 1, :]
+    pose_y[:, 2:, :3] = lav[nxt, :, :]
 
     # pose_contacts: foot contact flags aligned to frame i
-    pose_contacts = pose_set.foot_contacts[:n_target_poses, :].copy()
+    pose_contacts = pose_set.foot_contacts[idx, :].copy()
 
     return skeleton, pose_x, pose_v, pose_y, pose_contacts, pose_set.frameTime, pose_set
 
@@ -116,39 +143,51 @@ def get_pose_arrays(skeleton: Skeleton,
     return pos, quats, lv, lav, bool(pose_contacts[0]), bool(pose_contacts[1])
 
 
-def main():
-    skeleton, pose_x, pose_v, pose_y, pose_contacts, frame_time, pose_set = load_animations()
-    motion_field = MotionField(pose_x, pose_v, pose_y, skeleton, frame_time)
+def main(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchingData',
+         db_name='MotionMatchingData', value_function_path=None):
+    """
+    Out-of-process motion field server for MfConnector (the ZeroMQ alternative to
+    the in-process PythonNET MotionFieldStage).
+    """
+    skeleton, pose_x, pose_v, pose_y, pose_contacts, frame_time, pose_set = \
+        load_animations(data_dir, db_name)
+    motion_field = MotionField(pose_x, pose_v, pose_y, skeleton, frame_time,
+                               value_function_path=value_function_path)
 
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
     print("Python ZeroMQ server listening on port 5555...")
 
-    last_index = 700
-    current_x = pose_x[last_index, ...].copy()
-    current_v = pose_v[last_index, ...].copy()
-    current_contacts = pose_contacts[last_index, ...]
+    start_index = 400
+    current_x = pose_x[start_index, ...].copy()
+    current_v = pose_v[start_index, ...].copy()
+    current_contacts = pose_contacts[start_index, ...]
 
     while True:
 
         raw_msg = socket.recv()
 
-        # decode desired direction from json sent from Unity
+        # decode the goal from the json sent from Unity
         try:
             msg = raw_msg.decode('utf-8')
             data = json.loads(msg)
-            desired_dir = np.array(data["desired_dir"])
             delta_time = float(data["delta_time"])
+            if "theta" in data:
+                theta = float(data["theta"])
+            else:
+                # Legacy clients send a desired direction in the character's local
+                # frame instead; theta is the character's heading (+Z) in the goal
+                # frame. See MotionFieldStage.UpdateSteering for the same conversion.
+                desired_dir = np.asarray(data["desired_dir"], dtype=np.float32)
+                theta = -float(np.arctan2(desired_dir[0], desired_dir[-1])) \
+                    if np.any(desired_dir) else 0.0
         except Exception as e:
             print(f"Error decoding message: {e}")
-            socket.send_string(json.dumps({"error": "Invalid desired direction format"}))
+            socket.send_string(json.dumps({"error": "Invalid request format"}))
             continue
 
-        # desired_dir = np.array([0.0, 0.0])
-        current_x[...], current_v[...] = motion_field.get_next_pose(current_x, current_v, delta_time)
-        # current_x[...], current_v[...] = motion_field.get_next_pose_blended(current_x, current_v, delta_time, k_neighbors=15)
-#         current_x[...], current_v[...] = motion_field.greedy_action(desired_dir, current_x, current_v, delta_time, k_neighbors=15)
+        current_x, current_v = motion_field.get_pose(current_x, current_v, delta_time, theta=theta)
         reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
         socket.send_string(json.dumps(reply))
 
