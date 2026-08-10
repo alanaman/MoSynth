@@ -11,19 +11,33 @@ namespace MotionField
 /// Draws the motion field as a 3D point cloud so a misbehaving policy can be watched rather than
 /// inferred.
 ///
-/// Every database state is a point in a 138-dimensional similarity space, projected to 3D by
-/// <c>motion_field_embedding.py</c>. On top of the static cloud, this overlays what the policy is
-/// doing right now: where the live pose sits, which neighbors it is choosing between, and which one
-/// the tug is pulling it toward. A policy that stalls shows up immediately -- the trail stops
-/// sweeping the cloud and collapses to a knot.
+/// Every database state is a point, projected to 3D by <c>motion_field_embedding.py</c>. Under that
+/// module's default the projection covers the *joint positions* only, so the cloud is a pose
+/// manifold: one pose held at two different speeds lands in one place rather than two, and how far
+/// apart two points sit means how differently the body is posed and nothing else.
 ///
-/// Overlay legend: yellow is the live pose, cyan its nearest state, magenta the tug target, green
-/// the rest of the neighbourhood with size and brightness following the similarity weight.
+/// Velocity is therefore not a displacement here, it is an edge. A state's one-frame lookahead is
+/// exactly the next frame of its clip, so the frame-adjacency edges <see cref="BuildEdgeMesh"/>
+/// draws are the field's velocity: each line leaves a pose and points at where that pose is going.
+/// Read together, the cloud is the set of poses and the edges are the flow over them.
 ///
-/// Two things to keep in mind when reading distances off the picture. The tug is the neighbour the
-/// *chosen action* emphasises, and actions are chosen on value, so it is routinely not the nearest
-/// state. And UMAP preserves neighbourhood structure, not distance -- two states adjacent in the
-/// real metric can land far apart on screen, so judge closeness by the markers, not by the gap.
+/// On top of that static picture, this overlays what the policy is doing right now: where the live
+/// pose sits, which neighbours it is choosing between, and which one the tug is pulling it toward.
+/// A policy that stalls shows up immediately -- the trail stops sweeping the cloud and collapses to
+/// a knot.
+///
+/// Overlay legend: yellow is the live pose, with a yellow edge ahead to where its neighbourhood
+/// flows over the next <c>velocityLookahead</c> frames (the live pose is not a database state, so
+/// it has no adjacency edge of its own) and a yellow trail behind it. Cyan is its nearest state,
+/// magenta the tug target, green the rest of the neighbourhood with size and brightness following
+/// the similarity weight.
+///
+/// Three things to keep in mind when reading the picture. The tug is the neighbour the *chosen
+/// action* emphasises, and actions are chosen on value, so it is routinely not the nearest state.
+/// The live pose's edge is built from the plain similarity weights, so it shows where the
+/// neighbourhood flows rather than which action was picked -- the magenta marker carries that. And
+/// UMAP preserves neighbourhood structure, not distance: two states adjacent in the real metric can
+/// land far apart on screen, so judge closeness by the markers, not by the gap.
 ///
 /// Add it to the same GameObject as the <see cref="MotionSynthesisComponent"/> whose stage list
 /// contains a <see cref="MotionFieldStage"/>, and enable <c>collectDebugData</c> on that stage.
@@ -65,16 +79,20 @@ public class MotionFieldVisualizer : MonoBehaviour
     [Header("What To Draw")] [SerializeField]
     private bool showCloud = true;
 
-    [Tooltip("Links each state to the next frame of the same clip. The line darkens at its start " +
-             "and brightens at its end, so the gradient reads as the direction of time.")]
+    [Tooltip("Links each state to the next frame of the same clip, which under a position-only " +
+             "projection is that state's velocity. The line darkens at its start and brightens at " +
+             "its end, so the gradient reads as the direction of travel.")]
     [SerializeField]
     private bool showEdges = true;
 
-    [Tooltip("The live pose, its k nearest neighbours and the tug target.")] [SerializeField]
+    [Tooltip("The live pose, its k nearest neighbours, the tug target, the trail, and the live " +
+             "pose's own velocity edge.")]
+    [SerializeField]
     private bool showOverlay = true;
 
-    [Tooltip("Lines from the live pose to each neighbour, plus the trail. Off by default: on a " +
-             "dense cloud they hide the markers they are meant to explain.")]
+    [Tooltip("Lines from the live pose to each of its neighbours. Off by default: on a dense cloud " +
+             "they hide the markers they are meant to explain. Does not affect the trail or the " +
+             "live pose's velocity edge, which are always drawn with the overlay.")]
     [SerializeField]
     private bool showLinks;
 
@@ -83,10 +101,25 @@ public class MotionFieldVisualizer : MonoBehaviour
     [Range(0, 600)]
     private int trailLength = 120;
 
+    [Tooltip("How many frames ahead the live pose's velocity edge reaches. 1 is the true one-frame " +
+             "velocity and the default. Raise it if the edge is too short to read -- at a large " +
+             "pointScale one frame of motion is about the width of the marker it leaves. The same " +
+             "count applies to every pose, so a longer edge never means a faster one.")]
+    [SerializeField]
+    [Range(1, 30)]
+    private int velocityLookahead = 1;
+
     private MotionFieldStage _stage;
     private Material _material;
 
     private Vector3[] _points; // embedding fitted into the size box, anchor-local
+
+    /// <summary>
+    /// State one frame later in the same clip, or -1 at a clip's last frame. Derived from the edge
+    /// list rather than assumed to be i+1, so clip boundaries are respected for free.
+    /// </summary>
+    private int[] _successor;
+
     private Mesh _cloudMesh;
     private Mesh _edgeMesh;
     private Mesh _overlayTriangles;
@@ -171,6 +204,10 @@ public class MotionFieldVisualizer : MonoBehaviour
         _overlayTriangles = null;
         _overlayLines = null;
         _material = null;
+
+        // Dropped too, so that editing `size` in play mode refits the cloud instead of rebuilding
+        // the meshes from the previous fit. `_successor` is size-independent, so it survives.
+        _points = null;
     }
 
     private void LateUpdate()
@@ -195,7 +232,11 @@ public class MotionFieldVisualizer : MonoBehaviour
 
         BuildOverlay();
         if (_overlayTriangles.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayTriangles, 0, toWorld);
-        if (showLinks && _overlayLines.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayLines, 0, toWorld);
+
+        // Not gated on showLinks: the trail and the live pose's velocity edge share this buffer,
+        // and both are the point of the tool. showLinks decides only whether the per-neighbour
+        // lines go into it, back in BuildOverlay.
+        if (_overlayLines.vertexCount > 0) Graphics.RenderMesh(parameters, _overlayLines, 0, toWorld);
     }
 
     private void OnValidate()
@@ -233,6 +274,7 @@ public class MotionFieldVisualizer : MonoBehaviour
         }
 
         _points ??= FitToBox(_stage.GetEmbedding(), size);
+        _successor ??= BuildSuccessors(_stage.GetEmbeddingEdges(), _points.Length);
 
         _cloudMesh ??= BuildCloudMesh();
         _edgeMesh ??= BuildEdgeMesh();
@@ -266,6 +308,27 @@ public class MotionFieldVisualizer : MonoBehaviour
         var fitted = new Vector3[raw.Count];
         for (var i = 0; i < raw.Count; i++) fitted[i] = (raw[i] - centre) * scale;
         return fitted;
+    }
+
+    /// <summary>
+    /// Invert the flat (from, to) edge pairs into a per-state successor lookup, so the overlay can
+    /// ask "where does this state go next" without scanning the edge list every frame.
+    /// </summary>
+    private static int[] BuildSuccessors(IReadOnlyList<int> edges, int stateCount)
+    {
+        var successor = new int[stateCount];
+        for (var i = 0; i < stateCount; i++) successor[i] = -1;
+
+        if (edges == null) return successor;
+
+        for (var e = 0; e + 1 < edges.Count; e += 2)
+        {
+            var from = edges[e];
+            var to = edges[e + 1];
+            if (from >= 0 && from < stateCount && to >= 0 && to < stateCount) successor[from] = to;
+        }
+
+        return successor;
     }
 
     private Mesh BuildCloudMesh()
@@ -366,10 +429,11 @@ public class MotionFieldVisualizer : MonoBehaviour
                     var scale = isNearest ? 2.2f : Mathf.Lerp(0.9f, 1.8f, relative);
 
                     _overlayTriangleBuffer.AddCube(point, unit * scale, colour);
-                    _overlayLineBuffer.AddLine(current, point, LinkColor * 0.1f, colour);
+                    if (showLinks) _overlayLineBuffer.AddLine(current, point, LinkColor * 0.1f, colour);
                 }
 
                 _overlayTriangleBuffer.AddCube(current, unit * 3f, CurrentColor);
+                BuildVelocityEdge(neighbors, weights, current, unit);
             }
         }
 
@@ -377,6 +441,72 @@ public class MotionFieldVisualizer : MonoBehaviour
 
         _overlayTriangleBuffer.Fill(_overlayTriangles, MeshTopology.Triangles);
         _overlayLineBuffer.Fill(_overlayLines, MeshTopology.Lines);
+    }
+
+    /// <summary>
+    /// The live pose's velocity, as an edge to where it is going.
+    /// </summary>
+    /// <remarks>
+    /// Every point in the cloud shows its velocity as the edge to the next frame of its clip. The
+    /// live pose cannot: it is not a database state, so it has no successor to link to. Its
+    /// neighbours do have one each, and averaging where they go next -- under the same weights that
+    /// placed the live marker itself -- puts the head of the edge where the field's blended step
+    /// lands. Point to point, on the same terms as every other edge here.
+    ///
+    /// One frame by default, matching every other edge in the picture.
+    /// <see cref="velocityLookahead"/> exists because that is short: one frame is around 1.8% of
+    /// the cloud's extent, which at a large <see cref="pointScale"/> is no longer than the marker
+    /// the edge leaves. Walking the successor chain keeps every head on a real projected state, and
+    /// the same count applies to every pose -- so a longer edge still never means a faster one.
+    ///
+    /// These are the plain similarity weights, so this is the flow of the neighbourhood, not the
+    /// action the policy actually chose; the magenta tug marker carries that.
+    ///
+    /// Renormalising by the weight that survived, rather than by the full sum, matches how
+    /// <c>current</c> itself is computed when some neighbours drop out.
+    /// </remarks>
+    private void BuildVelocityEdge(IReadOnlyList<int> neighbors, IReadOnlyList<float> weights,
+                                   Vector3 current, float unit)
+    {
+        var ahead = Vector3.zero;
+        var total = 0f;
+
+        for (var i = 0; i < neighbors.Count; i++)
+        {
+            if (!InRange(neighbors[i])) continue;
+
+            var next = Advance(neighbors[i], velocityLookahead);
+            if (next < 0) continue; // clip ends on this neighbour's own frame
+
+            ahead += _points[next] * weights[i];
+            total += weights[i];
+        }
+
+        if (total <= 1e-6f) return;
+
+        ahead /= total;
+        _overlayLineBuffer.AddLine(current, ahead, CurrentColor * 0.15f, CurrentColor);
+
+        // A head marker as well as the gradient: seen end-on, a line has no visible direction at
+        // all, and this is the one edge whose direction is the whole point.
+        _overlayTriangleBuffer.AddCube(ahead, unit * 1.2f, CurrentColor);
+    }
+
+    /// <summary>
+    /// Walk <paramref name="steps"/> frames along a state's clip, stopping at the clip's last
+    /// frame rather than running off it. -1 only when the start state has no successor at all.
+    /// </summary>
+    private int Advance(int state, int steps)
+    {
+        var at = _successor[state];
+        for (var i = 1; i < steps && at >= 0; i++)
+        {
+            var next = _successor[at];
+            if (next < 0) break; // end of the clip: stop here rather than losing the edge entirely
+            at = next;
+        }
+
+        return at;
     }
 
     private void PushTrail(Vector3 point)

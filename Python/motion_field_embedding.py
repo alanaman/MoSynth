@@ -21,6 +21,18 @@ One consequence of `precomputed_knn`: `reducer.transform()` is unavailable, so a
 novel pose cannot be projected exactly. Unity instead places the live state at
 the similarity-weighted barycenter of its neighbours' embeddings, which costs
 nothing and is the same interpolation the field already uses for values.
+
+By default only the *position* half of the feature is projected. Embedding the
+whole thing lays out a phase space, where one pose held at two speeds lands in
+two places and nothing on screen distinguishes "a different pose" from "the same
+pose, moving differently" -- which is what made the first version of this cloud
+hard to read. Positions alone lay out a pose manifold instead.
+
+Velocity does not disappear from the picture, it changes form. Since
+`pose_v[i] = (Pose(i+1) - Pose(i)) / frame_time`, a state's one-frame lookahead
+`x + v * frame_time` *is* the next state, so in a position-only projection the
+velocity of state i points exactly at the point for state i+1 -- the
+frame-adjacency edge Unity already draws. The edges become the velocity field.
 """
 
 from __future__ import annotations
@@ -37,12 +49,20 @@ from MotionField import MotionField, resolve_device
 from motion_field_io import (UNIFORM_BONE_WEIGHTS, bone_weights_signature,
                              database_signature, load_bone_weights_file)
 
-SCHEMA_VERSION = 1
+# 3: build_motion_states switched the metric FK to the rest-pose hips offset
+# (motion_field_io.METRIC_VERSION 2), which moves every embedded point.
+SCHEMA_VERSION = 3
 
 # 'field'     -- k-NN graph under the field's own sum-of-per-joint-L2 metric.
 # 'euclidean' -- flat L2 on the flattened feature, what the legacy notebook did.
 METRIC_FIELD = 'field'
 METRIC_EUCLIDEAN = 'euclidean'
+
+# 'position' -- joint positions only: a pose manifold, with velocity carried by
+#               the frame-adjacency edges. See the module docstring.
+# 'full'     -- positions and velocities, the original phase-space projection.
+FEATURE_POSITION = 'position'
+FEATURE_FULL = 'full'
 
 DEFAULT_KNN_CHUNK = 256
 
@@ -120,11 +140,12 @@ def compute_embedding(data_dir: str, db_name: str, out_path: str,
                       n_neighbors: int = 80,
                       min_dist: float = 0.1,
                       metric_mode: str = METRIC_FIELD,
+                      feature_mode: str = FEATURE_POSITION,
                       device: str = 'auto',
                       seed: int = 42,
                       knn_chunk: int = DEFAULT_KNN_CHUNK,
-                      pos_weight: float = 0.2,
-                      vel_weight: float = 0.9,
+                      pos_weight: float = 1.0,
+                      vel_weight: float = 0.06,
                       bone_weights=None,
                       progress=None) -> dict:
     """
@@ -133,6 +154,18 @@ def compute_embedding(data_dir: str, db_name: str, out_path: str,
     `progress(stage, fraction)` matches `motion_field_trainer.train`, so the
     Unity progress-bar callback works unchanged for both.
 
+    :param feature_mode: `FEATURE_POSITION` to project the joint-position rows
+        alone (the default -- see the module docstring), `FEATURE_FULL` for the
+        whole position+velocity feature.
+
+        Two consequences of position mode worth knowing. `vel_weight` stops
+        affecting the projection entirely, and `pos_weight` only scales it
+        uniformly, which cannot reorder neighbours and which UMAP normalises
+        away regardless; per-joint *position* weights do still shape the layout.
+        Both weights are still recorded in the file. And `load_embedding` will
+        still warn when the bone weights change, including a velocity-only
+        change that cannot have moved a single point -- over-warning is the safe
+        direction for a staleness check, so it is left alone.
     :return: summary dict for logging on the C# side.
     """
     progress = progress or _noop_progress
@@ -147,6 +180,13 @@ def compute_embedding(data_dir: str, db_name: str, out_path: str,
                                device=device, pos_weight=pos_weight,
                                vel_weight=vel_weight, bone_weights=bone_weights)
     features = motion_field.state_features
+    if feature_mode == FEATURE_POSITION:
+        # build_motion_states stacks bone_count weighted position rows on top of
+        # bone_count weighted velocity rows; the first half is the pose. Slicing
+        # here covers both uses below -- the k-NN graph and the matrix UMAP fits
+        # are derived from this one array.
+        features = np.ascontiguousarray(features[:, :motion_field.bone_count, :])
+
     states_count = int(features.shape[0])
     flat = features.reshape(states_count, -1)
 
@@ -188,6 +228,7 @@ def compute_embedding(data_dir: str, db_name: str, out_path: str,
                        'n_components': int(n_components),
                        'min_dist': float(min_dist),
                        'metric_mode': str(metric_mode),
+                       'feature_mode': str(feature_mode),
                        'seed': int(seed),
                        'pos_weight': float(pos_weight),
                        'vel_weight': float(vel_weight),
@@ -203,11 +244,14 @@ def compute_embedding(data_dir: str, db_name: str, out_path: str,
         'n_components': int(n_components),
         'n_neighbors': n_neighbors,
         'metric_mode': str(metric_mode),
+        'feature_mode': str(feature_mode),
+        'feature_rows': int(features.shape[1]),
         'device': motion_field.device,
         'seconds': round(time.perf_counter() - started, 2),
     }
     print(f"[MotionField] embedded {summary['states_count']} states -> "
           f"{summary['n_components']}D, {summary['edges_count']} edges, "
+          f"features={summary['feature_mode']} ({summary['feature_rows']} rows), "
           f"metric={summary['metric_mode']}, {summary['seconds']}s "
           f"on {summary['device']}")
     return summary
@@ -236,6 +280,7 @@ def save_embedding(out_path: str, embedding: np.ndarray, edges: np.ndarray,
         'bone_weights_sha1':
             np.str_(params.get('bone_weights_sha1', UNIFORM_BONE_WEIGHTS)),
         'metric_mode': np.str_(params['metric_mode']),
+        'feature_mode': np.str_(params.get('feature_mode', FEATURE_FULL)),
     }
     for key, value in signature.items():
         payload[key] = np.str_(value)
@@ -272,7 +317,8 @@ def load_embedding(path: str, data_dir: str = None, db_name: str = None,
         with np.load(path, allow_pickle=False) as data:
             version = int(data['schema_version'])
             if version != SCHEMA_VERSION:
-                log(f'[MotionField] embedding schema {version} != {SCHEMA_VERSION}, ignoring {path}')
+                log(f'[MotionField] embedding schema {version} != {SCHEMA_VERSION}, ignoring '
+                    f'{path}. Press Compute UMAP Embedding on the config to rebuild it.')
                 return None
 
             loaded = {
@@ -284,6 +330,7 @@ def load_embedding(path: str, data_dir: str = None, db_name: str = None,
                 'n_components': int(data['n_components']),
                 'n_neighbors': int(data['n_neighbors']),
                 'metric_mode': str(data['metric_mode']),
+                'feature_mode': str(data['feature_mode']),
                 'bone_weights_sha1': str(data['bone_weights_sha1'])
                     if 'bone_weights_sha1' in data.files else UNIFORM_BONE_WEIGHTS,
             }
@@ -323,7 +370,8 @@ def load_embedding(path: str, data_dir: str = None, db_name: str = None,
 
     log(f"[MotionField] loaded embedding {path} "
         f"({loaded['states_count']} states, {loaded['edges'].shape[0]} edges, "
-        f"{loaded['n_components']}D, metric={loaded['metric_mode']})")
+        f"{loaded['n_components']}D, features={loaded['feature_mode']}, "
+        f"metric={loaded['metric_mode']})")
     return loaded
 
 
@@ -371,11 +419,16 @@ def _parse_args(argv=None):
     parser.add_argument('--min-dist', type=float, default=0.1)
     parser.add_argument('--metric-mode', default=METRIC_FIELD,
                         choices=[METRIC_FIELD, METRIC_EUCLIDEAN])
+    parser.add_argument('--feature-mode', default=FEATURE_POSITION,
+                        choices=[FEATURE_POSITION, FEATURE_FULL],
+                        help='what to project: joint positions alone (a pose manifold, '
+                             'with the frame-adjacency edges carrying velocity) or the '
+                             'whole position+velocity feature')
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--knn-chunk', type=int, default=DEFAULT_KNN_CHUNK)
-    parser.add_argument('--pos-weight', type=float, default=0.2)
-    parser.add_argument('--vel-weight', type=float, default=0.9)
+    parser.add_argument('--pos-weight', type=float, default=1.0)
+    parser.add_argument('--vel-weight', type=float, default=0.06)
     parser.add_argument('--bone-weights', default=None,
                         help='JSON file of {"JointName": [pos, vel]} per-joint metric weights')
     return parser.parse_args(argv)
@@ -395,6 +448,7 @@ def main(argv=None) -> int:
                       n_neighbors=args.n_neighbors,
                       min_dist=args.min_dist,
                       metric_mode=args.metric_mode,
+                      feature_mode=args.feature_mode,
                       device=args.device,
                       seed=args.seed,
                       knn_chunk=args.knn_chunk,

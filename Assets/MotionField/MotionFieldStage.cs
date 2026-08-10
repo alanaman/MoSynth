@@ -183,7 +183,9 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                     k_neighbors: config.kNeighbors,
                     tug_ratio: config.tugRatio,
                     knn_chunk: config.knnChunk,
-                    bone_weights: boneWeights);
+                    bone_weights: boneWeights,
+                    locomotion_factor: config.locomotionFactor,
+                    locomotion_speed_threshold: config.locomotionSpeedThreshold);
 
                 // A stale or absent value function degrades to greedy control rather than throwing.
                 // Failing hard here would surface as an opaque managed exception in a player build.

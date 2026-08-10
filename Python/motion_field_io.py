@@ -42,6 +42,12 @@ DELTA_YAW_CONVENTION = 'root_quat_pure_yaw_xyzw'
 # actions nearly indistinguishable.
 TUG_MODE = 'emphasized'
 
+# Semantic version of the similarity feature itself, for changes no parameter
+# expresses. Bumped to 2 when `build_motion_states` switched the metric FK to
+# the rest-pose hips offset -- same weights, different feature, so anything
+# trained before the change must be rejected rather than reused.
+METRIC_VERSION = 2
+
 # Signature of an all-ones per-bone weight table. Spelled out rather than hashed
 # so a file written before per-bone weights existed -- which had uniform weights
 # by definition -- still matches a runtime that has not set any.
@@ -101,6 +107,7 @@ def database_signature(data_dir: str, db_name: str) -> dict:
 _GATE_KEYS = (
     'schema_version',
     'delta_yaw_convention',
+    'metric_version',
     'pose_db_sha1',
     'skeleton_sha1',
     'states_count',
@@ -111,6 +118,8 @@ _GATE_KEYS = (
     'pos_weight',
     'vel_weight',
     'bone_weights_sha1',
+    'locomotion_factor',
+    'locomotion_speed_threshold',
     'frame_time',
 )
 
@@ -171,6 +180,9 @@ def save_value_function(out_path: str, values: np.ndarray, scores: np.ndarray,
         'pos_weight': np.float32(params['pos_weight']),
         'vel_weight': np.float32(params['vel_weight']),
         'bone_weights_sha1': np.str_(params.get('bone_weights_sha1', UNIFORM_BONE_WEIGHTS)),
+        'metric_version': np.int64(params.get('metric_version', METRIC_VERSION)),
+        'locomotion_factor': np.float32(params['locomotion_factor']),
+        'locomotion_speed_threshold': np.float32(params['locomotion_speed_threshold']),
         'feature_shape': np.asarray(params['feature_shape'], dtype=np.int64),
         'k_neighbors': np.int64(params['k_neighbors']),
         'tug_ratio': np.float32(params['tug_ratio']),

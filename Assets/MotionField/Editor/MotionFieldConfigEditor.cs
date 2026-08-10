@@ -358,7 +358,10 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         EditorGUILayout.HelpBox(
             "Projects the motion field to 3D so MotionFieldVisualizer can draw it. Independent of " +
             "training -- the value function does not need it, and deleting it only turns the " +
-            "visualizer off. Expect ~20 s: the first UMAP import pays a one-off numba warm-up.",
+            "visualizer off. Expect ~20 s: the first UMAP import pays a one-off numba warm-up.\n\n" +
+            "Recompute after changing any of the settings above. An embedding written by an older " +
+            "version of this tool is rejected outright rather than reused, so the visualizer will " +
+            "draw nothing until it is rebuilt.",
             MessageType.None);
 
         using (new EditorGUI.DisabledScope(!databaseExists || EditorApplication.isPlayingOrWillChangePlaymode))
@@ -430,6 +433,9 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 kwargs["pos_weight"] = ((double)config.posWeight).ToPython();
                 kwargs["vel_weight"] = ((double)config.velWeight).ToPython();
                 kwargs["bone_weights"] = MotionFieldBoneWeights.ToPython(config);
+                kwargs["locomotion_factor"] = ((double)config.locomotionFactor).ToPython();
+                kwargs["locomotion_speed_threshold"] =
+                    ((double)config.locomotionSpeedThreshold).ToPython();
                 kwargs["device"] = config.DeviceName.ToPython();
                 kwargs["knn_chunk"] = config.knnChunk.ToPython();
                 kwargs["state_chunk"] = config.stateChunk.ToPython();
@@ -480,6 +486,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 });
 
                 using var kwargs = new PyDict();
+                kwargs["feature_mode"] = config.UmapFeatureModeName.ToPython();
                 kwargs["n_components"] = config.umapComponents.ToPython();
                 kwargs["n_neighbors"] = config.umapNeighbors.ToPython();
                 kwargs["min_dist"] = ((double)config.umapMinDist).ToPython();

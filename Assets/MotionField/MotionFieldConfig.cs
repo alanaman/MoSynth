@@ -51,12 +51,27 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Range(0f, 1f)] public float tugRatio = 0.1f;
 
     [Tooltip("Overall weight on the joint-position half of the similarity metric. Per-bone " +
-             "weights multiply on top of this.")]
-    public float posWeight = 0.2f;
+             "weights multiply on top of this. The defaults put roughly three quarters of the " +
+             "distance on positions, matching the reference implementation -- a velocity-dominated " +
+             "metric matches states that merely move alike, pose ignored, which is how the field " +
+             "wanders into idle poses mid-stride.")]
+    public float posWeight = 1.0f;
 
-    [Tooltip("Overall weight on the joint-velocity half of the similarity metric. Per-bone " +
-             "weights multiply on top of this.")]
-    public float velWeight = 0.9f;
+    [Tooltip("Overall weight on the joint-velocity half of the similarity metric (velocities are " +
+             "m/s, so raw magnitudes run several times the position half's metres -- 0.06 is what " +
+             "lands the measured split near 75/25 on this data). Per-bone weights multiply on top " +
+             "of this.")]
+    public float velWeight = 0.06f;
+
+    [Tooltip("Reward bonus for actions that land in moving states -- the reference " +
+             "implementation's state_score * factor term. At 0 every reward is <= 0 and an idle " +
+             "pose that faces the goal scores a perfect zero forever, so the policy freezes into " +
+             "it. Changing this needs a retrain but reuses the cached transition tables.")]
+    [Min(0f)] public float locomotionFactor = 1.0f;
+
+    [Tooltip("Root speed, m/s, at which a database state counts as fully moving. The locomotion " +
+             "score ramps linearly from 0 below it.")]
+    [Min(0.01f)] public float locomotionSpeedThreshold = 0.5f;
 
     /// <summary>
     /// Per-joint emphasis in the similarity metric, keyed by skeleton joint name.
@@ -164,7 +179,21 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Tooltip("Database states integrated per precompute chunk. Bounds host RAM.")]
     [Min(1)] public int stateChunk = 512;
 
+    public enum UmapFeatures
+    {
+        /// <summary>Joint positions only: a pose manifold, velocity carried by the edges.</summary>
+        PositionOnly,
+
+        /// <summary>The whole similarity feature, i.e. a phase space.</summary>
+        PositionAndVelocity
+    }
+
     [Header("Debug Visualization")]
+    [Tooltip("What UMAP projects. PositionOnly lays the cloud out as a pose manifold, so a state's " +
+             "velocity is the edge to the next frame's point. PositionAndVelocity projects the " +
+             "whole similarity feature, where one pose held at two speeds lands in two places.")]
+    public UmapFeatures umapFeatures = UmapFeatures.PositionOnly;
+
     [Tooltip("UMAP neighbourhood size. Larger values favour the global shape of the field over " +
              "local detail; 80 matches the reference notebook.")]
     [Min(2)] public int umapNeighbors = 80;
@@ -237,6 +266,13 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     public string GetTablesCachePath() =>
         Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "MotionField",
             name + ".mftables.npz"));
+
+    /// <summary>
+    /// <see cref="umapFeatures"/> as the literal `motion_field_embedding.compute_embedding`
+    /// expects, so the Python string lives in one place rather than at every call site.
+    /// </summary>
+    public string UmapFeatureModeName =>
+        umapFeatures == UmapFeatures.PositionOnly ? "position" : "full";
 
     public string DeviceName => device switch
     {

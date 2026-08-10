@@ -5,9 +5,9 @@ import torch
 
 from Pose import Pose, PoseDelta
 from Skeleton import Skeleton
-from motion_field_io import (DELTA_YAW_CONVENTION, TUG_MODE, ValueFunctionData,
-                             bone_weights_signature, database_signature,
-                             load_value_function)
+from motion_field_io import (DELTA_YAW_CONVENTION, METRIC_VERSION, TUG_MODE,
+                             ValueFunctionData, bone_weights_signature,
+                             database_signature, load_value_function)
 
 # Packed pose layout: row 0 root position, row 1 hip position, row 2 the root
 # bone quaternion, rows 3+ the remaining joint quaternions.
@@ -33,6 +33,21 @@ def root_yaw(packed_x: np.ndarray) -> np.ndarray:
     """
     q = np.asarray(packed_x)[..., ROOT_QUAT_ROW, :]
     return 2.0 * np.arctan2(q[..., 1], q[..., 3])
+
+
+def state_locomotion_scores(poses_v: np.ndarray, speed_threshold: float) -> np.ndarray:
+    """
+    Per-state "is this state moving" score in [0, 1], from root speed.
+
+    The reference implementation scored states by locomotion-set membership
+    (walk vs jog); with a single set that generalises to moving vs idle, which
+    is the distinction that matters: it is what keeps an idle pose from being a
+    zero-cost place for the reward's heading term to hide in. Ramped rather
+    than thresholded so slow turn-around frames keep partial credit instead of
+    flickering across a cliff.
+    """
+    speeds = np.linalg.norm(np.asarray(poses_v)[:, 0, :3], axis=-1)
+    return np.clip(speeds / max(float(speed_threshold), 1e-6), 0.0, 1.0).astype(np.float32)
 
 
 def resolve_device(preference=None) -> str:
@@ -106,7 +121,11 @@ def resolve_bone_weights(skeleton: Skeleton, bone_weights, log=print) -> np.ndar
     # rotation -- its position and velocity are structurally zero, so its weight
     # cannot change the feature. Normalising it to 1 keeps that from perturbing
     # the signature below and needlessly invalidating a trained value function.
+    # Row 1 is the hips, whose translation `build_motion_states` replaces with
+    # the rest-pose offset -- constant across states, so equally unable to move
+    # a distance. Same treatment for the same reason.
     table[0] = 1.0
+    table[1] = 1.0
 
     if np.all(np.abs(table - 1.0) <= 1e-6):
         return None
@@ -120,12 +139,14 @@ class MotionField:
                  skeleton: Skeleton,
                  frame_time: float,
                  device=None,
-                 pos_weight: float = 0.2,
-                 vel_weight: float = 0.9,
+                 pos_weight: float = 1.0,
+                 vel_weight: float = 0.06,
                  k_neighbors: int = 15,
                  tug_ratio: float = 0.1,
                  knn_chunk: int = 64,
                  bone_weights=None,
+                 locomotion_factor: float = 1.0,
+                 locomotion_speed_threshold: float = 0.5,
                  value_function_path: str = None):
         """
         Initialize the MotionField.
@@ -144,6 +165,13 @@ class MotionField:
             chunk * state_count * feature_count * 3 * 4 bytes.
         :param bone_weights: Optional per-joint emphasis on top of
             `pos_weight`/`vel_weight`. See `resolve_bone_weights`.
+        :param locomotion_factor: Reward bonus for landing in moving states --
+            the reference implementation's `state_score * factor` term. Without
+            it every reward is <= 0 and a database state that stands still while
+            facing the goal scores a perfect 0 forever, so the policy freezes
+            into any idle pose the data contains. 0 restores that behaviour.
+        :param locomotion_speed_threshold: Root speed, m/s, at which a state
+            counts as fully moving. The score ramps linearly from 0 below it.
         :param value_function_path: Optional `.mffield.npz` enabling `optimal_action`.
         """
         self.current_frame = None
@@ -167,7 +195,12 @@ class MotionField:
         self.bone_count = poses_x.shape[-2] - 2
         self.bone_weights = resolve_bone_weights(skeleton, bone_weights)
 
-        self.state_features = self.features(poses_x, poses_v)
+        # How much each database state "moves", for the locomotion reward term.
+        self.locomotion_factor = float(locomotion_factor)
+        self.locomotion_speed_threshold = float(locomotion_speed_threshold)
+        self.state_scores = state_locomotion_scores(poses_v, self.locomotion_speed_threshold)
+
+        self.state_features = self.build_motion_states(poses_x, poses_v)
         self.feature_shape = self.state_features.shape[-2:]
         self.states = torch.from_numpy(self.state_features).to(self.device)
 
@@ -180,17 +213,6 @@ class MotionField:
         self.last_indices = None
         self.last_weights = None
         self.last_action = None
-
-    # ------------------------------------------------------------------ #
-    # Similarity features and nearest-neighbour search
-    # ------------------------------------------------------------------ #
-
-    def features(self, x: np.ndarray, v: np.ndarray) -> np.ndarray:
-        """Similarity feature for one or many packed states."""
-        return MotionField.build_motion_states(
-            x, v, self.skeleton, self.frame_time,
-            pos_weight=self.pos_weight, vel_weight=self.vel_weight,
-            bone_weights=self.bone_weights)
 
     def get_batched_knn(self, queries: np.ndarray, k: int = None, chunk: int = None):
         """
@@ -219,9 +241,9 @@ class MotionField:
         # chunk=64 on this database, and quadratic in the chunk size.
         for start in range(0, query_tensor.shape[0], chunk):
             q = query_tensor[start:start + chunk].unsqueeze(1)  # (c, 1, F, 3)
-            diff = states - q                                   # (c, S, F, 3)
-            per_joint = torch.norm(diff, dim=3)                 # (c, S, F)
-            summed = torch.sum(per_joint, dim=2)                # (c, S)
+            diff = states - q  # (c, S, F, 3)
+            per_joint = torch.norm(diff, dim=3)  # (c, S, F)
+            summed = torch.sum(per_joint, dim=2)  # (c, S)
             top_k = torch.topk(summed, k=k, largest=False)
             indices[start:start + chunk] = top_k.indices.cpu().numpy()
             distances[start:start + chunk] = top_k.values.cpu().numpy()
@@ -236,7 +258,7 @@ class MotionField:
 
         query_tensor = torch.from_numpy(query).to(self.device)
 
-        diff = self.states - query_tensor      # (state_count, feature_count, 3)
+        diff = self.states - query_tensor  # (state_count, feature_count, 3)
         point_distances = torch.norm(diff, dim=2)
         sum_distances = torch.sum(point_distances, dim=1)
 
@@ -292,6 +314,13 @@ class MotionField:
         :return: (x, v), both (action_count, num_bones+2, 4)
         """
         tug_ratio = self.tug_ratio if tug_ratio is None else tug_ratio
+        # The tug is a contraction applied per CALL, so its strength has to
+        # follow the step size: at delta_time < frame_time a fixed ratio pulls
+        # onto a database pose faster than the dt-scaled advance can move away
+        # -- a literal freeze. Compounding it per database frame makes n small
+        # steps tug exactly as much as one full frame. Identity when
+        # delta_time == frame_time, which is what training uses.
+        tug_ratio = 1.0 - (1.0 - tug_ratio) ** (delta_time / self.frame_time)
         action_weights = np.ascontiguousarray(action_weights, dtype=np.float32)
         action_count = action_weights.shape[0]
         tug_indices = np.asarray(tug_indices).reshape(-1)
@@ -309,8 +338,8 @@ class MotionField:
         # The root slot is a PER-FRAME INCREMENT, not a world pose. Database
         # states are stored root-relative (rootPos == 0, root quat == identity,
         # see action_predictor.load_animations) and the tug below blends against
-        # one of them, so an accumulated world root would be dragged toward the
-        # origin by `tug_ratio` every frame -- a 0.9^n collapse that reaches the
+        # one of them. So 'tug_ratio' would drag an accumulated world root
+        # toward the origin every frame -- a 0.9^n collapse that reaches the
         # origin in about 30 frames. Unity owns the world root anyway and
         # integrates it from the returned velocities
         # (MotionSynthesisComponent.ApplyPoseToSkeletonTransforms), so zeroing
@@ -341,30 +370,26 @@ class MotionField:
 
         return tugged_pose_x.pack(), tugged_pose_v.pack()
 
-    def compute_new_state(self,
-                          current_pose_x: np.ndarray,
-                          delta_time: float,
-                          indices,
-                          weights,
-                          nearest_pose_index=None,
-                          tug_ratio: float = None):
-        """
-        Integrate a single action. Returns (x, v), both (1, num_bones+2, 4).
-
-        By default the tug target is the neighbour the action emphasises, which
-        is what makes the candidate actions meaningfully different from each
-        other; tugging everything toward the nearest state instead collapses
-        them onto near-identical outcomes.
-        """
-        weights = np.asarray(weights, dtype=np.float32)
-        tug = indices[int(np.argmax(weights))] if nearest_pose_index is None else nearest_pose_index
-        return self.compute_new_states(current_pose_x, delta_time, indices,
-                                       weights[np.newaxis, :], np.asarray([tug]),
-                                       tug_ratio)
-
-    # ------------------------------------------------------------------ #
-    # Value function
-    # ------------------------------------------------------------------ #
+    # def compute_new_state(self,
+    #                       current_pose_x: np.ndarray,
+    #                       delta_time: float,
+    #                       indices,
+    #                       weights,
+    #                       nearest_pose_index=None,
+    #                       tug_ratio: float = None):
+    #     """
+    #     Integrate a single action. Returns (x, v), both (1, num_bones+2, 4).
+    #
+    #     By default, the tug target is the neighbor the action emphasizes, which
+    #     is what makes the candidate actions meaningfully different from each
+    #     other; tugging everything toward the nearest state instead collapses
+    #     them onto near-identical outcomes.
+    #     """
+    #     weights = np.asarray(weights, dtype=np.float32)
+    #     tug = indices[int(np.argmax(weights))] if nearest_pose_index is None else nearest_pose_index
+    #     return self.compute_new_states(current_pose_x, delta_time, indices,
+    #                                    weights[np.newaxis, :], np.asarray([tug]),
+    #                                    tug_ratio)
 
     def load_value_function(self, path: str, data_dir: str = None,
                             db_name: str = None, log=None) -> bool:
@@ -379,6 +404,9 @@ class MotionField:
         value function is a row of that database, so a regenerated `.mmpose`
         with the same frame count would otherwise address the wrong poses.
 
+        :param db_name:
+        :param data_dir:
+        :param path:
         :param log: optional `callable(str)` for the accept/reject reason.
             Defaults to `print`, which under PythonNET goes to a stdout Unity
             does not display -- so Unity passes its own, otherwise a rejected
@@ -387,6 +415,7 @@ class MotionField:
         log = log or print
         expect = {
             'delta_yaw_convention': DELTA_YAW_CONVENTION,
+            'metric_version': METRIC_VERSION,
             'states_count': self.states_count,
             'bone_count': self.bone_count,
             'k_neighbors': self.k_neighbors,
@@ -395,6 +424,8 @@ class MotionField:
             'pos_weight': self.pos_weight,
             'vel_weight': self.vel_weight,
             'bone_weights_sha1': bone_weights_signature(self.bone_weights),
+            'locomotion_factor': self.locomotion_factor,
+            'locomotion_speed_threshold': self.locomotion_speed_threshold,
             'frame_time': self.frame_time,
         }
         if data_dir and db_name:
@@ -409,10 +440,6 @@ class MotionField:
                 f'({self.value_function.values.shape[0]} states x '
                 f'{self.value_function.theta_count} headings, '
                 f'final residual {self.value_function.final_residual:.6f})')
-        return self.value_function is not None
-
-    @property
-    def has_value_function(self) -> bool:
         return self.value_function is not None
 
     def interpolate_value(self, indices: np.ndarray, weights: np.ndarray,
@@ -459,7 +486,7 @@ class MotionField:
 
     def value_rewards(self, theta: float, next_x: np.ndarray, next_v: np.ndarray) -> np.ndarray:
         """Batched `value_reward` over several candidate outcomes. Returns (n,)."""
-        assert self.has_value_function, 'no value function loaded'
+        assert self.value_function is not None, 'no value function loaded'
 
         next_x = np.asarray(next_x, dtype=np.float32)
         next_v = np.asarray(next_v, dtype=np.float32)
@@ -470,10 +497,15 @@ class MotionField:
         # Each action rotates the character, so the goal moves in its frame.
         theta_prime = wrap_angle(theta + root_yaw(next_x)).astype(np.float32)
 
-        indices, weights = self.get_batched_knn(self.features(next_x, next_v),
+        indices, weights = self.get_batched_knn(self.build_motion_states(next_x, next_v),
                                                 self.value_function.k_neighbors)
         future = self.interpolate_value(indices, weights, theta_prime)
-        return -np.abs(theta_prime) + self.value_function.gamma * future
+        # The locomotion bonus is paid on the arrival state, interpolated
+        # through the same neighbourhood as V -- the immediate reward must match
+        # what the value iteration optimised or the argmax drifts off-policy.
+        arrival = np.sum(self.state_scores[indices] * weights, axis=1)
+        return (-np.abs(theta_prime) + self.locomotion_factor * arrival
+                + self.value_function.gamma * future)
 
     # ------------------------------------------------------------------ #
     # Policies
@@ -481,7 +513,7 @@ class MotionField:
 
     def optimal_action(self, theta: float,
                        current_x: np.ndarray, current_v: np.ndarray,
-                       delta_time: float, k_neighbors: int = None):
+                       delta_time: float):
         """
         Step the field along the action with the highest long-term value.
 
@@ -496,11 +528,11 @@ class MotionField:
             `-SignedAngle(root.forward, desiredWorldDir, up)`.
         :return: (new_x, new_v), both (1, num_bones+2, 4)
         """
-        if not self.has_value_function:
-            return self.greedy_action(theta, current_x, current_v, delta_time, k_neighbors)
+        if self.value_function is None:
+            return self.greedy_action(theta, current_x, current_v, delta_time)
 
-        k = k_neighbors or self.value_function.k_neighbors
-        indices, distances = self.get_knn(self.features(current_x, current_v), k=k)
+        k = self.value_function.k_neighbors
+        indices, distances = self.get_knn(self.build_motion_states(current_x, current_v), k=k)
         weights = MotionField.calculate_similarity_weights(distances)
 
         actions = MotionField.build_action_weights(weights)
@@ -513,20 +545,26 @@ class MotionField:
 
     def greedy_action(self, theta: float,
                       current_x: np.ndarray, current_v: np.ndarray,
-                      delta_time: float, k_neighbors: int = None):
+                      delta_time: float):
         """
         One-step-greedy fallback: pick whichever action best aligns the heading
         with the goal on the next frame. Used when no value function is loaded.
         """
-        k = k_neighbors or self.k_neighbors
-        indices, distances = self.get_knn(self.features(current_x, current_v), k=k)
+        indices, distances = self.get_knn(
+            self.build_motion_states(current_x, current_v), k=self.k_neighbors)
         weights = MotionField.calculate_similarity_weights(distances)
 
         actions = MotionField.build_action_weights(weights)
         xs, vs = self.compute_new_states(current_x, delta_time, indices, actions,
                                          tug_indices=indices)
 
-        rewards = -np.abs(wrap_angle(theta + root_yaw(xs)))
+        # Heading, plus the locomotion bonus over each action's convex blend of
+        # the neighbourhood. Without the bonus an idle-targeting action wins
+        # every tie: standing produces exactly zero yaw, which beats the yaw
+        # wiggle of any actual walk cycle once the character is aligned.
+        arrival = actions @ self.state_scores[indices]
+        rewards = (-np.abs(wrap_angle(theta + root_yaw(xs)))
+                   + self.locomotion_factor * arrival)
         best = int(np.argmax(rewards))
         self._record_decision(indices, weights, best)
         return xs[best:best + 1], vs[best:best + 1]
@@ -564,7 +602,7 @@ class MotionField:
     def get_next_pose(self, current_x: np.ndarray, current_v: np.ndarray, delta_time):
         """Debug playback: walk the database frame by frame from the nearest match."""
         if self.current_frame is None:
-            indices, _ = self.get_knn(self.features(current_x, current_v), k=self.k_neighbors)
+            indices, _ = self.get_knn(self.build_motion_states(current_x, current_v), k=self.k_neighbors)
             self.current_frame = int(indices[0])
         else:
             self.current_frame = (self.current_frame + 1) % self.states_count
@@ -574,7 +612,7 @@ class MotionField:
 
     def get_next_pose_from_field(self, current_x: np.ndarray, current_v: np.ndarray, delta_time):
         """Debug: snap to the successor of the nearest database state."""
-        indices, _ = self.get_knn(self.features(current_x, current_v), k=self.k_neighbors)
+        indices, _ = self.get_knn(self.build_motion_states(current_x, current_v), k=self.k_neighbors)
         nxt = min(int(indices[0]) + 1, self.states_count - 1)
         return self.poses_x[nxt][np.newaxis, ...], self.poses_v[nxt][np.newaxis, ...]
 
@@ -585,12 +623,12 @@ class MotionField:
     MODE_NEAREST = 'nearest'
 
     def get_pose(self, current_x: np.ndarray, current_v: np.ndarray, delta_time,
-                 theta: float = 0.0, mode: str = None):
+                 theta: float = 0.0, mode: str | None = None):
         """
         Advance one step. Defaults to the value-function policy when one is
         loaded and degrades to greedy control when it is not.
         """
-        mode = mode or (MotionField.MODE_OPTIMAL if self.has_value_function
+        mode = mode or (MotionField.MODE_OPTIMAL if self.value_function is not None
                         else MotionField.MODE_GREEDY)
 
         if mode == MotionField.MODE_OPTIMAL:
@@ -603,11 +641,9 @@ class MotionField:
             return self.get_next_pose_from_field(current_x, current_v, delta_time)
         raise ValueError(f'unknown motion field mode: {mode!r}')
 
-    @staticmethod
-    def build_motion_states(x, v, skeleton: Skeleton, frame_time: float,
-                            pos_weight=0.2, vel_weight=0.9, bone_weights=None):
+    def build_motion_states(self, x: np.ndarray, v: np.ndarray) -> np.ndarray:
         """
-        Build motion states from pose and velocity. Used to construct the motion field.
+        Build motion states from packed pose and velocity. Used to construct the motion field.
 
         The feature is the root-space joint positions concatenated with the
         root-space joint velocities. `v` holds per-second rates, so it must be
@@ -619,6 +655,13 @@ class MotionField:
         Root-invariant by construction: `fk_root_space` forces joint 0 to the
         origin with identity rotation, so where the character is in the world
         never influences which states it matches.
+
+        Hips-translation-invariant too: both FK passes use the hips' rest-pose
+        offset instead of the pose's own, following the reference metric. A
+        live hips offset is a rigid translation of every joint downstream, so
+        it would enter all rows at once and drown the per-joint shape signal
+        this metric exists to compare. `metric_version` in motion_field_io
+        records this convention; change it and stale artefacts must be caught.
 
         :param x: Packed poses, shape (..., bone_count + 2, 4)
         :param v: Packed per-second velocities, shape (..., bone_count + 2, 4)
@@ -632,22 +675,29 @@ class MotionField:
             position row, column 1 its velocity row.
         :return: (..., bone_count * 2, 3)
         """
-        current_pose = Pose.from_array(x)
 
-        p_a, _ = skeleton.fk_root_space(current_pose)
+        current_pose = Pose.from_array(x)  # from_array copies, so this is writable
 
-        next_pose = current_pose.add(PoseDelta.from_array(v).scaled(frame_time))
+        # The exact rest offset is irrelevant -- any constant cancels when two
+        # states are subtracted -- it only has to be the SAME for every state.
+        rest_hips = list(self.skeleton)[1].default_local_position
+        current_pose.hipPos[...] = rest_hips
 
-        p_b, _ = skeleton.fk_root_space(next_pose)
+        p_a, _ = self.skeleton.fk_root_space(current_pose)
 
-        velocity = (p_b - p_a) / frame_time  # m/s
+        next_pose = current_pose.add(PoseDelta.from_array(v).scaled(self.frame_time))
+        next_pose.hipPos[...] = rest_hips
 
-        position_scale = pos_weight
-        velocity_scale = vel_weight
-        if bone_weights is not None:
+        p_b, _ = self.skeleton.fk_root_space(next_pose)
+
+        velocity = (p_b - p_a) / self.frame_time  # m/s
+
+        position_scale = self.pos_weight
+        velocity_scale = self.vel_weight
+        if self.bone_weights is not None:
             # (bone_count, 1) broadcasts across xyz and across the batch axes.
-            position_scale = pos_weight * bone_weights[:, 0:1]
-            velocity_scale = vel_weight * bone_weights[:, 1:2]
+            position_scale = self.pos_weight * self.bone_weights[:, 0:1]
+            velocity_scale = self.vel_weight * self.bone_weights[:, 1:2]
 
         return np.concatenate(
             [position_scale * p_a, velocity_scale * velocity],

@@ -36,7 +36,8 @@ import numpy as np
 import torch
 
 import motion_field_io as mfio
-from MotionField import MotionField, resolve_device, root_yaw
+from MotionField import (MotionField, resolve_device, root_yaw,
+                         state_locomotion_scores)
 from action_predictor import load_animations
 
 # States per precompute chunk. The dominant allocation is the neighbour gather,
@@ -74,7 +75,7 @@ def build_tables(motion_field: MotionField, k_neighbors: int, tug_ratio: float,
     indices, weights = motion_field.get_batched_knn(
         motion_field.state_features, k, chunk=knn_chunk)
 
-    # One action per neighbour: pin that neighbour's weight to 1, renormalise.
+    # One action per neighbour: pin that neighbour's weight to 1, re-normalise.
     diagonal = np.arange(k)
     actions = np.repeat(weights[:, np.newaxis, :], k, axis=1)  # (S, K, K)
     actions[:, diagonal, diagonal] = 1.0
@@ -105,7 +106,7 @@ def build_tables(motion_field: MotionField, k_neighbors: int, tug_ratio: float,
         delta_yaw[start:stop] = root_yaw(xs).reshape(span, k)
 
         successor_indices, successor_weights = motion_field.get_batched_knn(
-            motion_field.features(xs, vs), k, chunk=knn_chunk)
+            motion_field.build_motion_states(xs, vs), k, chunk=knn_chunk)
         value_indices[start:stop] = successor_indices.reshape(span, k, k)
         value_weights[start:stop] = successor_weights.reshape(span, k, k)
 
@@ -115,22 +116,30 @@ def build_tables(motion_field: MotionField, k_neighbors: int, tug_ratio: float,
 
 
 def train_value_function(delta_yaw, value_indices, value_weights,
+                         state_scores=None, locomotion_factor=1.0,
                          theta_count=17, epochs=300, gamma=0.99,
                          device=None, residual_tolerance=1e-5,
                          progress=_noop_progress):
     """
     Fitted value iteration.
 
-        reward[s,a,t] = -|wrap(theta[t] + delta_yaw[s,a])|
+        bonus[s,a]    = factor * sum_j w[s,a,j] * state_scores[s'[s,a,j]]
+        reward[s,a,t] = -|wrap(theta[t] + delta_yaw[s,a])| + bonus[s,a]
         Q[s,a,t]      = reward + gamma * sum_j w[s,a,j] * V(s'[s,a,j], theta[t] + delta_yaw[s,a])
         V[s,t]        = max over a of Q[s,a,t]
 
-    The reward is simply how badly the character faces away from the goal after
-    the action. Because the action rotates the character, the goal moves in its
-    frame -- hence the successor value is read at `theta + delta_yaw`, not at
-    `theta`, and that shifted lookup is interpolated across the two bracketing
-    grid headings.
+    The heading term is how badly the character faces away from the goal after
+    the action. On its own it is never positive, which makes any idle state the
+    reward can reach a perfect score once aligned -- the bonus term (the
+    reference implementation's `state_score * factor`, keyed on root speed and
+    paid on the arrival state) is what makes continuing to move strictly better
+    than freezing. Because the action rotates the character, the goal moves in
+    its frame -- hence the successor value is read at `theta + delta_yaw`, not
+    at `theta`, and that shifted lookup is interpolated across the two
+    bracketing grid headings.
 
+    :param state_scores: (states,) per-state locomotion score in [0, 1], or
+        None to train on the heading term alone.
     :return: (V (states, theta_count) f32, scores (epochs_run, 3) f32) where
         scores columns are the min / max / mean Bellman residual per epoch.
     """
@@ -149,6 +158,14 @@ def train_value_function(delta_yaw, value_indices, value_weights,
     next_theta = thetas.view(1, 1, theta_count) + delta.view(states_count, k, 1)
     next_theta = (next_theta + torch.pi) % (2.0 * torch.pi) - torch.pi
     rewards = -torch.abs(next_theta)
+
+    if state_scores is not None and locomotion_factor != 0.0:
+        # Interpolated through the same successor neighbourhood as V, and
+        # heading-independent, so it broadcasts over the theta axis.
+        scores = torch.from_numpy(
+            np.ascontiguousarray(state_scores, dtype=np.float32)).to(device)
+        bonus = (scores[neighbour_ids] * neighbour_weights).sum(dim=2)
+        rewards = rewards + locomotion_factor * bonus.unsqueeze(-1)
 
     # Fractional position of next_theta on the heading grid, split into the two
     # bracketing grid indices and a blend factor. Fixed for all epochs.
@@ -195,9 +212,11 @@ def train(data_dir: str,
           epochs: int = 300,
           gamma: float = 0.99,
           tug_ratio: float = 0.1,
-          pos_weight: float = 0.2,
-          vel_weight: float = 0.9,
+          pos_weight: float = 1.0,
+          vel_weight: float = 0.06,
           bone_weights=None,
+          locomotion_factor: float = 1.0,
+          locomotion_speed_threshold: float = 0.5,
           device: str = 'auto',
           knn_chunk: int = 64,
           state_chunk: int = DEFAULT_STATE_CHUNK,
@@ -214,6 +233,11 @@ def train(data_dir: str,
     :param bone_weights: optional per-joint emphasis on the similarity metric,
         see `MotionField.resolve_bone_weights`. Changing it invalidates both the
         table cache and any previously trained value function.
+    :param locomotion_factor: reward bonus for actions landing in moving
+        states; see `MotionField.state_locomotion_scores`. Affects only the
+        Bellman rewards, so changing it reuses the cached transition tables.
+    :param locomotion_speed_threshold: root speed, m/s, at which a state
+        counts as fully moving.
     :param force: rebuild the transition tables even if the cache is valid
     :param progress: optional callable(stage_name, fraction_0_to_1)
     :return: a summary dict (also useful as the value Unity logs)
@@ -227,7 +251,9 @@ def train(data_dir: str,
     motion_field = MotionField(poses_x, poses_v, poses_y, skeleton, frame_time,
                                device=device, pos_weight=pos_weight, vel_weight=vel_weight,
                                k_neighbors=k_neighbors, tug_ratio=tug_ratio,
-                               knn_chunk=knn_chunk, bone_weights=bone_weights)
+                               knn_chunk=knn_chunk, bone_weights=bone_weights,
+                               locomotion_factor=locomotion_factor,
+                               locomotion_speed_threshold=locomotion_speed_threshold)
 
     signature = mfio.database_signature(data_dir, db_name)
     table_params = {
@@ -237,7 +263,9 @@ def train(data_dir: str,
         'pos_weight': float(pos_weight),
         'vel_weight': float(vel_weight),
         # Part of the metric, so part of what makes a cached transition table or
-        # a trained value function stale.
+        # a trained value function stale. metric_version covers feature-building
+        # changes no weight expresses.
+        'metric_version': int(mfio.METRIC_VERSION),
         'bone_weights_sha1': mfio.bone_weights_signature(motion_field.bone_weights),
         'frame_time': float(frame_time),
         'states_count': int(motion_field.states_count),
@@ -257,6 +285,8 @@ def train(data_dir: str,
 
     values, scores = train_value_function(
         delta_yaw, value_indices, value_weights,
+        state_scores=motion_field.state_scores,
+        locomotion_factor=locomotion_factor,
         theta_count=theta_count, epochs=epochs, gamma=gamma,
         device=motion_field.device, residual_tolerance=residual_tolerance,
         progress=progress)
@@ -267,6 +297,10 @@ def train(data_dir: str,
         'theta_count': int(theta_count),
         'gamma': float(gamma),
         'epochs': int(scores.shape[0]),
+        # Reward parameters, not table parameters: they gate the value function
+        # but leave the cached transitions reusable.
+        'locomotion_factor': float(locomotion_factor),
+        'locomotion_speed_threshold': float(locomotion_speed_threshold),
         'bone_count': int(motion_field.bone_count),
         'feature_shape': list(motion_field.feature_shape),
     }, signature=signature)
@@ -301,8 +335,10 @@ def _parse_args(argv=None):
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--gamma', type=float, default=0.99)
     parser.add_argument('--tug-ratio', type=float, default=0.1)
-    parser.add_argument('--pos-weight', type=float, default=0.2)
-    parser.add_argument('--vel-weight', type=float, default=0.9)
+    parser.add_argument('--pos-weight', type=float, default=1.0)
+    parser.add_argument('--vel-weight', type=float, default=0.06)
+    parser.add_argument('--locomotion-factor', type=float, default=1.0)
+    parser.add_argument('--locomotion-speed-threshold', type=float, default=0.5)
     parser.add_argument('--bone-weights', default=None,
                         help='JSON file of {"JointName": [pos, vel]} per-joint metric weights')
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu'])
@@ -326,6 +362,8 @@ def main(argv=None) -> int:
           epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
           pos_weight=args.pos_weight, vel_weight=args.vel_weight,
           bone_weights=mfio.load_bone_weights_file(args.bone_weights),
+          locomotion_factor=args.locomotion_factor,
+          locomotion_speed_threshold=args.locomotion_speed_threshold,
           device=args.device, knn_chunk=args.knn_chunk,
           state_chunk=args.state_chunk, force=args.force, progress=report)
     return 0
