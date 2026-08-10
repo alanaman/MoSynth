@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import torch
 
@@ -109,8 +111,8 @@ def pack_bone_weights(skeleton: Skeleton, bone_weights, log=print) -> np.ndarray
 
     # Row 0 is the root, which `fk_root_space` pins to the origin with identity
     # rotation -- its position and velocity are structurally zero, so its weight
-    # cannot change the feature. Normalising it to 1 keeps that from perturbing
-    # the signature below and needlessly invalidating a trained value function.
+    # cannot change the feature. Normalising it to 1 lets a table that differs
+    # only there collapse to `None` below instead of reading as a metric change.
     # Row 1 is the hips, whose translation `build_motion_states` replaces with
     # the rest-pose offset -- constant across states, so equally unable to move
     # a distance.
@@ -120,6 +122,20 @@ def pack_bone_weights(skeleton: Skeleton, bone_weights, log=print) -> np.ndarray
     if np.all(np.abs(table - 1.0) <= 1e-6):
         return None
     return table
+
+
+def load_bone_weights_file(path: str | None):
+    """
+    Read a `{"JointName": [pos, vel], ...}` JSON file for the CLIs.
+
+    Unity passes the same mapping straight across PythonNET into
+    `pack_bone_weights`, so this exists only to give the headless entry points
+    parity with the Editor buttons.
+    """
+    if not path:
+        return None
+    with open(path, 'r', encoding='utf-8') as handle:
+        return json.load(handle)
 
 
 class MotionField:
@@ -544,10 +560,9 @@ class MotionField:
         offset instead of the pose's own, following the reference metric. A
         live hips offset is a rigid translation of every joint downstream, so
         it would enter all rows at once and drown the per-joint shape signal
-        this metric exists to compare. `metric_version` in motion_field_io
-        records this convention: change the metric, and every field trained
-        under the old one has to be retrained by hand, since Unity's staleness
-        check watches config fields and a change in here moves none of them.
+        this metric exists to compare. Changing the metric here means retraining
+        every field by hand: Unity's staleness check watches config fields, and
+        an edit in this method moves none of them.
 
         :param x: Packed poses, shape (..., bone_count + 2, 4)
         :param v: Packed per-second velocities, shape (..., bone_count + 2, 4)

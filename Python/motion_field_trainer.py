@@ -36,8 +36,8 @@ import numpy as np
 import torch
 
 import motion_field_io as mfio
-from MotionField import (MotionField, resolve_device, root_yaw,
-                         state_locomotion_scores)
+from MotionField import (MotionField, load_bone_weights_file, resolve_device,
+                         root_yaw, state_locomotion_scores)
 from action_predictor import load_animations
 
 # States per precompute chunk. The dominant allocation is the neighbour gather,
@@ -249,22 +249,6 @@ def train(data_dir: str,
                                locomotion_factor=locomotion_factor,
                                locomotion_speed_threshold=locomotion_speed_threshold)
 
-    signature = mfio.database_signature(data_dir, db_name)
-    metric_params = {
-        'k_neighbors': int(k_neighbors),
-        'tug_ratio': float(tug_ratio),
-        'tug_mode': mfio.TUG_MODE,
-        'pos_weight': float(pos_weight),
-        'vel_weight': float(vel_weight),
-        # Provenance, not a gate: Unity decides staleness from the config, and
-        # nothing reads these back. They are what makes an npz found on its own
-        # answerable for the metric it was trained under.
-        'metric_version': int(mfio.METRIC_VERSION),
-        'bone_weights_sha1': mfio.bone_weights_signature(motion_field.bone_weights),
-        'frame_time': float(frame_time),
-        'states_count': int(motion_field.states_count),
-    }
-
     delta_yaw, value_indices, value_weights = build_tables(
         motion_field, k_neighbors, tug_ratio,
         state_chunk=state_chunk, knn_chunk=knn_chunk, progress=progress)
@@ -278,16 +262,9 @@ def train(data_dir: str,
         progress=progress)
 
     progress('Writing value function', 1.0)
-    mfio.save_value_function(out_path, values, scores, params={
-        **metric_params,
-        'theta_count': int(theta_count),
-        'gamma': float(gamma),
-        'epochs': int(scores.shape[0]),
-        'locomotion_factor': float(locomotion_factor),
-        'locomotion_speed_threshold': float(locomotion_speed_threshold),
-        'bone_count': int(motion_field.bone_count),
-        'feature_shape': list(motion_field.feature_shape),
-    }, signature=signature)
+    mfio.save_value_function(out_path, values, scores,
+                             theta_count=int(theta_count), gamma=float(gamma),
+                             k_neighbors=int(k_neighbors))
 
     summary = {
         'out_path': out_path,
@@ -343,7 +320,7 @@ def main(argv=None) -> int:
           k_neighbors=args.k_neighbors, theta_count=args.theta_count,
           epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
           pos_weight=args.pos_weight, vel_weight=args.vel_weight,
-          bone_weights=mfio.load_bone_weights_file(args.bone_weights),
+          bone_weights=load_bone_weights_file(args.bone_weights),
           locomotion_factor=args.locomotion_factor,
           locomotion_speed_threshold=args.locomotion_speed_threshold,
           device=args.device, knn_chunk=args.knn_chunk,

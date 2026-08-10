@@ -9,13 +9,11 @@ the projection and overlays the live query, its k nearest neighbours and the tug
 target, which turns "the character froze" into a picture of *where* in the field
 it froze.
 
-This mirrors the UMAP cell in
-`legacy/Motion Fields For Interactive Character Animation.ipynb`, with one
-correction. The notebook embeds under plain Euclidean distance, but the field's
-own k-NN metric is a sum of per-joint L2 norms -- an L2,1 mixed norm, not the
-flat L2 that UMAP would otherwise assume. Embedding under the wrong metric would
-draw neighbourhoods the field does not actually see. So the k-NN graph is built
-here with the field's metric and handed to UMAP via `precomputed_knn`.
+The field's own k-NN metric is a sum of per-joint L2 norms -- an L2,1 mixed
+norm, not the flat L2 that UMAP would otherwise assume. Embedding under the
+wrong metric would draw neighbourhoods the field does not actually see, so the
+k-NN graph is built here with the field's metric and handed to UMAP via
+`precomputed_knn`.
 
 One consequence of `precomputed_knn`: `reducer.transform()` is unavailable, so a
 novel pose cannot be projected exactly. Unity instead places the live state at
@@ -38,6 +36,7 @@ frame-adjacency edge Unity already draws. The edges become the velocity field.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import time
 
@@ -45,16 +44,14 @@ import numpy as np
 import torch
 
 import action_predictor
-from MotionField import MotionField, resolve_device
-from motion_field_io import (UNIFORM_BONE_WEIGHTS, bone_weights_signature,
-                             database_signature, load_bone_weights_file)
+from MotionField import MotionField, load_bone_weights_file, resolve_device
 
-# 3: build_motion_states switched the metric FK to the rest-pose hips offset
-# (motion_field_io.METRIC_VERSION 2), which moves every embedded point.
+# 3: build_motion_states switched the metric FK to the rest-pose hips offset,
+# which moves every embedded point.
 SCHEMA_VERSION = 3
 
 # 'field'     -- k-NN graph under the field's own sum-of-per-joint-L2 metric.
-# 'euclidean' -- flat L2 on the flattened feature, what the legacy notebook did.
+# 'euclidean' -- flat L2 on the flattened feature, what UMAP assumes by default.
 METRIC_FIELD = 'field'
 METRIC_EUCLIDEAN = 'euclidean'
 
@@ -65,6 +62,46 @@ FEATURE_POSITION = 'position'
 FEATURE_FULL = 'full'
 
 DEFAULT_KNN_CHUNK = 256
+
+# Signature of an all-ones per-bone weight table. Spelled out rather than hashed
+# so an embedding written before per-bone weights existed -- which had uniform
+# weights by definition -- still matches a runtime that has not set any.
+UNIFORM_BONE_WEIGHTS = 'uniform'
+
+
+def bone_weights_signature(bone_weights) -> str:
+    """
+    Stable identifier for a per-bone weight table.
+
+    Bone weights change the similarity metric, so they change which neighbours a
+    state has, so an embedding fitted under the old table draws the wrong
+    neighbourhoods. Hashed rather than compared elementwise because the npz
+    holds one scalar per key and a 23x2 table is not a scalar.
+    """
+    if bone_weights is None:
+        return UNIFORM_BONE_WEIGHTS
+
+    table = np.ascontiguousarray(bone_weights, dtype=np.float32)
+    if table.size == 0 or np.all(np.abs(table - 1.0) <= 1e-6):
+        return UNIFORM_BONE_WEIGHTS
+    return hashlib.sha1(table.tobytes()).hexdigest()
+
+
+def file_sha1(path: str) -> str:
+    h = hashlib.sha1()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(1 << 20), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def database_signature(data_dir: str, db_name: str) -> dict:
+    """Content hashes identifying the pose database the embedding was fitted on."""
+    return {
+        'pose_db_name': db_name,
+        'pose_db_sha1': file_sha1(os.path.join(data_dir, f'{db_name}.mmpose')),
+        'skeleton_sha1': file_sha1(os.path.join(data_dir, f'{db_name}.mmskeleton')),
+    }
 
 
 def _noop_progress(stage: str, fraction: float) -> None:
@@ -295,8 +332,9 @@ def load_embedding(path: str, data_dir: str = None, db_name: str = None,
 
     Every row of the embedding is a row of the pose database, so an embedding
     loaded against a re-extracted `.mmpose` would address the wrong states and
-    draw a plausible but wrong picture. Gated on the same content hashes the
-    value function uses.
+    draw a plausible but wrong picture. Gated here on content hashes of the
+    database rather than on Unity's `hasTrained` flag, since the visualizer is
+    the one place a wrong picture is worse than no picture at all.
 
     Returns `None` rather than raising on any problem -- a missing or stale
     embedding must degrade to "draw nothing", never throw inside `Py.GIL()`.

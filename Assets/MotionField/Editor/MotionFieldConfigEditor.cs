@@ -14,10 +14,7 @@ namespace MotionField.Editor
 /// function over it.
 ///
 /// Training runs in-process through PythonNET, synchronously on the main thread. It takes roughly
-/// 20 s on a GPU for a 7.8k-state database, which is short enough that a frozen editor beats the
-/// alternative: numpy and scipy hold the GIL for hundreds of milliseconds at a stretch, so a
-/// background worker would stall play mode anyway, cannot be aborted (Thread.Abort is gone), and
-/// hard-crashes the editor if a domain reload lands while it holds the GIL.
+/// 20 s on a GPU for a 7.8k-state database.
 /// </summary>
 [CustomEditor(typeof(MotionFieldConfig))]
 public class MotionFieldConfigEditor : UnityEditor.Editor
