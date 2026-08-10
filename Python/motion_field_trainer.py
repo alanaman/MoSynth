@@ -11,7 +11,7 @@ Pipeline:
 
   1. Precompute, for every database state and each of its K candidate actions,
      the yaw that action produces and the neighbourhood of the state it lands
-     in. This is the expensive part and gets cached.
+     in. This is the expensive part, and it is rebuilt on every train.
   2. Iterate the Bellman backup over that fixed transition structure until the
      residual stops moving.
   3. Write the value function to StreamingAssets.
@@ -206,7 +206,6 @@ def train_value_function(delta_yaw, value_indices, value_weights,
 def train(data_dir: str,
           db_name: str,
           out_path: str,
-          cache_path: str = None,
           k_neighbors: int = 15,
           theta_count: int = 17,
           epochs: int = 300,
@@ -221,24 +220,19 @@ def train(data_dir: str,
           knn_chunk: int = 64,
           state_chunk: int = DEFAULT_STATE_CHUNK,
           residual_tolerance: float = 1e-5,
-          force: bool = False,
           progress=None) -> dict:
     """
     Train a motion field value function and write it to `out_path`.
 
     :param data_dir: directory holding `<db_name>.mmskeleton` / `.mmpose`
     :param out_path: destination `.mffield.npz`, normally under StreamingAssets
-    :param cache_path: optional `.mftables.npz` rebuild cache. Belongs in
-        `Library/`, not in Assets -- it is tens of MB and useless at runtime.
     :param bone_weights: optional per-joint emphasis on the similarity metric,
-        see `MotionField.resolve_bone_weights`. Changing it invalidates both the
-        table cache and any previously trained value function.
+        see `MotionField.resolve_bone_weights`. Changing it invalidates any
+        previously trained value function.
     :param locomotion_factor: reward bonus for actions landing in moving
-        states; see `MotionField.state_locomotion_scores`. Affects only the
-        Bellman rewards, so changing it reuses the cached transition tables.
+        states; see `MotionField.state_locomotion_scores`.
     :param locomotion_speed_threshold: root speed, m/s, at which a state
         counts as fully moving.
-    :param force: rebuild the transition tables even if the cache is valid
     :param progress: optional callable(stage_name, fraction_0_to_1)
     :return: a summary dict (also useful as the value Unity logs)
     """
@@ -256,32 +250,24 @@ def train(data_dir: str,
                                locomotion_speed_threshold=locomotion_speed_threshold)
 
     signature = mfio.database_signature(data_dir, db_name)
-    table_params = {
+    metric_params = {
         'k_neighbors': int(k_neighbors),
         'tug_ratio': float(tug_ratio),
         'tug_mode': mfio.TUG_MODE,
         'pos_weight': float(pos_weight),
         'vel_weight': float(vel_weight),
-        # Part of the metric, so part of what makes a cached transition table or
-        # a trained value function stale. metric_version covers feature-building
-        # changes no weight expresses.
+        # Provenance, not a gate: Unity decides staleness from the config, and
+        # nothing reads these back. They are what makes an npz found on its own
+        # answerable for the metric it was trained under.
         'metric_version': int(mfio.METRIC_VERSION),
         'bone_weights_sha1': mfio.bone_weights_signature(motion_field.bone_weights),
         'frame_time': float(frame_time),
         'states_count': int(motion_field.states_count),
     }
 
-    tables = None if force else mfio.load_tables(cache_path, table_params, signature)
-    if tables is None:
-        tables = build_tables(motion_field, k_neighbors, tug_ratio,
-                              state_chunk=state_chunk, knn_chunk=knn_chunk,
-                              progress=progress)
-        if cache_path:
-            mfio.save_tables(cache_path, *tables, params=table_params, signature=signature)
-    else:
-        progress('Reusing cached transitions', 1.0)
-
-    delta_yaw, value_indices, value_weights = tables
+    delta_yaw, value_indices, value_weights = build_tables(
+        motion_field, k_neighbors, tug_ratio,
+        state_chunk=state_chunk, knn_chunk=knn_chunk, progress=progress)
 
     values, scores = train_value_function(
         delta_yaw, value_indices, value_weights,
@@ -293,12 +279,10 @@ def train(data_dir: str,
 
     progress('Writing value function', 1.0)
     mfio.save_value_function(out_path, values, scores, params={
-        **table_params,
+        **metric_params,
         'theta_count': int(theta_count),
         'gamma': float(gamma),
         'epochs': int(scores.shape[0]),
-        # Reward parameters, not table parameters: they gate the value function
-        # but leave the cached transitions reusable.
         'locomotion_factor': float(locomotion_factor),
         'locomotion_speed_threshold': float(locomotion_speed_threshold),
         'bone_count': int(motion_field.bone_count),
@@ -329,7 +313,6 @@ def _parse_args(argv=None):
                         help='database base name (defaults to the data-dir name)')
     parser.add_argument('--out', default=None,
                         help='destination .mffield.npz (defaults to <data-dir>/<db-name>.mffield.npz)')
-    parser.add_argument('--cache', default=None, help='optional .mftables.npz rebuild cache')
     parser.add_argument('--k-neighbors', type=int, default=15)
     parser.add_argument('--theta-count', type=int, default=17)
     parser.add_argument('--epochs', type=int, default=300)
@@ -344,7 +327,6 @@ def _parse_args(argv=None):
     parser.add_argument('--device', default='auto', choices=['auto', 'cuda', 'cpu'])
     parser.add_argument('--knn-chunk', type=int, default=64)
     parser.add_argument('--state-chunk', type=int, default=DEFAULT_STATE_CHUNK)
-    parser.add_argument('--force', action='store_true', help='ignore the table cache')
     return parser.parse_args(argv)
 
 
@@ -357,7 +339,7 @@ def main(argv=None) -> int:
     def report(stage, fraction):
         print(f'  {stage}: {fraction * 100:5.1f}%', end='\r', flush=True)
 
-    train(data_dir, db_name, out_path, cache_path=args.cache,
+    train(data_dir, db_name, out_path,
           k_neighbors=args.k_neighbors, theta_count=args.theta_count,
           epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
           pos_weight=args.pos_weight, vel_weight=args.vel_weight,
@@ -365,7 +347,7 @@ def main(argv=None) -> int:
           locomotion_factor=args.locomotion_factor,
           locomotion_speed_threshold=args.locomotion_speed_threshold,
           device=args.device, knn_chunk=args.knn_chunk,
-          state_chunk=args.state_chunk, force=args.force, progress=report)
+          state_chunk=args.state_chunk, progress=report)
     return 0
 
 

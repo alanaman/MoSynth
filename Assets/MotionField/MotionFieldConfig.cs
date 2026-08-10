@@ -66,7 +66,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Tooltip("Reward bonus for actions that land in moving states -- the reference " +
              "implementation's state_score * factor term. At 0 every reward is <= 0 and an idle " +
              "pose that faces the goal scores a perfect zero forever, so the policy freezes into " +
-             "it. Changing this needs a retrain but reuses the cached transition tables.")]
+             "it. Changing this needs a retrain.")]
     [Min(0f)] public float locomotionFactor = 1.0f;
 
     [Tooltip("Root speed, m/s, at which a database state counts as fully moving. The locomotion " +
@@ -250,6 +250,9 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
 
     // --- Motion field artefacts -------------------------------------------------------------
 
+    /// <summary>The extracted pose database: one row per frame of the assigned clips.</summary>
+    public string GetPoseDatabasePath() => Path.Combine(GetAssetPath(), name + ".mmpose");
+
     /// <summary>The trained value function, shipped with the player.</summary>
     public string GetValueFunctionPath() => Path.Combine(GetAssetPath(), name + ".mffield.npz");
 
@@ -259,13 +262,29 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     /// </summary>
     public string GetEmbeddingPath() => Path.Combine(GetAssetPath(), name + ".mfembed.npz");
 
+    // --- Build state ------------------------------------------------------------------------
+
     /// <summary>
-    /// Rebuild cache for the precomputed transitions. Tens of megabytes and useless at runtime, so
-    /// it goes in Library/ where Unity never imports it and no build picks it up.
+    /// Whether the pose database on disk was extracted from the config as it now stands.
     /// </summary>
-    public string GetTablesCachePath() =>
-        Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Library", "MotionField",
-            name + ".mftables.npz"));
+    /// <remarks>
+    /// Set by the Generate Pose Database button and cleared by <c>MotionFieldConfigEditor</c> when a
+    /// field is edited. The editor's change check cannot tell which field moved, so any edit clears
+    /// this -- over-flagging rather than missing a change that matters.
+    ///
+    /// Initialised true so a config saved before this field existed -- which was, by definition,
+    /// current when it was last generated -- does not demand a pointless rebuild the first time it
+    /// is opened. A config that has never been generated has no <c>.mmpose</c>, and every reader
+    /// takes the file's absence, not the flag, as the answer.
+    /// </remarks>
+    [HideInInspector] public bool hasPoseDatabase = true;
+
+    /// <summary>
+    /// Whether the value function on disk was trained on the config as it now stands. Cleared by an
+    /// edit and by regenerating the database, since extraction renumbers every state the value
+    /// function indexes. See <see cref="hasPoseDatabase"/> for why it starts true.
+    /// </summary>
+    [HideInInspector] public bool hasTrained = true;
 
     /// <summary>
     /// <see cref="umapFeatures"/> as the literal `motion_field_embedding.compute_embedding`

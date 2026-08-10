@@ -165,6 +165,8 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 dynamic motionFieldModule = PythonRuntime.Import("MotionField");
 
                 string dataPath = config.GetAssetPath();
+                var poseSet = config.GetOrImportPoseSet();
+                
                 var animData = _actionPredictor.load_animations(dataPath, config.name);
                 _skeleton = animData[0];
                 dynamic poseX = animData[1];
@@ -190,27 +192,25 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 // A stale or absent value function degrades to greedy control rather than throwing.
                 // Failing hard here would surface as an opaque managed exception in a player build.
                 string valuePath = config.GetValueFunctionPath();
-                if (File.Exists(valuePath))
-                {
-                    bool loaded = (bool)_motionField.load_value_function(
-                        valuePath, dataPath, config.name, PythonLog);
-
-                    // Silence here would read as the policy changing its mind on its own. Editing
-                    // the bone weights or any other metric parameter invalidates the training, and
-                    // that has to be visible or the character just quietly gets worse.
-                    if (!loaded)
-                    {
-                        Debug.LogWarning(
-                            "[MotionField] The trained value function does not match this config " +
-                            "(reason logged above), so the stage is running the one-step-greedy " +
-                            "policy. Press Train Motion Field on the config to rebuild it.");
-                    }
-                }
-                else
+                if (!File.Exists(valuePath))
                 {
                     Debug.LogWarning(
                         $"[MotionField] No trained value function at '{valuePath}'. Using the " +
                         "one-step-greedy policy. Press Train Motion Field on the config to fix this.");
+                }
+                // Refusing a stale one is not caution: the value function is indexed by database
+                // row, so a mismatched pair reads plausible numbers off the wrong poses and the
+                // character merely moves badly rather than visibly failing.
+                else if (!config.hasTrained)
+                {
+                    Debug.LogWarning(
+                        $"[MotionField] '{config.name}' has changed since the value function was " +
+                        "trained, so the stage is running the one-step-greedy policy instead. " +
+                        "Press Train Motion Field on the config.");
+                }
+                else
+                {
+                    _motionField.load_value_function(valuePath, PythonLog);
                 }
 
                 int stateCount = (int)poseX.shape[0];
@@ -306,9 +306,6 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
     public override bool Apply(PoseVector pose, float deltaTime)
     {
-        // Never return false. MotionSynthesisComponent breaks the stage chain but still applies the
-        // pose it built from the current transforms, whose angular velocities are Quaternion.euler
-        // angles in degrees wrapped to 0..360 -- which kicks the root by hundreds of rad/s.
         if (!_isInitialized) return true;
 
         try
@@ -317,8 +314,7 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
             using (Py.GIL())
             {
-                var nextPose = _motionField.get_pose(_currentX, _currentV, deltaTime,
-                    theta: Theta, mode: PolicyName());
+                dynamic nextPose = StepPolicy(deltaTime);
                 _currentX = nextPose[0];
                 _currentV = nextPose[1];
 
@@ -365,12 +361,22 @@ public class MotionFieldStage : MoSynthStage, IDisposable
         return true;
     }
 
-    private string PolicyName() => policy switch
+    /// <summary>Run one step of the selected policy. Must be called with the GIL held.</summary>
+    private dynamic StepPolicy(float deltaTime) => policy switch
     {
-        Policy.Greedy => "greedy",
-        Policy.Playback => "playback",
-        Policy.NearestNeighbour => "nearest",
-        Policy.Optimal => "optimal",
+        // Falls back to greedy on its own when no value function is loaded.
+        Policy.Optimal => _motionField.optimal_action(
+            theta: Theta, current_x: _currentX, current_v: _currentV, delta_time: deltaTime),
+
+        Policy.Greedy => _motionField.greedy_action(
+            theta: Theta, current_x: _currentX, current_v: _currentV, delta_time: deltaTime),
+
+        Policy.Playback => _motionField.get_next_pose(
+            current_x: _currentX, current_v: _currentV, delta_time: deltaTime),
+
+        Policy.NearestNeighbour => _motionField.get_next_pose_from_field(
+            current_x: _currentX, current_v: _currentV, delta_time: deltaTime),
+
         _ => throw new NotImplementedException($"Unknown policy {policy}."),
     };
 

@@ -1,20 +1,19 @@
 """
 On-disk format for the trained motion field value function.
 
-Two artefacts come out of training:
+Training produces one artefact: `<name>.mffield.npz`, the value function itself,
+written into StreamingAssets so it ships with the player. The transition tables
+it is fitted on are intermediate and rebuilt on every train.
 
-  * `<name>.mffield.npz` -- the value function itself, written into
-    StreamingAssets so it ships with the player.
-  * `<name>.mftables.npz` -- the precomputed transition tables, a rebuild cache
-    only. It is ~15 MB and useless at runtime, so it lives in `Library/` where
-    Unity never imports it and no build ever picks it up.
+Deciding whether a value function still matches the config that will run it is
+Unity's job, not this module's: `MotionFieldConfig.hasTrained` is set by the
+Train button and cleared the moment a field is edited, so the answer is known in
+the inspector rather than at load time with the character already in play mode.
+The loader here therefore takes whatever file it is handed.
 
-Both carry a signature of the pose database they were derived from. Every index
-in the value function is a row of that database, so loading a value function
-against a re-extracted `.mmpose` would silently address the wrong poses. The
-legacy notebook guarded this with a states_count assert alone, which happily
-accepts a database that was regenerated with the same frame count but different
-content -- hence the content hashes here.
+The parameters and database hashes are still written into the npz. Nothing reads
+them back: they are provenance, so a value function found on its own is still
+answerable for what produced it.
 """
 
 from __future__ import annotations
@@ -26,16 +25,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-SCHEMA_VERSION = 1
-
-# `delta_yaw` is read straight off the root quaternion as 2*atan2(q.y, q.w).
-# That is exact rather than an approximation because PoseExtractor builds the
-# SimulationBone rotation as LookRotation(hipsForward_projected, up), making
-# every root rotation in the database a pure yaw. Recorded in the file so a
-# future non-yaw root cannot silently reuse a value function trained under this
-# assumption.
-DELTA_YAW_CONVENTION = 'root_quat_pure_yaw_xyzw'
-
 # Which database state an action is tugged toward. 'emphasized' follows the
 # paper's reference implementation: the neighbour that the action emphasises.
 # 'nearest' always tugs toward the closest state, which makes the candidate
@@ -45,7 +34,12 @@ TUG_MODE = 'emphasized'
 # Semantic version of the similarity feature itself, for changes no parameter
 # expresses. Bumped to 2 when `build_motion_states` switched the metric FK to
 # the rest-pose hips offset -- same weights, different feature, so anything
-# trained before the change must be rejected rather than reused.
+# trained before the change is worthless.
+#
+# Bumping it does not invalidate anything by itself: Unity clears `hasTrained`
+# when a config field is edited, and a change in here moves no config field.
+# Editing the metric means retraining every field by hand, and this number is
+# what makes it obvious afterwards which files were left behind.
 METRIC_VERSION = 2
 
 # Signature of an all-ones per-bone weight table. Spelled out rather than hashed
@@ -60,8 +54,8 @@ def bone_weights_signature(bone_weights) -> str:
 
     Bone weights change the similarity metric, so they change which neighbours a
     state has, so they invalidate every transition and value trained under the
-    old table. Hashed rather than compared elementwise because the gate stores
-    one scalar per key and a 23x2 table is not a scalar.
+    old table. Hashed rather than compared elementwise because the embedding's
+    staleness check stores one scalar per key and a 23x2 table is not a scalar.
     """
     if bone_weights is None:
         return UNIFORM_BONE_WEIGHTS
@@ -102,37 +96,6 @@ def database_signature(data_dir: str, db_name: str) -> dict:
     }
 
 
-# Keys that must agree between the trained file and the runtime asking for it.
-# Anything outside this list is informational.
-_GATE_KEYS = (
-    'schema_version',
-    'delta_yaw_convention',
-    'metric_version',
-    'pose_db_sha1',
-    'skeleton_sha1',
-    'states_count',
-    'bone_count',
-    'k_neighbors',
-    'tug_ratio',
-    'tug_mode',
-    'pos_weight',
-    'vel_weight',
-    'bone_weights_sha1',
-    'locomotion_factor',
-    'locomotion_speed_threshold',
-    'frame_time',
-)
-
-# Gate keys a file is allowed to omit, and what to assume when it does. Only for
-# keys added after the format shipped, where the old behaviour is a known
-# constant -- anything else missing is a mismatch.
-_GATE_MISSING_DEFAULTS = {
-    'bone_weights_sha1': UNIFORM_BONE_WEIGHTS,
-}
-
-_FLOAT_GATE_TOLERANCE = 1e-6
-
-
 @dataclass
 class ValueFunctionData:
     """A loaded and validated value function."""
@@ -168,7 +131,6 @@ def save_value_function(out_path: str, values: np.ndarray, scores: np.ndarray,
 
     theta_count = int(params['theta_count'])
     payload = {
-        'schema_version': np.int64(SCHEMA_VERSION),
         'value_function': np.ascontiguousarray(values, dtype=np.float32),
         'scores': np.ascontiguousarray(scores, dtype=np.float32),
         'thetas': theta_grid(theta_count),
@@ -187,7 +149,6 @@ def save_value_function(out_path: str, values: np.ndarray, scores: np.ndarray,
         'k_neighbors': np.int64(params['k_neighbors']),
         'tug_ratio': np.float32(params['tug_ratio']),
         'tug_mode': np.str_(params.get('tug_mode', TUG_MODE)),
-        'delta_yaw_convention': np.str_(DELTA_YAW_CONVENTION),
         'gamma': np.float32(params['gamma']),
         'epochs': np.int64(params['epochs']),
         'config_json': np.str_(json.dumps(params, sort_keys=True, default=str)),
@@ -202,21 +163,16 @@ def theta_grid(theta_count: int) -> np.ndarray:
     return np.linspace(-np.pi, np.pi, theta_count + 1, dtype=np.float32)[:theta_count]
 
 
-def _mismatch(loaded, expected) -> bool:
-    if isinstance(expected, float) or isinstance(loaded, float):
-        return abs(float(loaded) - float(expected)) > _FLOAT_GATE_TOLERANCE
-    return str(loaded) != str(expected)
-
-
-def load_value_function(path: str, expect: dict | None = None,
-                        log=print) -> ValueFunctionData | None:
+def load_value_function(path: str, log=print) -> ValueFunctionData | None:
     """
-    Load and validate a `.mffield.npz`.
+    Load a `.mffield.npz`.
 
-    Returns None -- never raises -- when the file is missing, unreadable or does
-    not match `expect`. Callers run inside `Py.GIL()` from Unity, where an
-    exception surfaces as an opaque managed error, and a stale value function
-    should degrade to greedy control rather than take the player down.
+    Whether this file belongs with the config about to use it is settled in
+    Unity before the call; here a missing or unreadable file is the only reason
+    to decline. Returns None rather than raising either way -- callers run inside
+    `Py.GIL()` from Unity, where an exception surfaces as an opaque managed
+    error, and an unusable value function should degrade to greedy control
+    rather than take the player down.
     """
     if not path or not os.path.isfile(path):
         return None
@@ -229,88 +185,27 @@ def load_value_function(path: str, expect: dict | None = None,
         return None
 
     def scalar(key):
-        return data[key].item() if key in data else None
+        return data[key].item()
 
-    if scalar('schema_version') != SCHEMA_VERSION:
-        log(f'[MotionField] value function {path} has schema version '
-            f'{scalar("schema_version")}, expected {SCHEMA_VERSION}.')
-        return None
-
-    for key, expected in (expect or {}).items():
-        if key not in _GATE_KEYS or expected is None:
-            continue
-        if key in data:
-            found = scalar(key)
-        elif key in _GATE_MISSING_DEFAULTS:
-            found = _GATE_MISSING_DEFAULTS[key]
-        else:
-            log(f'[MotionField] value function {path} is missing "{key}".')
-            return None
-        if _mismatch(found, expected):
-            log(f'[MotionField] value function {path} is stale: {key} is '
-                f'{found!r} but the runtime expects {expected!r}. '
-                f'Retrain the motion field.')
-            return None
-
-    return ValueFunctionData(
-        values=np.ascontiguousarray(data['value_function'], dtype=np.float32),
-        scores=np.ascontiguousarray(data['scores'], dtype=np.float32),
-        thetas=np.ascontiguousarray(data['thetas'], dtype=np.float32),
-        theta_count=int(scalar('theta_count')),
-        theta_spacing=float(scalar('theta_spacing')),
-        gamma=float(scalar('gamma')),
-        k_neighbors=int(scalar('k_neighbors')),
-        tug_ratio=float(scalar('tug_ratio')),
-        tug_mode=str(scalar('tug_mode')),
-        pos_weight=float(scalar('pos_weight')),
-        vel_weight=float(scalar('vel_weight')),
-        frame_time=float(scalar('frame_time')),
-        states_count=int(scalar('states_count')),
-        bone_count=int(scalar('bone_count')),
-    )
-
-
-def save_tables(path: str, delta_yaw: np.ndarray, value_indices: np.ndarray,
-                value_weights: np.ndarray, params: dict, signature: dict) -> None:
-    """Write the `<name>.mftables.npz` rebuild cache."""
-    os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    payload = {
-        'schema_version': np.int64(SCHEMA_VERSION),
-        'delta_yaw': np.ascontiguousarray(delta_yaw, dtype=np.float32),
-        # int32, not the legacy int16: JLData has ~19k states and would
-        # silently wrap around.
-        'value_indices': np.ascontiguousarray(value_indices, dtype=np.int32),
-        'value_weights': np.ascontiguousarray(value_weights, dtype=np.float32),
-        'tables_json': np.str_(json.dumps(params, sort_keys=True, default=str)),
-    }
-    payload.update({k: np.str_(v) for k, v in signature.items()})
-    np.savez(path, **payload)
-
-
-def load_tables(path: str, params: dict, signature: dict, log=print):
-    """
-    Load the transition-table cache, or None if absent or stale.
-
-    Staleness is decided on the database hashes plus every parameter that feeds
-    the precompute (k, tug ratio, feature weights, frame time).
-    """
-    if not path or not os.path.isfile(path):
-        return None
     try:
-        with np.load(path, allow_pickle=False) as f:
-            data = {k: f[k] for k in f.files}
-    except Exception as exc:  # noqa: BLE001
-        log(f'[MotionField] could not read table cache {path}: {exc}')
+        return ValueFunctionData(
+            values=np.ascontiguousarray(data['value_function'], dtype=np.float32),
+            scores=np.ascontiguousarray(data['scores'], dtype=np.float32),
+            thetas=np.ascontiguousarray(data['thetas'], dtype=np.float32),
+            theta_count=int(scalar('theta_count')),
+            theta_spacing=float(scalar('theta_spacing')),
+            gamma=float(scalar('gamma')),
+            k_neighbors=int(scalar('k_neighbors')),
+            tug_ratio=float(scalar('tug_ratio')),
+            tug_mode=str(scalar('tug_mode')),
+            pos_weight=float(scalar('pos_weight')),
+            vel_weight=float(scalar('vel_weight')),
+            frame_time=float(scalar('frame_time')),
+            states_count=int(scalar('states_count')),
+            bone_count=int(scalar('bone_count')),
+        )
+    except KeyError as exc:
+        # A file written by an older layout. Nothing checks a format version, so
+        # the missing key is the symptom that surfaces first.
+        log(f'[MotionField] value function {path} is missing {exc}')
         return None
-
-    if data.get('schema_version', np.int64(-1)).item() != SCHEMA_VERSION:
-        return None
-    for key, expected in signature.items():
-        if str(data.get(key, '')) != str(expected):
-            return None
-    if str(data.get('tables_json', '')) != json.dumps(params, sort_keys=True, default=str):
-        return None
-
-    return (np.asarray(data['delta_yaw'], dtype=np.float32),
-            np.asarray(data['value_indices'], dtype=np.int32),
-            np.asarray(data['value_weights'], dtype=np.float32))

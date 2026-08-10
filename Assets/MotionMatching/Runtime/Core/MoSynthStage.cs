@@ -29,6 +29,12 @@ public abstract class MoSynthStage
     {
     }
 
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="pose"></param>
+    /// <param name="deltaTime"></param>
+    /// <returns>Return false to tell MSC to stop at this stage.</returns>
     public abstract bool Apply(PoseVector pose, float deltaTime);
 
     public virtual void OnDestroy()

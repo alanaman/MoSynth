@@ -94,33 +94,6 @@ def load_animations(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchi
 
     return skeleton, pose_x, pose_v, pose_y, pose_contacts, pose_set.frameTime, pose_set
 
-
-import zmq
-
-
-def create_pose_json_reply(skeleton: Skeleton,
-                           current_x: np.ndarray,
-                           current_v: np.ndarray,
-                           pose_contacts: np.ndarray):
-    p_x = Pose.from_array(current_x)
-    p_v = PoseDelta.from_array(current_v)
-
-    pos = skeleton.get_local_positions(p_x)[0]
-    assert pos.shape == (23, 3), f"Expected shape {(23, 3)}, got {pos.shape}"
-    lv = np.zeros_like(pos)
-    lv[0] = p_v.rootVel
-    quats = p_x.quats[0]
-    lav = p_v.rotvecs[0]
-    return {
-        "JointLocalPositions": [{"x": p[0], "y": p[1], "z": p[2]} for p in pos.tolist()],
-        "JointLocalRotations": [{"value": {"x": q[0], "y": q[1], "z": q[2], "w": q[3]}} for q in quats.tolist()],
-        "JointLocalVelocities": [{"x": v[0], "y": v[1], "z": v[2]} for v in lv.tolist()],
-        "JointLocalAngularVelocities": [{"x": ang_vel[0], "y": ang_vel[1], "z": ang_vel[2]} for ang_vel in
-                                        lav.tolist()],
-        "LeftFootContact": bool(pose_contacts[0]),
-        "RightFootContact": bool(pose_contacts[1])
-    }
-
 def get_pose_arrays(skeleton: Skeleton,
                     current_x: np.ndarray,
                     current_v: np.ndarray,
@@ -141,59 +114,3 @@ def get_pose_arrays(skeleton: Skeleton,
     lav = np.ascontiguousarray(lav, dtype=np.float32).flatten().tolist()
 
     return pos, quats, lv, lav, bool(pose_contacts[0]), bool(pose_contacts[1])
-
-
-def main(data_dir='../Assets/StreamingAssets/MMDatabases/MotionMatchingData',
-         db_name='MotionMatchingData', value_function_path=None):
-    """
-    Out-of-process motion field server for MfConnector (the ZeroMQ alternative to
-    the in-process PythonNET MotionFieldStage).
-    """
-    skeleton, pose_x, pose_v, pose_y, pose_contacts, frame_time, pose_set = \
-        load_animations(data_dir, db_name)
-    motion_field = MotionField(pose_x, pose_v, pose_y, skeleton, frame_time,
-                               value_function_path=value_function_path)
-
-    context = zmq.Context()
-    socket = context.socket(zmq.REP)
-    socket.bind("tcp://*:5555")
-    print("Python ZeroMQ server listening on port 5555...")
-
-    start_index = 400
-    current_x = pose_x[start_index, ...].copy()
-    current_v = pose_v[start_index, ...].copy()
-    current_contacts = pose_contacts[start_index, ...]
-
-    while True:
-
-        raw_msg = socket.recv()
-
-        # decode the goal from the json sent from Unity
-        try:
-            msg = raw_msg.decode('utf-8')
-            data = json.loads(msg)
-            delta_time = float(data["delta_time"])
-            if "theta" in data:
-                theta = float(data["theta"])
-            else:
-                # Legacy clients send a desired direction in the character's local
-                # frame instead; theta is the character's heading (+Z) in the goal
-                # frame. See MotionFieldStage.UpdateSteering for the same conversion.
-                desired_dir = np.asarray(data["desired_dir"], dtype=np.float32)
-                theta = -float(np.arctan2(desired_dir[0], desired_dir[-1])) \
-                    if np.any(desired_dir) else 0.0
-        except Exception as e:
-            print(f"Error decoding message: {e}")
-            socket.send_string(json.dumps({"error": "Invalid request format"}))
-            continue
-
-        current_x, current_v = motion_field.get_pose(current_x, current_v, delta_time, theta=theta)
-        reply = create_pose_json_reply(skeleton, current_x, current_v, current_contacts)
-        socket.send_string(json.dumps(reply))
-
-
-if __name__ == "__main__":
-    main()
-
-def get_multiplier():
-    return 10

@@ -46,9 +46,20 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
     public override void OnInspectorGUI()
     {
-        DrawDefaultInspector();
-
         var config = (MotionFieldConfig)target;
+
+        // Scoped to the fields on purpose. GUI.changed is also set by a button press, so clearing
+        // the flags from the blanket check at the bottom of this method would wipe hasTrained the
+        // instant Train Motion Field set it.
+        EditorGUI.BeginChangeCheck();
+        DrawDefaultInspector();
+        if (EditorGUI.EndChangeCheck())
+        {
+            // Which field moved is not knowable here, so every edit invalidates both artefacts.
+            // Over-flagging costs a rebuild; under-flagging costs a character that quietly moves
+            // worse than it should.
+            MarkStale(config, database: true);
+        }
 
         EditorGUILayout.Space();
         DrawImportSection(config);
@@ -71,6 +82,20 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         }
     }
 
+    // --- Build state ----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Note that an artifact no longer matches the config. <paramref name="database"/> extends that
+    /// to the pose database, which drags the value function with it: extraction renumbers every
+    /// state, and the value function is indexed by state.
+    /// </summary>
+    private static void MarkStale(MotionFieldConfig config, bool database)
+    {
+        if (database) config.hasPoseDatabase = false;
+        config.hasTrained = false;
+        EditorUtility.SetDirty(config);
+    }
+
     private void DrawImportSection(MotionFieldConfig config)
     {
         _showImport = EditorGUILayout.Foldout(_showImport, "Import Settings From MotionMatchingData", true);
@@ -89,14 +114,14 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             if (GUILayout.Button("Copy Settings"))
             {
                 Undo.RecordObject(config, "Import MotionField settings");
-                config.animationClips = new System.Collections.Generic.List<AnnotatedAnimationClip>(
+                config.animationClips = new List<AnnotatedAnimationClip>(
                     _importSource.animationClips);
                 config.hipsForwardLocalVector = _importSource.hipsForwardLocalVector;
                 config.contactVelocityThreshold = _importSource.contactVelocityThreshold;
                 config.animationChannelToMecanim =
-                    new System.Collections.Generic.List<MotionMatchingData.JointToMecanim>(
+                    new List<MotionMatchingData.JointToMecanim>(
                         _importSource.animationChannelToMecanim);
-                EditorUtility.SetDirty(config);
+                MarkStale(config, database: true); // rewrites the clips extraction reads
                 Debug.Log($"[MotionField] Copied {config.animationClips.Count} clip(s) and " +
                           $"{config.animationChannelToMecanim.Count} bone mapping(s) from " +
                           $"'{_importSource.name}'.");
@@ -121,14 +146,41 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 "contact detection and will fail without it.", MessageType.Warning);
         }
 
+        if (File.Exists(config.GetPoseDatabasePath()))
+        {
+            DrawBuildState(config.hasPoseDatabase,
+                "The config changed since the pose database was generated. Regenerate it, then " +
+                "retrain -- extraction renumbers every state, which invalidates the value function " +
+                "too.");
+        }
+
         using (new EditorGUI.DisabledScope(!hasClips))
         {
             if (GUILayout.Button("Generate Pose Database", GUILayout.Height(24)))
             {
-                GeneratePoseDatabase(config);
+                if (GeneratePoseDatabase(config))
+                {
+                    config.hasPoseDatabase = true;
+                    config.hasTrained = false; // the states the value function indexes were renumbered
+                    EditorUtility.SetDirty(config);
+                    AssetDatabase.SaveAssetIfDirty(config);
+                }
+
                 InvalidateSkeleton(); // the joint list the bone weight rows are drawn from
             }
         }
+    }
+
+    /// <summary>Say which button needs pressing, or confirm that none does.</summary>
+    private static void DrawBuildState(bool current, string staleMessage)
+    {
+        if (current)
+        {
+            EditorGUILayout.LabelField(" ", "Up to date with this config.", EditorStyles.miniLabel);
+            return;
+        }
+
+        EditorGUILayout.HelpBox(staleMessage, MessageType.Error);
     }
 
     /// <summary>
@@ -213,7 +265,8 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                     Undo.RecordObject(config, "Edit bone weight");
                     config.SetBoneWeight(new MotionFieldConfig.BoneWeight(
                         joint.name, Mathf.Max(0f, position), Mathf.Max(0f, velocity)));
-                    EditorUtility.SetDirty(config);
+                    // The metric changes, the extraction does not, so only the training is stale.
+                    MarkStale(config, database: false);
                 }
             }
         }
@@ -238,7 +291,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 {
                     Undo.RecordObject(config, "Reset bone weights");
                     config.boneWeights.Clear();
-                    EditorUtility.SetDirty(config);
+                    MarkStale(config, database: false);
                 }
             }
 
@@ -262,8 +315,11 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (GUILayout.Button("Remove Stale Entries"))
         {
             Undo.RecordObject(config, "Remove stale bone weights");
+            // Training ignores these already, so this cannot change a result -- but the flag is
+            // cheap and a config that says "retrain" when nothing needs it is the harmless way
+            // to be wrong.
             config.boneWeights.RemoveAll(w => _skeleton.Joints.All(j => j.name != w.name));
-            EditorUtility.SetDirty(config);
+            MarkStale(config, database: false);
         }
     }
 
@@ -303,7 +359,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         EditorGUILayout.LabelField("Value Function", EditorStyles.boldLabel);
 
         string valuePath = config.GetValueFunctionPath();
-        bool databaseExists = File.Exists(Path.Combine(config.GetAssetPath(), config.name + ".mmpose"));
+        bool databaseExists = File.Exists(config.GetPoseDatabasePath());
         bool trained = File.Exists(valuePath);
 
         EditorGUILayout.LabelField("Trained file",
@@ -314,6 +370,12 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (!databaseExists)
         {
             EditorGUILayout.HelpBox("Generate the pose database first.", MessageType.Warning);
+        }
+        else if (trained)
+        {
+            DrawBuildState(config.hasTrained,
+                "The config changed since the value function was trained. Until it is retrained " +
+                "the stage rejects it and runs the one-step-greedy policy.");
         }
 
         if (EditorApplication.isPlayingOrWillChangePlaymode)
@@ -327,12 +389,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         {
             if (GUILayout.Button("Train Motion Field", GUILayout.Height(30)))
             {
-                TrainMotionField(config, force: false);
-            }
-
-            if (GUILayout.Button("Retrain (ignore transition cache)"))
-            {
-                TrainMotionField(config, force: true);
+                TrainMotionField(config);
             }
         }
     }
@@ -342,7 +399,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         EditorGUILayout.LabelField("Debug Visualization", EditorStyles.boldLabel);
 
         string embeddingPath = config.GetEmbeddingPath();
-        bool databaseExists = File.Exists(Path.Combine(config.GetAssetPath(), config.name + ".mmpose"));
+        bool databaseExists = File.Exists(config.GetPoseDatabasePath());
         bool embedded = File.Exists(embeddingPath);
 
         EditorGUILayout.LabelField("Embedding",
@@ -373,7 +430,8 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         }
     }
 
-    private static void GeneratePoseDatabase(MotionFieldConfig config)
+    /// <summary>Extract and serialize the pose database. Returns false if it did not get written.</summary>
+    private static bool GeneratePoseDatabase(MotionFieldConfig config)
     {
         try
         {
@@ -385,10 +443,12 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
             Debug.Log($"[MotionField] Wrote {config.GetOrImportPoseSet().NumberPoses} poses to " +
                       $"{ProjectRelative(config.GetAssetPath())}.");
+            return true;
         }
         catch (Exception e)
         {
             Debug.LogException(e);
+            return false;
         }
         finally
         {
@@ -398,7 +458,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         }
     }
 
-    private static void TrainMotionField(MotionFieldConfig config, bool force)
+    private void TrainMotionField(MotionFieldConfig config)
     {
         // The interpreter runs in this process. A domain reload while it is mid-call takes the
         // editor down with it, so hold reloads off for the duration.
@@ -424,7 +484,6 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 });
 
                 using var kwargs = new PyDict();
-                kwargs["cache_path"] = config.GetTablesCachePath().ToPython();
                 kwargs["k_neighbors"] = config.kNeighbors.ToPython();
                 kwargs["theta_count"] = config.thetaCount.ToPython();
                 kwargs["epochs"] = config.epochs.ToPython();
@@ -439,11 +498,16 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 kwargs["device"] = config.DeviceName.ToPython();
                 kwargs["knn_chunk"] = config.knnChunk.ToPython();
                 kwargs["state_chunk"] = config.stateChunk.ToPython();
-                kwargs["force"] = force.ToPython();
                 kwargs["progress"] = report.ToPython();
 
                 using PyObject summary = trainer.InvokeMethod("train", args, kwargs);
                 Debug.Log($"[MotionField] {summary}");
+
+                // Only on the success path: train() throwing leaves the old value function on disk,
+                // and it is no less stale than it was a moment ago.
+                config.hasTrained = true;
+                EditorUtility.SetDirty(config);
+                AssetDatabase.SaveAssetIfDirty(config);
             }
 
             GC.KeepAlive(report);
