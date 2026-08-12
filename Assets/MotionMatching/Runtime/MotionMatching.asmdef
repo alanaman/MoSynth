@@ -8,7 +8,8 @@
         "Unity.Splines",
         "Unity.Collections",
         "Sperlich.SDraw",
-        "MackySoft.SerializeReferenceExtensions"
+        "MackySoft.SerializeReferenceExtensions",
+        "AnimationTools"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
