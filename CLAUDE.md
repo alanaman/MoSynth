@@ -9,6 +9,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Code Style
 - Do not write comments in generated code that depend on the context of the conversation that produced them (e.g. referencing the task, a fix, a prior approach, or "why we're changing this now"). Comments should only explain non-obvious WHY that a reader with just the code in front of them would need.
 - Use `var` to declare variables unless an explicit type makes the code clearer (IDEs surface type info well).
+- Naming (matches Rider's default C# inspections; follow loosely, matching surrounding code):
+  - Private instance/static fields: `_camelCase` (e.g. `_skeleton`, `_poseSet`)
+  - `[SerializeField]` private fields and public fields: `camelCase` (e.g. `poseSkeleton`, `mmData`) — they surface in the Inspector
+  - Types, methods, properties, events, constants: `PascalCase`
+  - Locals and parameters: `camelCase`
 
 ### Tech Stack
 - **Unity**: 6000.4.4f1 (LTS)
