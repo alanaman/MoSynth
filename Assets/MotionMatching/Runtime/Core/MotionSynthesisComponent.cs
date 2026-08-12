@@ -9,9 +9,6 @@ namespace MotionMatching
 {
 public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 {
-    // TODO: remove. shouldn't be coupled to MotionMatchingData
-    public MotionMatchingData mmData;
-
     [NonSerialized] public PoseVector CurrentPose;
 
     private Skeleton _skeleton;
@@ -46,7 +43,22 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
     // maybe change this to 'root motion'?
     public bool rootPositionsMask = true;
 
-    public override MotionMatchingData MmData => mmData;
+    /// <summary>
+    /// The <see cref="MotionMatchingData"/> of the first <see cref="MotionMatchingStage"/> in
+    /// <see cref="stages"/>, or null when no such stage exists (e.g. a motion-field-only stack).
+    /// </summary>
+    public override MotionMatchingData MmData
+    {
+        get
+        {
+            foreach (var stage in stages)
+            {
+                if (stage is MotionMatchingStage mm) return mm.mmData;
+            }
+
+            return null;
+        }
+    }
     public override float3 RootVelocity { get; protected set; }
     public override float3 RootAngularVelocity { get; protected set; }
     public override float3 RootPosition { get; protected set; }
@@ -76,6 +88,14 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
             _skeleton = stage.GetSkeleton(_skeleton);
         }
 
+        if (_skeleton == null)
+        {
+            Debug.LogError($"MotionSynthesisComponent \"{name}\": no stage provided a skeleton " +
+                           "(e.g. a MotionMatchingStage). Disabling the component.");
+            enabled = false;
+            return;
+        }
+
         InitSkeletonTransformsArray();
         InitCurrentPose();
         ApplyTransformOffsetsFromSkeleton();
@@ -98,8 +118,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     private void InitSkeletonTransformsArray()
     {
-        var poseSet = mmData.GetOrImportPoseSet();
-        var poseJoints = poseSet.Skeleton.Joints;
+        var poseJoints = _skeleton.Joints;
 
         // +1 for SimulationBone
         SkeletonTransforms = new Transform[poseJoints.Count];
@@ -112,8 +131,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     private void ApplyTransformOffsetsFromSkeleton()
     {
-        var poseSet = mmData.GetOrImportPoseSet();
-        var animJoints = poseSet.Skeleton.Joints;
+        var animJoints = _skeleton.Joints;
 
         for (var i = 1; i < animJoints.Count; i++)
         {
