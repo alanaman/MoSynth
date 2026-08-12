@@ -1,0 +1,324 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &3434875197664048077
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 3817909796914826700}
+  - component: {fileID: 1967041479346193330}
+  - component: {fileID: 5870093008604421234}
+  m_Layer: 0
+  m_Name: MotionMatching
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &3817909796914826700
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3434875197664048077}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2906574596192062769}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1967041479346193330
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3434875197664048077}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 519818dcf0144c0b906e668f48997c14, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.Editor.MotionMatchingControllerDrawer
+  spheresRadius: 0.1
+  debugSkeleton: 1
+  debugFutureSkeleton: 1
+  debugCurrent: 1
+  debugPose: 1
+  debugTrajectory: 1
+  debugEnvironment: 1
+  debugContacts: 1
+--- !u!114 &5870093008604421234
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3434875197664048077}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9550d673ff34618448579184c846c9d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionMatchingController
+  controlInput: {fileID: 9195784020326121126}
+  mmData: {fileID: 11400000, guid: 74ea31e3cadcaa345b7e1171ab5116a9, type: 2}
+  mmSearch:
+    rid: 6955135189951447106
+  searchInterval: 0.16666667
+  inertialize: 1
+  footLock: 1
+  footUnlockDistance: 0.2
+  inertializeHalfLife: 0.1
+  responsiveness: 1
+  quality: 1
+  featureWeights:
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  minFrameSwitchDistance: 20
+  references:
+    version: 2
+    RefIds:
+    - rid: 6955135189951447106
+      type: {class: BvhMotionMatchingSearch, ns: MotionMatching, asm: MotionMatching}
+      data: 
+--- !u!1 &3578868769316349416
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6396724996047244885}
+  - component: {fileID: 9195784020326121126}
+  m_Layer: 0
+  m_Name: CharacterController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6396724996047244885
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3578868769316349416}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2906574596192062769}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9195784020326121126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3578868769316349416}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d559543e917c6d44b4429eb838f6898, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.SpringControlInput
+  motionSynthesizer: {fileID: 5870093008604421234}
+  TrajectoryPositionFeatureName: FuturePosition
+  TrajectoryDirectionFeatureName: FutureDirection
+  MaxSpeed: 1
+  ResponsivenessPositions: 0.75
+  ResponsivenessDirections: 0.75
+  MinimumVelocityClamp: 0.01
+  InputBigChangeThreshold: 0.5
+  DoAdjustment: 1
+  PositionAdjustmentHalflife: 0.1
+  RotationAdjustmentHalflife: 0.1
+  PosMaximumAdjustmentRatio: 0.1
+  RotMaximumAdjustmentRatio: 0.1
+  DoClamping: 1
+  MaxDistanceMMAndCharacterController: 0.1
+  DebugCurrent: 1
+  DebugPrediction: 1
+  DebugClamping: 1
+--- !u!1 &8965083205471426151
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2906574596192062769}
+  - component: {fileID: 2380834431203398885}
+  - component: {fileID: 1584133339272508714}
+  - component: {fileID: 8550816054912891177}
+  m_Layer: 0
+  m_Name: SimpleMMController
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &2906574596192062769
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8965083205471426151}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 9101681337443583739}
+  - {fileID: 6396724996047244885}
+  - {fileID: 3817909796914826700}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2380834431203398885
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8965083205471426151}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e06881ce2fab0824c9dca82a227d6c45, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SimpleKeyboardInput
+  MMController: {fileID: 8550816054912891177}
+--- !u!114 &1584133339272508714
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8965083205471426151}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ffb3d28d913499b86e31e3667b7e5c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.Testing.MoveForwardInput
+  MMController: {fileID: 0}
+--- !u!114 &8550816054912891177
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8965083205471426151}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f413cb81b1d85394aa5accc31b629613, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.SimpleMMController
+--- !u!1001 &8774440929736909072
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 2906574596192062769}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: -0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_Name
+      value: Lafan_model_skeleton
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_Controller
+      value: 
+      objectReference: {fileID: 9100000, guid: 1faf7fdcb656b3d458f0b9392ab8c218, type: 2}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 6898382071468165809}
+  m_SourcePrefab: {fileID: 100100000, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+--- !u!1 &8431998923866954817 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+  m_PrefabInstance: {fileID: 8774440929736909072}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &6898382071468165809
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8431998923866954817}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e66e50b2cbd412540a6365f0aa36fa62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionMatchingSkinnedMeshRenderer
+  motionSynthesizer: {fileID: 5870093008604421234}
+  avatarMask: {fileID: 0}
+  rootPositionsMask: 1
+  rootRotationsMask: 1
+  blendPoses: 1
+  blendHalfLife: 0.05
+  avoidToesFloorPenetration: 0
+  toesSoleOffset: {x: 0, y: 0, z: 0}
+--- !u!4 &9101681337443583739 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+  m_PrefabInstance: {fileID: 8774440929736909072}
+  m_PrefabAsset: {fileID: 0}
