@@ -282,6 +282,13 @@
       },
       "url": "https://packages.unity.com"
     },
+    "com.yasirkula.assetusagedetector": {
+      "version": "https://github.com/yasirkula/UnityAssetUsageDetector.git",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "69f7ee5a27fc33442e3fa5778308bd4c29389a72"
+    },
     "org.mujoco": {
       "version": "file:../External/mujoco/unity",
       "depth": 0,
