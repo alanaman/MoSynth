@@ -123,7 +123,7 @@ def compute_knn(features: np.ndarray, k: int, device: str = None,
         sorted nearest first.
     """
     device = resolve_device(device)
-    states = torch.from_numpy(np.ascontiguousarray(features, dtype=np.float32)).to(device)
+    states = torch.from_numpy(features).to(device, torch.float32)
     count = states.shape[0]
     k = min(int(k), count)
 

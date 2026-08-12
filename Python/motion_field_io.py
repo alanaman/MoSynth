@@ -41,9 +41,6 @@ class ValueFunctionData:
         return float(self.scores[-1, 2]) if self.scores.size else float('nan')
 
 
-def theta_grid(theta_count: int) -> np.ndarray:
-    """The task-parameter grid: `theta_count` headings spanning [-pi, pi)."""
-    return np.linspace(-np.pi, np.pi, theta_count + 1, dtype=np.float32)[:theta_count]
 
 
 def save_value_function(out_path: str, values: np.ndarray, scores: np.ndarray,

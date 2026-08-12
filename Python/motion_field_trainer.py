@@ -114,6 +114,9 @@ def build_tables(motion_field: MotionField, k_neighbors: int, tug_ratio: float,
 
     return delta_yaw, value_indices, value_weights
 
+def theta_grid(theta_count: int) -> np.ndarray:
+    """The task-parameter grid: `theta_count` headings spanning [-pi, pi)."""
+    return np.linspace(-np.pi, np.pi, theta_count + 1, dtype=np.float32)[:theta_count]
 
 def train_value_function(delta_yaw, value_indices, value_weights,
                          state_scores=None, locomotion_factor=1.0,
@@ -138,8 +141,25 @@ def train_value_function(delta_yaw, value_indices, value_weights,
     at `theta`, and that shifted lookup is interpolated across the two
     bracketing grid headings.
 
+    :param delta_yaw: (states, actions) f32 -- yaw each action turns the
+        character through, from `build_tables`.
+    :param value_indices: (states, actions, neighbours) i32 -- the k database
+        states nearest each action's arrival state.
+    :param value_weights: (states, actions, neighbours) f32 -- similarity
+        weights over `value_indices`; each (state, action) row sums to 1.
     :param state_scores: (states,) per-state locomotion score in [0, 1], or
         None to train on the heading term alone.
+    :param locomotion_factor: scale on the bonus term; 0 disables it even when
+        `state_scores` is given.
+    :param theta_count: number of goal headings on the task grid, spanning
+        [-pi, pi). Must match what the runtime policy will use.
+    :param epochs: maximum Bellman backup iterations.
+    :param gamma: discount factor; also bounds V at 1 / (1 - gamma) per unit
+        of per-step reward.
+    :param device: torch device name, or None to pick via `resolve_device`.
+    :param residual_tolerance: stop early once the mean Bellman residual for
+        an epoch falls below this.
+    :param progress: optional callable(stage_name, fraction_0_to_1).
     :return: (V (states, theta_count) f32, scores (epochs_run, 3) f32) where
         scores columns are the min / max / mean Bellman residual per epoch.
     """
@@ -147,12 +167,10 @@ def train_value_function(delta_yaw, value_indices, value_weights,
     states_count, k = delta_yaw.shape
 
     values = torch.zeros((states_count, theta_count), device=device)
-    delta = torch.from_numpy(np.ascontiguousarray(delta_yaw, dtype=np.float32)).to(device)
-    neighbour_ids = torch.from_numpy(
-        np.ascontiguousarray(value_indices, dtype=np.int64)).to(device)
-    neighbour_weights = torch.from_numpy(
-        np.ascontiguousarray(value_weights, dtype=np.float32)).to(device)
-    thetas = torch.from_numpy(mfio.theta_grid(theta_count)).to(device)
+    delta = torch.from_numpy(delta_yaw).to(device, torch.float32)
+    neighbour_ids = torch.from_numpy(value_indices).to(device, torch.long)
+    neighbour_weights = torch.from_numpy(value_weights).to(device, torch.float32)
+    thetas = torch.from_numpy(theta_grid(theta_count)).to(device)
 
     # Goal heading after the action, per (state, action, starting heading).
     next_theta = thetas.view(1, 1, theta_count) + delta.view(states_count, k, 1)
@@ -162,8 +180,7 @@ def train_value_function(delta_yaw, value_indices, value_weights,
     if state_scores is not None and locomotion_factor != 0.0:
         # Interpolated through the same successor neighbourhood as V, and
         # heading-independent, so it broadcasts over the theta axis.
-        scores = torch.from_numpy(
-            np.ascontiguousarray(state_scores, dtype=np.float32)).to(device)
+        scores = torch.from_numpy(state_scores).to(device, torch.float32)
         bonus = (scores[neighbour_ids] * neighbour_weights).sum(dim=2)
         rewards = rewards + locomotion_factor * bonus.unsqueeze(-1)
 
@@ -307,26 +324,26 @@ def _parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None) -> int:
-    args = _parse_args(argv)
-    data_dir = os.path.abspath(args.data_dir)
-    db_name = args.db_name or os.path.basename(data_dir.rstrip('\\/'))
-    out_path = args.out or os.path.join(data_dir, f'{db_name}.mffield.npz')
-
-    def report(stage, fraction):
-        print(f'  {stage}: {fraction * 100:5.1f}%', end='\r', flush=True)
-
-    train(data_dir, db_name, out_path,
-          k_neighbors=args.k_neighbors, theta_count=args.theta_count,
-          epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
-          pos_weight=args.pos_weight, vel_weight=args.vel_weight,
-          bone_weights=load_bone_weights_file(args.bone_weights),
-          locomotion_factor=args.locomotion_factor,
-          locomotion_speed_threshold=args.locomotion_speed_threshold,
-          device=args.device, knn_chunk=args.knn_chunk,
-          state_chunk=args.state_chunk, progress=report)
-    return 0
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())
+# def main(argv=None) -> int:
+#     args = _parse_args(argv)
+#     data_dir = os.path.abspath(args.data_dir)
+#     db_name = args.db_name or os.path.basename(data_dir.rstrip('\\/'))
+#     out_path = args.out or os.path.join(data_dir, f'{db_name}.mffield.npz')
+#
+#     def report(stage, fraction):
+#         print(f'  {stage}: {fraction * 100:5.1f}%', end='\r', flush=True)
+#
+#     train(data_dir, db_name, out_path,
+#           k_neighbors=args.k_neighbors, theta_count=args.theta_count,
+#           epochs=args.epochs, gamma=args.gamma, tug_ratio=args.tug_ratio,
+#           pos_weight=args.pos_weight, vel_weight=args.vel_weight,
+#           bone_weights=load_bone_weights_file(args.bone_weights),
+#           locomotion_factor=args.locomotion_factor,
+#           locomotion_speed_threshold=args.locomotion_speed_threshold,
+#           device=args.device, knn_chunk=args.knn_chunk,
+#           state_chunk=args.state_chunk, progress=report)
+#     return 0
+#
+#
+# if __name__ == '__main__':
+#     raise SystemExit(main())
