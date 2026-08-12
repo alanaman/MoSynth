@@ -1,0 +1,254 @@
+using System.Collections.Generic;
+using AnimationTools;
+using NUnit.Framework;
+using Unity.Collections;
+using Unity.Mathematics;
+using UnityEngine;
+
+namespace AnimationTools.Tests
+{
+public class PoseBufferTests
+{
+    private SkeletonAsset skeleton;
+    private PoseLayout layout;
+    private PoseBuffer buffer;
+
+    private BoneReference rootBone;
+    private BoneReference spineBone;
+    private BoneReference headBone;
+
+    [SetUp]
+    public void SetUp()
+    {
+        skeleton = TestSkeletons.CreateChain3();
+        rootBone = new BoneReference(TestSkeletons.RootId, "root");
+        spineBone = new BoneReference(TestSkeletons.SpineId, "spine");
+        headBone = new BoneReference(TestSkeletons.HeadId, "head");
+
+        var channels = new List<ChannelDescriptor>
+        {
+            new() { boneId = TestSkeletons.RootId, type = ChannelType.Position },
+            new() { boneId = TestSkeletons.RootId, type = ChannelType.Rotation, representation = RotationRepresentation.Quaternion },
+            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Scale },
+            new() { boneId = TestSkeletons.RootId, type = ChannelType.Velocity },
+            new() { boneId = TestSkeletons.RootId, type = ChannelType.AngularVelocity, representation = RotationRepresentation.RotationVector },
+            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Bool, usage = ChannelUsage.Default }
+        };
+        layout = PoseLayout.Build(skeleton, channels);
+        buffer = PoseBuffer.Allocate(layout, Allocator.Temp);
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        buffer.Dispose();
+        if (skeleton != null) UnityEngine.Object.DestroyImmediate(skeleton);
+        skeleton = null;
+    }
+
+    [Test]
+    public void Allocate_ZeroInitializesAndIsCreated()
+    {
+        Assert.IsTrue(buffer.IsCreated);
+        for (var i = 0; i < buffer.Data.Length; i++)
+            Assert.AreEqual(0f, buffer.Data[i]);
+    }
+
+    [Test]
+    public void SetGet_Position_RoundTrips()
+    {
+        var handle = layout.BindPosition(rootBone);
+        var value = new float3(1f, 2f, 3f);
+        buffer.SetPosition(handle, value);
+        Assert.AreEqual(value, buffer.GetPosition(handle));
+    }
+
+    [Test]
+    public void SetGet_QuaternionRotation_RoundTrips()
+    {
+        var handle = layout.BindRotation(rootBone);
+        var value = quaternion.AxisAngle(math.normalize(new float3(0f, 1f, 0f)), 0.7f);
+        buffer.SetRotation(handle, value);
+        var result = buffer.GetRotation(handle);
+        Assert.AreEqual(value.value.x, result.value.x, 1e-6f);
+        Assert.AreEqual(value.value.y, result.value.y, 1e-6f);
+        Assert.AreEqual(value.value.z, result.value.z, 1e-6f);
+        Assert.AreEqual(value.value.w, result.value.w, 1e-6f);
+    }
+
+    [Test]
+    public void SetGet_Scale_RoundTrips()
+    {
+        var handle = layout.BindScale(spineBone);
+        var value = new float3(2f, 3f, 4f);
+        buffer.SetScale(handle, value);
+        Assert.AreEqual(value, buffer.GetScale(handle));
+    }
+
+    [Test]
+    public void SetGet_Velocity_RoundTrips()
+    {
+        var handle = layout.BindVelocity(rootBone);
+        var value = new float3(-1f, 0.5f, 2f);
+        buffer.SetVelocity(handle, value);
+        Assert.AreEqual(value, buffer.GetVelocity(handle));
+    }
+
+    [Test]
+    public void SetGet_AngularVelocity_RoundTrips()
+    {
+        var handle = layout.BindAngularVelocity(rootBone);
+        var value = new float3(0f, 0f, 1.5f);
+        buffer.SetAngularVelocity(handle, value);
+        Assert.AreEqual(value, buffer.GetAngularVelocity(handle));
+    }
+
+    [Test]
+    public void SetGet_Bool_RoundTripsTrueAndFalse()
+    {
+        var handle = layout.BindBool(headBone);
+
+        buffer.SetBool(handle, true);
+        Assert.IsTrue(buffer.GetBool(handle));
+
+        buffer.SetBool(handle, false);
+        Assert.IsFalse(buffer.GetBool(handle));
+    }
+
+    [Test]
+    public void Slices_LengthsMatchSectionCounts()
+    {
+        Assert.AreEqual(layout.Data.PositionCount, buffer.Positions.Length);
+        Assert.AreEqual(layout.Data.RotationCount, buffer.Rotations.Length);
+    }
+
+    [Test]
+    public void PositionSlice_AliasesSetPosition()
+    {
+        var handle = layout.BindPosition(rootBone);
+        var value = new float3(5f, 6f, 7f);
+
+        buffer.SetPosition(handle, value);
+        Assert.AreEqual(value, buffer.Positions[0]);
+
+        var viaSlice = new float3(8f, 9f, 10f);
+        var positions = buffer.Positions;
+        positions[0] = viaSlice;
+        Assert.AreEqual(viaSlice, buffer.GetPosition(handle));
+    }
+
+    [Test]
+    public void CopyFrom_CopiesAllData()
+    {
+        var positionHandle = layout.BindPosition(rootBone);
+        var boolHandle = layout.BindBool(headBone);
+        buffer.SetPosition(positionHandle, new float3(1f, 2f, 3f));
+        buffer.SetBool(boolHandle, true);
+
+        var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
+        try
+        {
+            destination.CopyFrom(buffer);
+
+            for (var i = 0; i < layout.FloatCount; i++)
+                Assert.AreEqual(buffer.Data[i], destination.Data[i]);
+        }
+        finally
+        {
+            destination.Dispose();
+        }
+    }
+
+    [Test]
+    public void Lerp_Positions_ComputesMidpoint()
+    {
+        var handle = layout.BindPosition(rootBone);
+        var a = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var b = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
+        try
+        {
+            a.SetPosition(handle, new float3(0f, 0f, 0f));
+            b.SetPosition(handle, new float3(10f, 20f, 30f));
+
+            PoseBuffer.Lerp(a, b, 0.5f, destination);
+
+            Assert.AreEqual(new float3(5f, 10f, 15f), destination.GetPosition(handle));
+        }
+        finally
+        {
+            a.Dispose();
+            b.Dispose();
+            destination.Dispose();
+        }
+    }
+
+    [Test]
+    public void Lerp_Rotation_FixesHemisphereAndStaysNearIdentityAtHalfway()
+    {
+        var handle = layout.BindRotation(rootBone);
+        var a = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var b = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
+        try
+        {
+            a.SetRotation(handle, quaternion.identity);
+            // Same rotation, opposite sign: naive lerp without the hemisphere fix would cancel out.
+            var negated = quaternion.identity;
+            negated.value = -negated.value;
+            b.SetRotation(handle, negated);
+
+            PoseBuffer.Lerp(a, b, 0.5f, destination);
+            var result = destination.GetRotation(handle);
+
+            Assert.AreEqual(1f, math.abs(result.value.w), 1e-4f);
+            Assert.AreEqual(1f, math.length(result.value), 1e-4f);
+        }
+        finally
+        {
+            a.Dispose();
+            b.Dispose();
+            destination.Dispose();
+        }
+    }
+
+    [Test]
+    public void Lerp_Bool_StepsAtHalfway()
+    {
+        var handle = layout.BindBool(headBone);
+        var a = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var b = PoseBuffer.Allocate(layout, Allocator.Temp);
+        var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
+        try
+        {
+            a.SetBool(handle, false);
+            b.SetBool(handle, true);
+
+            PoseBuffer.Lerp(a, b, 0.49f, destination);
+            Assert.IsFalse(destination.GetBool(handle));
+
+            PoseBuffer.Lerp(a, b, 0.5f, destination);
+            Assert.IsTrue(destination.GetBool(handle));
+        }
+        finally
+        {
+            a.Dispose();
+            b.Dispose();
+            destination.Dispose();
+        }
+    }
+
+    [Test]
+    public void PoseBuffer_IsAViewStruct_CopyAliasesSameData()
+    {
+        var handle = layout.BindBool(headBone);
+        var copy = buffer;
+
+        // Regression pin: PoseBuffer copies must alias, not clone, so a by-value contact-write
+        // (e.g. a helper taking PoseBuffer by value) is visible through the original reference.
+        copy.SetBool(handle, true);
+
+        Assert.IsTrue(buffer.GetBool(handle));
+    }
+}
+}

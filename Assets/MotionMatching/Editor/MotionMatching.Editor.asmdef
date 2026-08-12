@@ -3,7 +3,9 @@
     "rootNamespace": "",
     "references": [
         "MotionMatching",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "AnimationTools",
+        "AnimationTools.Editor"
     ],
     "includePlatforms": [
         "Editor"
