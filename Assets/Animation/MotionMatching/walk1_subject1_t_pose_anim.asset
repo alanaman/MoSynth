@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b81a3691c81c50d41858624eac4a6299, type: 3}
+  m_Name: walk1_subject1_t_pose_anim
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.AnimationData
+  animation: {fileID: 5022602860645237092, guid: 5b9ba3ce1f331a943a539df7fd8bb8eb, type: 3}
+  tags: []
+  startFrame: 0
+  endFrame: 1
