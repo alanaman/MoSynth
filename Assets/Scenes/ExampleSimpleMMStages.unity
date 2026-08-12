@@ -2843,6 +2843,58 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: poseSkeleton
+      value: 
+      objectReference: {fileID: 11400000, guid: cc85968526bae8d498109f0ffc7938b2, type: 2}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: stages.Array.size
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: 'stages.Array.data[3]'
+      value: 5432756508962848881
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: 'managedReferences[5432756508962848881]'
+      value: MotionMatching MotionMatching.ContactVisualizerStage
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].skeleton
+      value: 
+      objectReference: {fileID: 11400000, guid: cc85968526bae8d498109f0ffc7938b2, type: 2}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].isEnabled
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].markerSize
+      value: 0.08
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactBones.Array.size
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactVelocityThreshold
+      value: 0.15
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactBones.Array.data[0].boneId
+      value: 6
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactBones.Array.data[1].boneId
+      value: 10
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactBones.Array.data[0].cachedName
+      value: LeftToe
+      objectReference: {fileID: 0}
+    - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+      propertyPath: managedReferences[5432756508962848881].contactBones.Array.data[1].cachedName
+      value: RightToe
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

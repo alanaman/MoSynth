@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 
 namespace MotionMatching
 {
-public class MotionSynthesisComponent : MotionSynthesizer
+public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 {
     // TODO: remove. shouldn't be coupled to MotionMatchingData
     public MotionMatchingData mmData;
@@ -15,6 +16,11 @@ public class MotionSynthesisComponent : MotionSynthesizer
 
     private Skeleton _skeleton;
     public Skeleton Skeleton => _skeleton;
+
+    [SerializeField] [Tooltip("Optional skeleton asset binding for AnimationTools-based stages.")]
+    private SkeletonAsset poseSkeleton;
+    public SkeletonAsset PoseSkeleton => poseSkeleton;
+    public SkeletonMap PoseSkeletonMap { get; private set; }
 
     /// <summary>
     /// The transforms of the character controlled by this <see cref="MotionSynthesisComponent"/>.
@@ -73,6 +79,15 @@ public class MotionSynthesisComponent : MotionSynthesizer
         InitSkeletonTransformsArray();
         InitCurrentPose();
         ApplyTransformOffsetsFromSkeleton();
+
+        if (poseSkeleton != null && _skeleton != null)
+        {
+            PoseSkeletonMap = SkeletonMap.Build(_skeleton, poseSkeleton);
+            if (PoseSkeletonMap == null)
+            {
+                Debug.LogError($"MotionSynthesisComponent \"{name}\": could not map the MotionMatching skeleton onto poseSkeleton \"{poseSkeleton.name}\" (some joint has no matching bone by name or HumanBodyBones type).");
+            }
+        }
 
         foreach (var stage in stages)
         {
