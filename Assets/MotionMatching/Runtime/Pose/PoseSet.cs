@@ -10,24 +10,45 @@ namespace MotionMatching
 using Joint = Skeleton.Joint;
 
 /// <summary>
-/// Stores the full pose representation of all poses for Motion Matching
+/// Stores the full pose representation of all poses for Motion Matching.
+/// Poses are stored as flat <see cref="PoseBuffer"/> frames in a single
+/// <see cref="PoseSequence"/> over an in-memory <see cref="AnimationTools.SkeletonAsset"/>
+/// that mirrors <see cref="Skeleton"/> joint-for-joint; <see cref="GetPose"/> converts back
+/// to <see cref="PoseVector"/> through a <see cref="PoseVectorAdapter"/>.
 /// </summary>
 public class PoseSet
 {
     // Public ---
     public Skeleton Skeleton { get; private set; }
     public float FrameTime { get; private set; }
-    public int NumberPoses => _poses.Count;
+    public int NumberPoses => _poseCount;
     public int NumberClips => _clips.Count;
     public int NumberTags => _tags.Count;
+
+    /// <summary>In-memory mirror of <see cref="Skeleton"/> (same indices, ids = index + 1).</summary>
+    public SkeletonAsset SkeletonAsset => _skeletonAsset;
+
+    /// <summary>Layout of the buffers returned by <see cref="GetPoseBuffer"/>.</summary>
+    public PoseLayout PoseLayout => _adapter?.Layout;
+
+    /// <summary>Reads the foot-contact Bool channels of a <see cref="GetPoseBuffer"/> frame.</summary>
+    public BoolHandle LeftFootContactHandle => _leftFootContactHandle;
+    public BoolHandle RightFootContactHandle => _rightFootContactHandle;
 
     public readonly int MaximumFramesPrediction; // Number of prediction frames of the longest trajectory feature
 
     // Private ---
-    private readonly List<PoseVector> _poses;
     private readonly List<AnimationClip> _clips;
     private readonly List<AnimationTag> _tags;
     private readonly Dictionary<string, int> _tagNameToIndex;
+
+    private SkeletonAsset _skeletonAsset;
+    private PoseVectorAdapter _adapter;
+    // Capacity view over Domain-backed storage; only the first _poseCount frames hold poses.
+    private PoseSequence _poseStorage;
+    private int _poseCount;
+    private BoolHandle _leftFootContactHandle;
+    private BoolHandle _rightFootContactHandle;
 
     public PoseSet(IPoseSetSource source) : this(source.MaximumFramesPrediction)
     {
@@ -35,7 +56,6 @@ public class PoseSet
 
     public PoseSet(int maximumFramesPrediction)
     {
-        _poses = new List<PoseVector>();
         _clips = new List<AnimationClip>();
         _tags = new List<AnimationTag>();
         _tagNameToIndex = new Dictionary<string, int>();
@@ -59,6 +79,8 @@ public class PoseSet
             Skeleton.AddJoint(new Joint(bone.name, i + 1, i == 0 ? 0 : bone.parentIndex + 1,
                 bone.restLocalPosition, bone.humanBone));
         }
+
+        RebuildPoseStorage();
     }
 
     /// <summary>
@@ -67,6 +89,88 @@ public class PoseSet
     public void SetSkeletonFromFile(Skeleton skeleton)
     {
         Skeleton = skeleton;
+        RebuildPoseStorage();
+    }
+
+    /// <summary>
+    /// Mirrors <see cref="Skeleton"/> into a fresh <see cref="AnimationTools.SkeletonAsset"/>
+    /// and rebuilds the adapter/layout over it. Pose storage starts empty: every real caller
+    /// sets the skeleton exactly once, before adding any pose.
+    /// </summary>
+    private void RebuildPoseStorage()
+    {
+        Debug.Assert(_poseCount == 0, "Setting the skeleton discards previously stored poses");
+
+        var joints = Skeleton.Joints;
+        var bones = new List<Bone>(joints.Count);
+        for (var i = 0; i < joints.Count; i++)
+        {
+            var joint = joints[i];
+            bones.Add(new Bone
+            {
+                id = i + 1,
+                name = joint.name,
+                parentIndex = i == 0 ? -1 : joint.parentIndex,
+                restLocalPosition = joint.localOffset,
+                restLocalRotation = quaternion.identity,
+                humanBone = joint.type
+            });
+        }
+
+        // HideAndDontSave + Domain-backed pose storage share one lifetime model: both live
+        // until domain unload. Dispose() deliberately leaves them alone because pose sets are
+        // shared (see MotionMatchingData.GetOrImportPoseSet).
+        _skeletonAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
+        _skeletonAsset.name = "PoseSetSkeleton";
+        _skeletonAsset.hideFlags = HideFlags.HideAndDontSave;
+        _skeletonAsset.SetBones(bones, bones.Count + 1);
+
+        var mmToAsset = new int[joints.Count];
+        var assetToMm = new int[joints.Count];
+        for (var i = 0; i < joints.Count; i++)
+        {
+            mmToAsset[i] = i;
+            assetToMm[i] = i;
+        }
+        var map = new SkeletonMap { MmToAsset = mmToAsset, AssetToMm = assetToMm, IsIdentity = true };
+
+        var leftContactBone = PickContactBoneIndex(HumanBodyBones.LeftToes, HumanBodyBones.LeftFoot, 0);
+        var rightContactBone = PickContactBoneIndex(HumanBodyBones.RightToes, HumanBodyBones.RightFoot,
+            _skeletonAsset.BoneCount - 1);
+        // The layout rejects duplicate (bone, type, usage) triples, so a skeleton missing one
+        // side must still end up with two distinct host bones.
+        if (rightContactBone == leftContactBone)
+        {
+            rightContactBone = leftContactBone == 0 ? _skeletonAsset.BoneCount - 1 : 0;
+        }
+
+        var contactChannels = new List<ChannelDescriptor>
+        {
+            new() { boneId = _skeletonAsset.GetBone(leftContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact },
+            new() { boneId = _skeletonAsset.GetBone(rightContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact }
+        };
+
+        _adapter = new PoseVectorAdapter(_skeletonAsset, map, contactChannels);
+        _leftFootContactHandle = _adapter.Layout.BindBool(
+            BoneRef(leftContactBone), ChannelUsage.Contact);
+        _rightFootContactHandle = _adapter.Layout.BindBool(
+            BoneRef(rightContactBone), ChannelUsage.Contact);
+
+        _poseStorage = null;
+        _poseCount = 0;
+    }
+
+    private BoneReference BoneRef(int boneIndex)
+    {
+        var bone = _skeletonAsset.GetBone(boneIndex);
+        return new BoneReference(bone.id, bone.name);
+    }
+
+    private int PickContactBoneIndex(HumanBodyBones toes, HumanBodyBones foot, int fallbackIndex)
+    {
+        if (_skeletonAsset.TryFindByHumanBone(toes, out var index)) return index;
+        if (_skeletonAsset.TryFindByHumanBone(foot, out index)) return index;
+        return fallbackIndex;
     }
 
     /// <summary>
@@ -81,11 +185,17 @@ public class PoseSet
         Debug.Assert(math.abs(FrameTime - frameTime) < 0.001f, "Frame time should be the same for all clips");
 
         // Add poses
-        int start = _poses.Count;
+        int start = _poseCount;
         int nPoses = poses.Length;
 
         _clips.Add(new AnimationClip(start, start + nPoses, frameTime));
-        _poses.AddRange(poses);
+        EnsureCapacity(_poseCount + nPoses);
+        for (var i = 0; i < nPoses; i++)
+        {
+            WritePose(_poseCount + i, poses[i]);
+        }
+        _poseCount += nPoses;
+
         foreach (var tag in tags)
         {
             AddTag(_clips.Count - 1, tag);
@@ -96,17 +206,49 @@ public class PoseSet
 
     public void AddClip(PoseVector pose)
     {
-        _poses.Add(pose);
+        EnsureCapacity(_poseCount + 1);
+        WritePose(_poseCount, pose);
+        _poseCount++;
     }
 
     public void SetPoseCapacity(uint numPoses)
     {
-        _poses.Capacity = (int)numPoses;
+        EnsureCapacity((int)numPoses);
     }
 
     public void SetClipCapacity(uint count)
     {
         _clips.Capacity = (int)count;
+    }
+
+    /// <summary>
+    /// Grows pose storage to hold at least <paramref name="poseCapacity"/> frames. Storage is
+    /// Domain-backed (never disposed, freed on domain unload); an outgrown buffer is simply
+    /// abandoned to the domain after its contents are copied over.
+    /// </summary>
+    private void EnsureCapacity(int poseCapacity)
+    {
+        Debug.Assert(_adapter != null, "Skeleton should be set first. Use SetSkeleton(...)");
+        if (poseCapacity <= 0) return;
+        if (_poseStorage != null && poseCapacity <= _poseStorage.FrameCount) return;
+
+        var newCapacity = math.max(poseCapacity, _poseStorage == null ? 64 : _poseStorage.FrameCount * 2);
+        var floatCount = _adapter.Layout.FloatCount;
+        var newData = new NativeArray<float>(newCapacity * floatCount, Allocator.Domain, NativeArrayOptions.ClearMemory);
+        if (_poseStorage != null)
+        {
+            NativeArray<float>.Copy(_poseStorage.Data, newData, _poseCount * floatCount);
+        }
+
+        _poseStorage = new PoseSequence(_adapter.Layout, newData);
+    }
+
+    private void WritePose(int poseIndex, in PoseVector pose)
+    {
+        var frame = _poseStorage.GetFrame(poseIndex);
+        _adapter.Write(pose, frame);
+        frame.SetBool(_leftFootContactHandle, pose.leftFootContact);
+        frame.SetBool(_rightFootContactHandle, pose.rightFootContact);
     }
 
     /// <summary>
@@ -160,7 +302,12 @@ public class PoseSet
     /// </summary>
     public void AddClipDeserialized(PoseVector[] poses)
     {
-        _poses.AddRange(poses);
+        EnsureCapacity(_poseCount + poses.Length);
+        for (var i = 0; i < poses.Length; i++)
+        {
+            WritePose(_poseCount + i, poses[i]);
+        }
+        _poseCount += poses.Length;
     }
 
     /// <summary>
@@ -177,7 +324,7 @@ public class PoseSet
 
     public bool IsPoseValidForPrediction(int poseIndex)
     {
-        Debug.Assert(poseIndex >= 0 && poseIndex < _poses.Count, "Pose index out of range");
+        Debug.Assert(poseIndex >= 0 && poseIndex < _poseCount, "Pose index out of range");
         // Check the validity of the pose
         bool isPredictionSafe = true;
         for (int i = 0; i < _clips.Count && isPredictionSafe; ++i)
@@ -199,7 +346,11 @@ public class PoseSet
     public bool GetPose(int poseIndex, out PoseVector pose)
     {
         bool isPredictionSafe = IsPoseValidForPrediction(poseIndex);
-        pose = new PoseVector(_poses[poseIndex]);
+        var frame = GetPoseBuffer(poseIndex);
+        pose = new PoseVector(Skeleton.Joints.Count);
+        _adapter.Read(frame, ref pose);
+        pose.leftFootContact = frame.GetBool(_leftFootContactHandle);
+        pose.rightFootContact = frame.GetBool(_rightFootContactHandle);
         return isPredictionSafe;
     }
 
@@ -221,6 +372,16 @@ public class PoseSet
 
         Debug.Assert(animationClip != -1, "Clip index not found");
         return GetPose(poseIndex, out pose);
+    }
+
+    /// <summary>
+    /// View over one stored pose — never Dispose it; it aliases this set's storage. Contacts
+    /// are readable through <see cref="LeftFootContactHandle"/>/<see cref="RightFootContactHandle"/>.
+    /// </summary>
+    public PoseBuffer GetPoseBuffer(int poseIndex)
+    {
+        Debug.Assert(poseIndex >= 0 && poseIndex < _poseCount, "Pose index out of range");
+        return _poseStorage.GetFrame(poseIndex);
     }
 
     /// <summary>
@@ -321,6 +482,8 @@ public class PoseSet
 
     public void Dispose()
     {
+        // Pose storage and the mirror SkeletonAsset are Domain-lifetime by design: pose sets
+        // are shared (MotionMatchingData caches one), so Dispose only releases the tags.
         if (_tags != null)
         {
             foreach (AnimationTag tag in _tags)
