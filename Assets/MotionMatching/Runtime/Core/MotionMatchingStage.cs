@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using AnimationTools;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -86,7 +87,7 @@ public class MotionMatchingStage : MoSynthStage
         controlInput.OnHighInputChange += () => { _searchTimeLeft = 0; };
         
         Assert.IsTrue(
-            motionSynthesisComponent.SkeletonTransforms.Length == _poseSet.Skeleton.Joints.Count,
+            motionSynthesisComponent.SkeletonTransforms.Length == _poseSet.SkeletonAsset.BoneCount,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
         
@@ -117,10 +118,10 @@ public class MotionMatchingStage : MoSynthStage
         mmSearch.Initialize(featureSet, _tagMask, _featureWeights);
     }
 
-    public override Skeleton GetSkeleton(in Skeleton inSkeleton)
+    public override SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton)
     {
         _poseSet = mmData.GetOrImportPoseSet();
-        return _poseSet.Skeleton;
+        return _poseSet.SkeletonAsset;
     }
     
     public override bool Apply(PoseVector pose, float deltaTime)

@@ -37,6 +37,23 @@ static class MmTestData
         return asset;
     }
 
+    /// <summary>
+    /// Inverse of <see cref="BuildSkeletonAsset"/>: rebuilds the legacy MM skeleton shape from
+    /// an asset, for parity tests that compare against the legacy FK implementation.
+    /// </summary>
+    public static Skeleton BuildMmSkeletonFromAsset(SkeletonAsset asset)
+    {
+        var skeleton = new Skeleton();
+        for (var i = 0; i < asset.BoneCount; i++)
+        {
+            var bone = asset.GetBone(i);
+            skeleton.AddJoint(new Skeleton.Joint(bone.name, i, bone.parentIndex,
+                bone.restLocalPosition, bone.humanBone));
+        }
+
+        return skeleton;
+    }
+
     // Mirrors MotionMatching.SkeletonAssetFromMmData.ConvertToBoneSources, which lives in the
     // editor-only MotionMatching.Editor assembly that this test asmdef doesn't reference.
     private static List<SkeletonAssetAuthoring.BoneSource> ConvertToBoneSources(Skeleton mmSkeleton)
@@ -109,7 +126,7 @@ static class MmTestData
     /// Loads the checked-in demo pose database. Returns false (rather than throwing) on any
     /// failure so demo-guarded tests can <c>Assert.Ignore</c> when it isn't available.
     /// </summary>
-    public static bool TryLoadDemoPose(out PoseSet poseSet, out Skeleton skeleton)
+    public static bool TryLoadDemoPose(out PoseSet poseSet, out SkeletonAsset skeleton)
     {
         poseSet = null;
         skeleton = null;
@@ -129,7 +146,7 @@ static class MmTestData
 
         if (poseSet == null || poseSet.NumberPoses == 0) return false;
 
-        skeleton = poseSet.Skeleton;
+        skeleton = poseSet.SkeletonAsset;
         return skeleton != null;
     }
 }

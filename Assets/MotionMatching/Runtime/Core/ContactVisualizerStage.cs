@@ -31,7 +31,7 @@ public class ContactVisualizerStage : MoSynthStage
     private int[] _contactAssetBoneIndices;
     private int[] _contactMmJointIndices;
 
-    public override Skeleton GetSkeleton(in Skeleton inSkeleton) => inSkeleton;
+    public override SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton) => inSkeleton;
 
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {

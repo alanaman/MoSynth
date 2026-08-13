@@ -48,14 +48,13 @@ public class Inertialization : MoSynthStage
 
     }
 
-    public Inertialization(Skeleton skeleton)
+    public Inertialization(int jointCount)
     {
-        int numJoints = skeleton.Joints.Count;
-        InertializedRotations = new quaternion[numJoints];
-        _inertializedAngularVelocities = new float3[numJoints];
-        _offsetRotations = new quaternion[numJoints];
-        for (int i = 0; i < numJoints; i++) _offsetRotations[i] = quaternion.identity; // init to a valid quaternion
-        _offsetAngularVelocities = new float3[numJoints];
+        InertializedRotations = new quaternion[jointCount];
+        _inertializedAngularVelocities = new float3[jointCount];
+        _offsetRotations = new quaternion[jointCount];
+        for (int i = 0; i < jointCount; i++) _offsetRotations[i] = quaternion.identity; // init to a valid quaternion
+        _offsetAngularVelocities = new float3[jointCount];
     }
 
     /// <summary>

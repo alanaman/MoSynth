@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Collections;
 using UnityEngine;
 using Unity.Mathematics;
@@ -7,7 +8,6 @@ using UnityEngine.Assertions;
 
 namespace MotionMatching
 {
-    using Joint = Skeleton.Joint;
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
     /// <summary>
@@ -524,7 +524,7 @@ namespace MotionMatching
             _valid = new NativeArray<bool>(nPoses, Allocator.Domain);
             _features = new NativeArray<float>(nPoses * FeatureSize, Allocator.Domain);
             // Check skeleton has all needed joints
-            var jointsTrajectory = new Joint[NumberTrajectoryFeatures];
+            var jointsTrajectory = new int[NumberTrajectoryFeatures];
             var i = 0;
             foreach (var trajectoryFeature in mmData.trajectoryFeatures)
             {
@@ -532,18 +532,18 @@ namespace MotionMatching
                     trajectoryFeature.featureType == TrajectoryFeature.Type.Direction)
                     && !trajectoryFeature.simulationBone)
                 {
-                    if (!poseSet.Skeleton.TryFind(trajectoryFeature.bone, out jointsTrajectory[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + trajectoryFeature.bone);
+                    jointsTrajectory[i] = poseSet.SkeletonAsset.FindJointIndexOrZero(trajectoryFeature.bone);
                 }
                 i += 1;
             }
-            var jointsPose = new Joint[PoseFeatureCount];
+            var jointsPose = new int[PoseFeatureCount];
             i = 0;
             foreach (var poseFeature in mmData.poseFeatures)
             {
-                if (!poseSet.Skeleton.TryFind(poseFeature.bone, out jointsPose[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + poseFeature.bone);
+                jointsPose[i] = poseSet.SkeletonAsset.FindJointIndexOrZero(poseFeature.bone);
                 i += 1;
             }
-            var jointsEnvironment = new Joint[NumberEnvironmentFeatures];
+            var jointsEnvironment = new int[NumberEnvironmentFeatures];
             i = 0;
             foreach (var environmentFeature in mmData.environmentFeatures)
             {
@@ -551,7 +551,7 @@ namespace MotionMatching
                     environmentFeature.featureType == TrajectoryFeature.Type.Direction)
                     && !environmentFeature.simulationBone)
                 {
-                    if (!poseSet.Skeleton.TryFind(environmentFeature.bone, out jointsEnvironment[i])) Debug.Assert(false, "The skeleton does not contain any joint of type " + environmentFeature.bone);
+                    jointsEnvironment[i] = poseSet.SkeletonAsset.FindJointIndexOrZero(environmentFeature.bone);
                 }
                 i += 1;
             }
@@ -570,7 +570,7 @@ namespace MotionMatching
         /// <summary>
         /// Extract the feature vectors from poseSet
         /// </summary>
-        private void ExtractFeature(PoseSet poseSet, int poseIndex, Joint[] jointsTrajectory, Joint[] jointsPose, Joint[] jointsEnvironment, MotionMatchingData mmData)
+        private void ExtractFeature(PoseSet poseSet, int poseIndex, int[] jointsTrajectory, int[] jointsPose, int[] jointsEnvironment, MotionMatchingData mmData)
         {
             var featureIndex = poseIndex * FeatureSize;
             var nextPose = poseIndex + 1;
@@ -581,6 +581,7 @@ namespace MotionMatching
             var nextFeatureIndex = nextPose * FeatureSize;
             poseSet.GetPose(poseIndex, out var pose);
             poseSet.GetPose(nextPose, out var poseNext);
+            var skeletonData = poseSet.SkeletonAsset.GetSkeletonData();
             // Compute local features based on the Simulation Bone
             // so hips and feet are local to a stable position with respect to the character
             GetWorldOriginCharacter(pose, out var characterOrigin, out var characterForward);
@@ -601,7 +602,7 @@ namespace MotionMatching
 
                     isStartFeature = ExtractTrajectoryFeature(trajectoryFeature, poseSet, futurePoseIndex, nextFuturePoseIndex,
                                                               jointsTrajectory, i, predictionOffset, characterOrigin, characterForward,
-                                                              mmData, isStartFeature);
+                                                              mmData, isStartFeature, skeletonData);
                 }
             }
 
@@ -614,10 +615,10 @@ namespace MotionMatching
                 switch (poseFeature.featureType)
                 {
                     case MotionMatchingData.PoseFeature.Type.Position:
-                        feature = GetJointPosition(pose, poseSet.Skeleton, jointsPose[i], characterOrigin, characterForward);
+                        feature = GetJointPosition(pose, skeletonData, jointsPose[i], characterOrigin, characterForward);
                         break;
                     case MotionMatchingData.PoseFeature.Type.Velocity:
-                        feature = GetJointVelocity(pose, poseNext, poseSet.Skeleton, jointsPose[i], characterOrigin, characterForward, poseSet.FrameTime);
+                        feature = GetJointVelocity(pose, poseNext, skeletonData, jointsPose[i], characterOrigin, characterForward, poseSet.FrameTime);
                         break;
                     default:
                         Debug.Assert(false, "Unknown PoseFeature.Type: " + poseFeature.featureType);
@@ -644,14 +645,14 @@ namespace MotionMatching
 
                     isStartFeature = ExtractTrajectoryFeature(environmentFeature, poseSet, futurePoseIndex, nextFuturePoseIndex,
                                                               jointsEnvironment, i, predictionOffset, characterOrigin, characterForward,
-                                                              mmData, isStartFeature);
+                                                              mmData, isStartFeature, skeletonData);
                 }
             }
         }
 
         private bool ExtractTrajectoryFeature(TrajectoryFeature feature, PoseSet poseSet, int futurePoseIndex, int nextFuturePoseIndex,
-                                              Joint[] joints, int featureIt, int predictionOffset, float3 characterOrigin, float3 characterForward,
-                                              MotionMatchingData mmData, bool isStartFeature)
+                                              int[] joints, int featureIt, int predictionOffset, float3 characterOrigin, float3 characterForward,
+                                              MotionMatchingData mmData, bool isStartFeature, in SkeletonData skeletonData)
         {
             poseSet.GetPose(futurePoseIndex, out var futurePose, out var animationClip);
             poseSet.GetPose(nextFuturePoseIndex, out var nextFuturePose, out var nextAnimationClip);
@@ -661,13 +662,13 @@ namespace MotionMatching
             {
                 case TrajectoryFeature.Type.Position:
                     {
-                        GetTrajectoryPosition(futurePose, poseSet.Skeleton, feature.simulationBone, joints[featureIt], characterOrigin, characterForward,
+                        GetTrajectoryPosition(futurePose, skeletonData, feature.simulationBone, joints[featureIt], characterOrigin, characterForward,
                                               out value);
                     }
                     break;
                 case TrajectoryFeature.Type.Direction:
                     {
-                        GetTrajectoryDirection(futurePose, poseSet.Skeleton, feature.simulationBone, joints[featureIt], characterForward, mmData,
+                        GetTrajectoryDirection(futurePose, skeletonData, feature.simulationBone, joints[featureIt], characterForward, mmData,
                                                out value);
                         if (feature.zeroX) value.x = 0;
                         if (feature.zeroY) value.y = 0;
@@ -682,9 +683,9 @@ namespace MotionMatching
                         if (isStartFeature)
                         {
                             isStartFeature = false;
-                            extractor1D.StartExtracting(poseSet.Skeleton);
+                            extractor1D.StartExtracting(poseSet.SkeletonAsset);
                         }
-                        var value1D = extractor1D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.Skeleton, characterOrigin, characterForward);
+                        var value1D = extractor1D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.SkeletonAsset, characterOrigin, characterForward);
                         _features[predictionOffset + 0] = value1D;
                     }
                     break;
@@ -695,9 +696,9 @@ namespace MotionMatching
                         if (isStartFeature)
                         {
                             isStartFeature = false;
-                            extractor2D.StartExtracting(poseSet.Skeleton);
+                            extractor2D.StartExtracting(poseSet.SkeletonAsset);
                         }
-                        var value2D = extractor2D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.Skeleton, characterOrigin, characterForward);
+                        var value2D = extractor2D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.SkeletonAsset, characterOrigin, characterForward);
                         _features[predictionOffset + 0] = value2D.x;
                         _features[predictionOffset + 1] = value2D.y;
                     }
@@ -709,9 +710,9 @@ namespace MotionMatching
                         if (isStartFeature)
                         {
                             isStartFeature = false;
-                            extractor3D.StartExtracting(poseSet.Skeleton);
+                            extractor3D.StartExtracting(poseSet.SkeletonAsset);
                         }
-                        var value3D = extractor3D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.Skeleton, characterOrigin, characterForward);
+                        var value3D = extractor3D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.SkeletonAsset, characterOrigin, characterForward);
                         _features[predictionOffset + 0] = value3D.x;
                         _features[predictionOffset + 1] = value3D.y;
                         _features[predictionOffset + 2] = value3D.z;
@@ -724,9 +725,9 @@ namespace MotionMatching
                         if (isStartFeature)
                         {
                             isStartFeature = false;
-                            extractor4D.StartExtracting(poseSet.Skeleton);
+                            extractor4D.StartExtracting(poseSet.SkeletonAsset);
                         }
-                        var value4D = extractor4D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.Skeleton, characterOrigin, characterForward);
+                        var value4D = extractor4D.ExtractFeature(futurePose, futurePoseIndex, nextFuturePose, animationClip, poseSet.SkeletonAsset, characterOrigin, characterForward);
                         _features[predictionOffset + 0] = value4D.x;
                         _features[predictionOffset + 1] = value4D.y;
                         _features[predictionOffset + 2] = value4D.z;
@@ -755,7 +756,7 @@ namespace MotionMatching
             return isStartFeature;
         }
 
-        private static void GetTrajectoryPosition(PoseVector pose, Skeleton skeleton, bool simulationBone, Joint joint, float3 characterOrigin, float3 characterForward,
+        private static void GetTrajectoryPosition(PoseVector pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterOrigin, float3 characterForward,
                                                   out float3 futureLocalPosition)
         {
             float3 worldPosition;
@@ -765,11 +766,11 @@ namespace MotionMatching
             }
             else
             {
-                worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
+                worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
             }
             futureLocalPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
         }
-        private static void GetTrajectoryDirection(PoseVector pose, Skeleton skeleton, bool simulationBone, Joint joint, float3 characterForward, MotionMatchingData mmData,
+        private static void GetTrajectoryDirection(PoseVector pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterForward, MotionMatchingData mmData,
                                                    out float3 futureLocalDirection)
         {
             quaternion worldRotation;
@@ -781,23 +782,23 @@ namespace MotionMatching
             }
             else
             {
-                worldRotation = skeleton.GetWorldSpaceRotation(joint, pose);
-                localForward = mmData.GetLocalForward(joint.index);
+                worldRotation = PoseVectorFK.WorldRotation(skeleton, pose, jointIndex);
+                localForward = mmData.GetLocalForward(jointIndex);
             }
             var worldDirection = math.mul(worldRotation, localForward);
             futureLocalDirection = GetLocalDirectionFromCharacter(worldDirection, characterForward);
         }
 
-        private static float3 GetJointPosition(PoseVector pose, Skeleton skeleton, Joint joint, float3 characterOrigin, float3 characterForward)
+        private static float3 GetJointPosition(PoseVector pose, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward)
         {
-            var worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
+            var worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             return localPosition;
         }
-        private static float3 GetJointVelocity(PoseVector pose, PoseVector poseNext, Skeleton skeleton, Joint joint, float3 characterOrigin, float3 characterForward, float frameTime)
+        private static float3 GetJointVelocity(PoseVector pose, PoseVector poseNext, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward, float frameTime)
         {
-            var worldPosition = skeleton.GetWorldSpacePosition(joint, pose);
-            var worldPositionNext = skeleton.GetWorldSpacePosition(joint, poseNext);
+            var worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
+            var worldPositionNext = PoseVectorFK.WorldPosition(skeleton, poseNext, jointIndex);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             var localVelocity = (GetLocalPositionFromCharacter(worldPositionNext, characterOrigin, characterForward) - localPosition) / frameTime;
             return localVelocity;

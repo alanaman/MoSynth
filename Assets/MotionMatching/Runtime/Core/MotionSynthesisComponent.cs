@@ -11,8 +11,8 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 {
     [NonSerialized] public PoseVector CurrentPose;
 
-    private Skeleton _skeleton;
-    public Skeleton Skeleton => _skeleton;
+    private SkeletonAsset _skeleton;
+    public SkeletonAsset Skeleton => _skeleton;
 
     [SerializeField] [Tooltip("Optional skeleton asset binding for AnimationTools-based stages.")]
     private SkeletonAsset poseSkeleton;
@@ -121,25 +121,21 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     private void InitSkeletonTransformsArray()
     {
-        var poseJoints = _skeleton.Joints;
-
-        // +1 for SimulationBone
-        SkeletonTransforms = new Transform[poseJoints.Count];
+        SkeletonTransforms = new Transform[_skeleton.BoneCount];
         SkeletonTransforms[0] = transform; // SimulationBone
-        for (var i = 1; i < poseJoints.Count; i++)
+        for (var i = 1; i < _skeleton.BoneCount; i++)
         {
-            SkeletonTransforms[i] = _animator.GetBoneTransform(poseJoints[i].type);
+            SkeletonTransforms[i] = _animator.GetBoneTransform(_skeleton.GetBone(i).humanBone);
         }
     }
 
     private void ApplyTransformOffsetsFromSkeleton()
     {
-        var animJoints = _skeleton.Joints;
-
-        for (var i = 1; i < animJoints.Count; i++)
+        for (var i = 1; i < _skeleton.BoneCount; i++)
         {
-            var skeletonTransform = _animator.GetBoneTransform(animJoints[i].type);
-            var skeletonBone = GetSkeletonBone(_animator.avatar.humanDescription, animJoints[i].type);
+            var humanBone = _skeleton.GetBone(i).humanBone;
+            var skeletonTransform = _animator.GetBoneTransform(humanBone);
+            var skeletonBone = GetSkeletonBone(_animator.avatar.humanDescription, humanBone);
             skeletonTransform.localPosition = skeletonBone.position;
         }
     }
@@ -207,7 +203,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     void InitCurrentPose()
     {
-        CurrentPose = new PoseVector(_skeleton.Joints.Count);
+        CurrentPose = new PoseVector(_skeleton.BoneCount);
 
         for (var i = 0; i < SkeletonTransforms.Length; i++)
         {
@@ -272,7 +268,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
         //     transform.position = simulationBone;
         // }
 
-        for (var i = 1; i < _skeleton.Joints.Count; i++)
+        for (var i = 1; i < _skeleton.BoneCount; i++)
         {
             SkeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
         }

@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -135,21 +136,21 @@ public class MotionMatchingController : MotionSynthesizer
         FeatureSet = mmData.GetOrImportFeatureSet();
 
         // Skeleton
-        SkeletonTransforms = new Transform[PoseSet.Skeleton.Joints.Count];
+        SkeletonTransforms = new Transform[PoseSet.SkeletonAsset.BoneCount];
         SkeletonTransforms[0] = transform; // Simulation Bone
-        for (var j = 1; j < PoseSet.Skeleton.Joints.Count; j++)
+        for (var j = 1; j < PoseSet.SkeletonAsset.BoneCount; j++)
         {
             // Joints
-            var joint = PoseSet.Skeleton.Joints[j];
+            var bone = PoseSet.SkeletonAsset.GetBone(j);
             var t = new GameObject().transform;
-            t.name = joint.name;
-            t.SetParent(SkeletonTransforms[joint.parentIndex], false);
-            t.localPosition = joint.localOffset;
+            t.name = bone.name;
+            t.SetParent(SkeletonTransforms[bone.parentIndex], false);
+            t.localPosition = bone.restLocalPosition;
             SkeletonTransforms[j] = t;
         }
 
         // Inertialization
-        _inertialization = new Inertialization(PoseSet.Skeleton);
+        _inertialization = new Inertialization(PoseSet.SkeletonAsset.BoneCount);
 
         // FPS
         _databaseFrameRate = 1.0f / DatabaseFrameTime;
@@ -185,15 +186,15 @@ public class MotionMatchingController : MotionSynthesizer
         DisableQueryTag();
 
         // Foot Lock
-        var skeleton = PoseSet.Skeleton;
-        LeftToesIndex = skeleton.GetJointIndex(HumanBodyBones.LeftToes);
-        _leftFootIndex = skeleton.GetJointIndex(HumanBodyBones.LeftFoot);
-        _leftLowerLegIndex = skeleton.GetJointIndex(HumanBodyBones.LeftLowerLeg);
-        _leftUpperLegIndex = skeleton.GetJointIndex(HumanBodyBones.LeftUpperLeg);
-        RightToesIndex = skeleton.GetJointIndex(HumanBodyBones.RightToes);
-        _rightFootIndex = skeleton.GetJointIndex(HumanBodyBones.RightFoot);
-        _rightLowerLegIndex = skeleton.GetJointIndex(HumanBodyBones.RightLowerLeg);
-        _rightUpperLegIndex = skeleton.GetJointIndex(HumanBodyBones.RightUpperLeg);
+        var skeleton = PoseSet.SkeletonAsset;
+        LeftToesIndex = skeleton.RequireJointIndex(HumanBodyBones.LeftToes);
+        _leftFootIndex = skeleton.RequireJointIndex(HumanBodyBones.LeftFoot);
+        _leftLowerLegIndex = skeleton.RequireJointIndex(HumanBodyBones.LeftLowerLeg);
+        _leftUpperLegIndex = skeleton.RequireJointIndex(HumanBodyBones.LeftUpperLeg);
+        RightToesIndex = skeleton.RequireJointIndex(HumanBodyBones.RightToes);
+        _rightFootIndex = skeleton.RequireJointIndex(HumanBodyBones.RightFoot);
+        _rightLowerLegIndex = skeleton.RequireJointIndex(HumanBodyBones.RightLowerLeg);
+        _rightUpperLegIndex = skeleton.RequireJointIndex(HumanBodyBones.RightUpperLeg);
         _leftLowerLegLocalForward = mmData.GetLocalForward(_leftLowerLegIndex);
         _rightLowerLegLocalForward = mmData.GetLocalForward(_rightLowerLegIndex);
 

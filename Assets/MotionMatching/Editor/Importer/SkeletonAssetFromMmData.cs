@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using System.IO;
 using AnimationTools;
 using AnimationTools.Editor;
-using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
 
 namespace MotionMatching
 {
 /// <summary>
-/// Converts a Motion Matching <see cref="Skeleton"/> (from a pose database or a raw BVH import)
-/// into an <see cref="AnimationTools.SkeletonAsset"/>, so tooling built against the new pose
-/// architecture can share bone lists with existing Motion Matching data.
+/// Converts the transient <see cref="SkeletonAsset"/> read from a Motion Matching database's
+/// .mmskeleton into a persisted one, so tooling built against the new pose architecture can share
+/// bone lists with existing Motion Matching data.
 /// </summary>
 public static class SkeletonAssetFromMmData
 {
@@ -21,7 +20,7 @@ public static class SkeletonAssetFromMmData
     /// merging into an existing <see cref="SkeletonAsset"/> there if one already exists so bone
     /// ids (and therefore any <see cref="BoneReference"/>s pointing at them) survive re-import.
     /// </summary>
-    public static SkeletonAsset CreateOrUpdate(Skeleton mmSkeleton, string assetPath)
+    public static SkeletonAsset CreateOrUpdate(SkeletonAsset mmSkeleton, string assetPath)
     {
         var asset = AssetDatabase.LoadAssetAtPath<SkeletonAsset>(assetPath);
         var isNew = asset == null;
@@ -39,48 +38,36 @@ public static class SkeletonAssetFromMmData
     }
 
     /// <summary>
-    /// Converts <paramref name="mmSkeleton"/> into <paramref name="target"/> without touching the
+    /// Converts <paramref name="source"/> into <paramref name="target"/> without touching the
     /// AssetDatabase, for transient (in-memory) skeleton assets.
     /// </summary>
-    public static void Build(Skeleton mmSkeleton, SkeletonAsset target)
+    public static void Build(SkeletonAsset source, SkeletonAsset target)
     {
-        SkeletonAssetAuthoring.BuildOrMerge(target, ConvertToBoneSources(mmSkeleton));
+        SkeletonAssetAuthoring.BuildOrMerge(target, ConvertToBoneSources(source));
     }
 
-    private static List<SkeletonAssetAuthoring.BoneSource> ConvertToBoneSources(Skeleton mmSkeleton)
+    private static List<SkeletonAssetAuthoring.BoneSource> ConvertToBoneSources(SkeletonAsset mmSkeleton)
     {
-        var joints = mmSkeleton.Joints;
-        var source = new List<SkeletonAssetAuthoring.BoneSource>(joints.Count);
+        var source = new List<SkeletonAssetAuthoring.BoneSource>(mmSkeleton.BoneCount);
 
-        for (var i = 0; i < joints.Count; i++)
+        for (var i = 0; i < mmSkeleton.BoneCount; i++)
         {
-            var joint = joints[i];
+            var bone = mmSkeleton.GetBone(i);
 
-            // PoseSet.SetSkeletonFromBvh roots MM skeletons at index 0 with parentIndex -1, matching
-            // AnimationTools' own root convention. Some sources instead self-reference the root
-            // (parentIndex == its own index) rather than using -1; normalize both to -1, and only
-            // accept either at index 0 -- anywhere else it means a genuinely missing parent.
-            var parentIndex = joint.parentIndex;
-            if (parentIndex == i || parentIndex < 0)
+            if (bone.parentIndex < 0 && i != 0)
             {
-                if (i != 0)
-                {
-                    throw new InvalidOperationException(
-                        $"MM joint \"{joint.name}\" at index {i} has no valid parent " +
-                        $"(parentIndex {joint.parentIndex}) but is not the root.");
-                }
-
-                parentIndex = -1;
+                throw new InvalidOperationException(
+                    $"MM joint \"{bone.name}\" at index {i} has no valid parent " +
+                    $"(parentIndex {bone.parentIndex}) but is not the root.");
             }
 
             source.Add(new SkeletonAssetAuthoring.BoneSource
             {
-                name = joint.name,
-                parentIndex = parentIndex,
-                restLocalPosition = joint.localOffset,
-                // MM skeletons carry rest offsets only, no rest rotation.
-                restLocalRotation = quaternion.identity,
-                humanBone = joint.type
+                name = bone.name,
+                parentIndex = bone.parentIndex,
+                restLocalPosition = bone.restLocalPosition,
+                restLocalRotation = bone.restLocalRotation,
+                humanBone = bone.humanBone
             });
         }
 
@@ -92,7 +79,7 @@ public static class SkeletonAssetFromMmData
     {
         var selected = Selection.activeObject;
 
-        Skeleton mmSkeleton;
+        SkeletonAsset mmSkeleton;
         string sourceName;
 
         if (selected is IPoseSetSource poseSetSource)
@@ -119,6 +106,7 @@ public static class SkeletonAssetFromMmData
             .Replace('\\', '/');
 
         var result = CreateOrUpdate(mmSkeleton, outputPath);
+        UnityEngine.Object.DestroyImmediate(mmSkeleton);
         Debug.Log($"[SkeletonAssetFromMmData] Wrote {result.BoneCount} bone(s) to {outputPath}.");
     }
 

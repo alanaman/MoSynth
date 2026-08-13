@@ -72,10 +72,10 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
                     mmc.PoseSet.GetPose(frame, out PoseVector futurePose);
                     var simulationBoneTransform = mmc.GetSimulationBoneWorldSpaceTransform(futurePose);
                     var worldPositions = mmc.PoseSet.GetWorldPositions(futurePose, simulationBoneTransform);
-                    for (int i = 2; i < mmc.PoseSet.Skeleton.Joints.Count; i++)
+                    for (int i = 2; i < mmc.PoseSet.SkeletonAsset.BoneCount; i++)
                     {
                         float3 child = worldPositions[i];
-                        float3 parent = worldPositions[mmc.PoseSet.Skeleton.Joints[i].parentIndex];
+                        float3 parent = worldPositions[mmc.PoseSet.SkeletonAsset.GetBone(i).parentIndex];
                         GizmosExtensions.DrawLine(parent, child, 3);
                     }
                 }
@@ -108,7 +108,7 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
 
         MotionMatchingDataVisualiser.DrawFeatureGizmos(mmc.FeatureSet, mmc.mmData, spheresRadius, currentFrame,
             characterOrigin, characterForward,
-            mmc.SkeletonTransforms, mmc.PoseSet.Skeleton, Color.blue, debugPose, debugTrajectory,
+            mmc.SkeletonTransforms, mmc.PoseSet.SkeletonAsset, Color.blue, debugPose, debugTrajectory,
             debugEnvironment);
 
     }

@@ -4,9 +4,9 @@ using UnityEngine;
 namespace MotionMatching
 {
 /// <summary>
-/// A per-joint index correspondence between an MM <see cref="Skeleton"/> and an
-/// AnimationTools <see cref="SkeletonAsset"/>, letting adapters translate between the two
-/// pose representations without either side knowing about the other's indexing.
+/// A per-bone index correspondence between two <see cref="SkeletonAsset"/>s (the "Mm" side
+/// being the pose-set skeleton), letting adapters translate between two pose
+/// representations without either side knowing about the other's indexing.
 /// </summary>
 public sealed class SkeletonMap
 {
@@ -15,36 +15,41 @@ public sealed class SkeletonMap
     public bool IsIdentity;
 
     /// <summary>
-    /// Matches every MM joint to an asset bone by name, falling back to HumanBodyBones type
-    /// when the joint has one. Returns null if any MM joint can't be matched.
+    /// Matches every bone of <paramref name="source"/> to a bone of <paramref name="target"/>
+    /// by name, falling back to HumanBodyBones type when the bone has one. Returns null if
+    /// any source bone can't be matched. The source side plays the "MM" role of the map.
     /// </summary>
-    public static SkeletonMap Build(Skeleton mmSkeleton, SkeletonAsset asset)
+    public static SkeletonMap Build(SkeletonAsset source, SkeletonAsset target)
     {
-        if (mmSkeleton == null || asset == null) return null;
+        if (source == null || target == null) return null;
 
-        var joints = mmSkeleton.Joints;
-        var mmToAsset = new int[joints.Count];
+        var mmToAsset = new int[source.BoneCount];
 
-        for (var i = 0; i < joints.Count; i++)
+        for (var i = 0; i < source.BoneCount; i++)
         {
-            var joint = joints[i];
+            var bone = source.GetBone(i);
 
-            if (asset.TryFindByName(joint.name, out var assetIndex))
+            if (target.TryFindByName(bone.name, out var targetIndex))
             {
-                mmToAsset[i] = assetIndex;
+                mmToAsset[i] = targetIndex;
                 continue;
             }
 
-            if (joint.type != HumanBodyBones.LastBone && asset.TryFindByHumanBone(joint.type, out assetIndex))
+            if (bone.humanBone != HumanBodyBones.LastBone && target.TryFindByHumanBone(bone.humanBone, out targetIndex))
             {
-                mmToAsset[i] = assetIndex;
+                mmToAsset[i] = targetIndex;
                 continue;
             }
 
             return null;
         }
 
-        var assetToMm = new int[asset.BoneCount];
+        return FromMmToAsset(mmToAsset, target.BoneCount);
+    }
+
+    private static SkeletonMap FromMmToAsset(int[] mmToAsset, int assetBoneCount)
+    {
+        var assetToMm = new int[assetBoneCount];
         for (var i = 0; i < assetToMm.Length; i++) assetToMm[i] = -1;
         for (var i = 0; i < mmToAsset.Length; i++) assetToMm[mmToAsset[i]] = i;
 

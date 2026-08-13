@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -37,7 +38,7 @@ public class RetargetingStage : MoSynthStage
         // currently animJoints dont have Joint.type set correctly
         // and poseJoints have extra simBone entry
         var poseSet = mmData.GetOrImportPoseSet();
-        var poseJoints = poseSet.Skeleton.Joints;
+        var poseSkeletonAsset = poseSet.SkeletonAsset;
 
         var tPoseAnimation = mmData.tPoseAnimationClip;
         var boneCount = tPoseAnimation.Skeleton.BoneCount;
@@ -53,7 +54,7 @@ public class RetargetingStage : MoSynthStage
         var tPoseSkeleton = _animator.avatar.humanDescription.skeleton;
         for (var i = 0; i < boneCount; i++)
         {
-            var jointTransform = _animator.GetBoneTransform(poseJoints[i + 1].type);
+            var jointTransform = _animator.GetBoneTransform(poseSkeletonAsset.GetBone(i + 1).humanBone);
             var targetJointIndex = Array.FindIndex(tPoseSkeleton, bone => bone.name == jointTransform.name);
             Debug.Assert(targetJointIndex != -1, "Target joint not found: " + jointTransform.name);
 
@@ -91,11 +92,12 @@ public class RetargetingStage : MoSynthStage
     public override bool Apply(PoseVector pose, float deltaTime)
     {
         var animationSkeleton = _owner.Skeleton;
+        var skeletonData = animationSkeleton.GetSkeletonData();
 
         var sourcePose = new PoseVector(pose);
 
         // Retargeting
-        for (var i = 0; i < animationSkeleton.Joints.Count - 1; i++)
+        for (var i = 0; i < animationSkeleton.BoneCount - 1; i++)
         {
             // Motion Matching Target Rotation
             var sourceTPoseRotation = _animationTPose[i];
@@ -104,7 +106,7 @@ public class RetargetingStage : MoSynthStage
             // TODO: precalculate for entire skeleton
 
             var newSourceRot =
-                animationSkeleton.GetRootSpaceRotation(animationSkeleton.Joints[i + 1], sourcePose);
+                PoseVectorFK.RootSpaceRotation(skeletonData, sourcePose, i + 1);
 
             // targetTPoseRotation -> Local Target -> World (Target TPose)
             /*
@@ -128,8 +130,7 @@ public class RetargetingStage : MoSynthStage
                 );
 
 
-            var parentJoint = animationSkeleton.GetParent(animationSkeleton.Joints[i + 1]);
-            var parentRot = animationSkeleton.GetRootSpaceRotation(parentJoint, pose);
+            var parentRot = PoseVectorFK.RootSpaceRotation(skeletonData, pose, skeletonData.ParentIndices[i + 1]);
 
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
 

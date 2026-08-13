@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AnimationTools;
 using MotionMatching;
 using Python.Runtime;
 using UnityEditor;
@@ -25,7 +26,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
     // Skeleton of the generated database, cached because OnInspectorGUI repaints constantly and
     // this comes off disk. Dropped on enable and whenever the database is regenerated.
-    private Skeleton _skeleton;
+    private SkeletonAsset _skeleton;
     private int[] _jointDepths;
     private bool _skeletonRead;
 
@@ -36,6 +37,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
     private void InvalidateSkeleton()
     {
+        if (_skeleton != null) UnityEngine.Object.DestroyImmediate(_skeleton);
         _skeleton = null;
         _jointDepths = null;
         _skeletonRead = false;
@@ -218,7 +220,6 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
     private void DrawBoneWeightRows(MotionFieldConfig config)
     {
         const float fieldWidth = 54f;
-        List<Skeleton.Joint> joints = _skeleton.Joints;
 
         using (new EditorGUILayout.HorizontalScope())
         {
@@ -227,10 +228,10 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             EditorGUILayout.LabelField("Vel", EditorStyles.miniBoldLabel, GUILayout.Width(fieldWidth));
         }
 
-        for (int i = 0; i < joints.Count; i++)
+        for (int i = 0; i < _skeleton.BoneCount; i++)
         {
-            Skeleton.Joint joint = joints[i];
-            MotionFieldConfig.BoneWeight weight = config.GetBoneWeight(joint.name);
+            var bone = _skeleton.GetBone(i);
+            MotionFieldConfig.BoneWeight weight = config.GetBoneWeight(bone.name);
 
             // Row 0 is the simulation bone. Forward kinematics pins it to the origin with identity
             // rotation before the feature is built, so its position and velocity are structurally
@@ -241,10 +242,10 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             {
                 GUILayout.Space(_jointDepths[i] * 12f);
 
-                var label = new GUIContent(joint.name, isRoot
+                var label = new GUIContent(bone.name, isRoot
                     ? "The root is pinned to the origin when the metric is built, so its rows are " +
                       "always zero and its weight has no effect."
-                    : $"{joint.type} (joint {i})");
+                    : $"{bone.humanBone} (joint {i})");
                 EditorGUILayout.LabelField(label,
                     weight.IsNeutral ? EditorStyles.label : EditorStyles.boldLabel);
 
@@ -261,7 +262,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
                     Undo.RecordObject(config, "Edit bone weight");
                     config.SetBoneWeight(new MotionFieldConfig.BoneWeight(
-                        joint.name, Mathf.Max(0f, position), Mathf.Max(0f, velocity)));
+                        bone.name, Mathf.Max(0f, position), Mathf.Max(0f, velocity)));
                     // The metric changes, the extraction does not, so only the training is stale.
                     MarkStale(config, database: false);
                 }
@@ -301,7 +302,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         // Entries naming joints the current skeleton does not have. They are ignored at runtime
         // (Python logs them), but silently keeping them would make the summary above lie.
         var orphans = config.boneWeights
-            .Where(w => _skeleton.Joints.All(j => j.name != w.name))
+            .Where(w => !_skeleton.TryFindByName(w.name, out _))
             .ToList();
         if (orphans.Count == 0) return;
 
@@ -315,7 +316,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             // Training ignores these already, so this cannot change a result -- but the flag is
             // cheap and a config that says "retrain" when nothing needs it is the harmless way
             // to be wrong.
-            config.boneWeights.RemoveAll(w => _skeleton.Joints.All(j => j.name != w.name));
+            config.boneWeights.RemoveAll(w => !_skeleton.TryFindByName(w.name, out _));
             MarkStale(config, database: false);
         }
     }
@@ -326,23 +327,23 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (_skeletonRead) return _skeleton != null;
         _skeletonRead = true;
 
-        if (!config.TryGetDatabaseSkeleton(out Skeleton skeleton) || skeleton.Joints.Count == 0)
+        if (!config.TryGetDatabaseSkeleton(out SkeletonAsset skeleton) || skeleton.BoneCount == 0)
         {
             return false;
         }
 
         _skeleton = skeleton;
-        _jointDepths = new int[skeleton.Joints.Count];
+        _jointDepths = new int[skeleton.BoneCount];
 
-        for (int i = 0; i < skeleton.Joints.Count; i++)
+        for (int i = 0; i < skeleton.BoneCount; i++)
         {
             int depth = 0;
-            int parent = skeleton.Joints[i].parentIndex;
+            int parent = skeleton.GetBone(i).parentIndex;
             // Bounded by the joint count so a cyclic parentIndex cannot hang the inspector.
-            while (parent >= 0 && parent < skeleton.Joints.Count && depth < skeleton.Joints.Count)
+            while (parent >= 0 && parent < skeleton.BoneCount && depth < skeleton.BoneCount)
             {
                 depth++;
-                parent = skeleton.Joints[parent].parentIndex;
+                parent = skeleton.GetBone(parent).parentIndex;
             }
 
             _jointDepths[i] = depth;

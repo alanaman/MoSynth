@@ -157,70 +157,6 @@ public static class PoseExtractor
         }
     }
 
-    // TODO: implement low-pass filter
-    private static void SmoothSimulationBone(PoseVector[] poses, PoseSet poseSet)
-    {
-        // Save Hips world position and rotation before smoothing Simulation Bone (Root)
-        var hipsWorldPositions = new float3[poses.Length];
-        var hipsWorldRotations = new quaternion[poses.Length];
-        if (!poseSet.Skeleton.TryFind(HumanBodyBones.Hips, out var hipsJoint))
-        {
-            Debug.LogError("Hips Joint not found");
-        }
-
-        for (var i = 0; i < poses.Length; i++)
-        {
-            hipsWorldPositions[i] = poseSet.Skeleton.GetWorldSpacePosition(hipsJoint, poses[i]);
-            hipsWorldRotations[i] = poseSet.Skeleton.GetWorldSpaceRotation(hipsJoint, poses[i]);
-        }
-
-        // Prepare simulation bone lists for python
-        var sbPosX = new float[poses.Length];
-        var sbPosY = new float[poses.Length];
-        var sbPosZ = new float[poses.Length];
-        var sbDirX = new float[poses.Length];
-        var sbDirY = new float[poses.Length];
-        var sbDirZ = new float[poses.Length];
-        for (var i = 0; i < poses.Length; i++)
-        {
-            sbPosX[i] = poses[i].jointLocalPositions[0].x;
-            sbPosY[i] = poses[i].jointLocalPositions[0].y;
-            sbPosZ[i] = poses[i].jointLocalPositions[0].z;
-            var rot = poses[i].jointLocalRotations[0];
-            var dir = math.mul(rot, new float3(0, 0, 1));
-            sbDirX[i] = dir.x;
-            sbDirY[i] = dir.y;
-            sbDirZ[i] = dir.z;
-        }
-
-        // TODO: Implement Low-Pass filter here...
-        //       the previous arrays (sbPos/Dir*) where used for a previous implementation
-        //       with python... consider change them
-
-        // Set new Simulation Bone positions and rotations
-        for (var i = 0; i < poses.Length; i++)
-        {
-            poses[i].jointLocalPositions[0] = new float3(sbPosX[i], sbPosY[i], sbPosZ[i]);
-            var dir = new float3(sbDirX[i], sbDirY[i], sbDirZ[i]);
-            dir = math.normalize(dir);
-            poses[i].jointLocalRotations[0] = math.normalize(quaternion.LookRotation(dir, math.up()));
-        }
-
-        // Set new relative Hips position and rotation to the Simulation Bone
-        for (var i = 0; i < poses.Length; i++)
-        {
-            var sbPos = poses[i].jointLocalPositions[0];
-            var inverseSbRot = math.inverse(poses[i].jointLocalRotations[0]);
-            var newHipsPos = math.mul(inverseSbRot, hipsWorldPositions[i] - sbPos);
-            var newHipsRot = math.mul(inverseSbRot, hipsWorldRotations[i]);
-            poses[i].jointLocalPositions[1] = newHipsPos;
-            poses[i].jointLocalRotations[1] = newHipsRot;
-        }
-
-        // Look up to the TODO 
-        throw new NotImplementedException();
-    }
-
     private static void ExtractPose(ref PoseVector pose, AnnotatedAnimationClip animationClip, int frameIndex,
         IPoseSetSource source)
     {
@@ -286,41 +222,6 @@ public static class PoseExtractor
 
         pose.leftFootContact = math.length(leftToeVel) < contactVelocityThreshold;
         pose.rightFootContact = math.length(rightToeVel) < contactVelocityThreshold;
-    }
-
-    private static void ForwardKinematics(Skeleton skeleton,
-        float3[] jointLocalPositions, quaternion[] jointLocalRotations, float3[] jointLocalVelocities,
-        float3[] jointLocalAngularVelocities,
-        out float3[] jointPositions, out quaternion[] jointRotations, out float3[] jointVelocities,
-        out float3[] jointAngularVelocities)
-    {
-        jointPositions = new float3[jointLocalPositions.Length];
-        jointRotations = new quaternion[jointLocalRotations.Length];
-        jointVelocities = new float3[jointLocalVelocities.Length];
-        jointAngularVelocities = new float3[jointLocalAngularVelocities.Length];
-        jointPositions[0] = jointLocalPositions[0];
-        jointRotations[0] = jointLocalRotations[0];
-        jointVelocities[0] = jointLocalVelocities[0];
-        jointAngularVelocities[0] = jointLocalAngularVelocities[0];
-        for (var j = 1; j < skeleton.Joints.Count + 1; j++) // +1 for SimulationBone
-        {
-            var joint = skeleton.Joints[j - 1];
-            var parentIndex = 0;
-            if (j > 1) parentIndex = joint.parentIndex + 1; // +1 for SimulationBone
-            var rotatedLocalOffset = math.mul(jointRotations[parentIndex], jointLocalPositions[j]);
-            jointPositions[j] = rotatedLocalOffset + jointPositions[parentIndex];
-            jointRotations[j] = math.mul(jointRotations[parentIndex], jointLocalRotations[j]);
-            // Given a fixed point 'O', a point 'A' relative to 'O', and the angular velocity 'w' of 'O'
-            // the velocity 'V' of 'A' is 'V = w x OA' where 'x' is the cross product and 'OA' is the vector from 'O' to 'A'
-            // Here, we add the local velocity + the velocity caused by the angular velocity + parent velocity
-            jointVelocities[j] =
-                math.mul(jointRotations[parentIndex], jointLocalVelocities[j]) +
-                math.cross(jointAngularVelocities[parentIndex], rotatedLocalOffset) +
-                jointVelocities[parentIndex];
-            jointAngularVelocities[j] =
-                math.mul(jointRotations[parentIndex], jointLocalAngularVelocities[j]) +
-                jointAngularVelocities[parentIndex];
-        }
     }
 }
 }

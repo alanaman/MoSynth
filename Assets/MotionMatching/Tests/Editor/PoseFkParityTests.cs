@@ -26,7 +26,7 @@ public class PoseFkParityTests
     {
         mmSkeleton = MmTestData.BuildMmSkeleton();
         asset = MmTestData.BuildSkeletonAsset(mmSkeleton);
-        map = SkeletonMap.Build(mmSkeleton, asset);
+        map = SkeletonMap.Build(asset, asset);
         Assert.IsNotNull(map, "SkeletonMap.Build should match every synthetic MM joint by name.");
         Assert.IsTrue(map.IsIdentity, "A SkeletonAsset built directly from the MM skeleton should map identity.");
         adapter = new PoseVectorAdapter(asset, map);
@@ -54,17 +54,18 @@ public class PoseFkParityTests
     [TestCase(1000)]
     public void DemoPose_MatchesLegacyFK(int poseIndex)
     {
-        if (!MmTestData.TryLoadDemoPose(out var poseSet, out var demoSkeleton))
+        if (!MmTestData.TryLoadDemoPose(out var poseSet, out var poseSetSkeleton))
         {
             Assert.Ignore("Demo MotionMatchingData is not available in this environment.");
             return;
         }
 
+        var demoSkeleton = MmTestData.BuildMmSkeletonFromAsset(poseSetSkeleton);
         var demoAsset = MmTestData.BuildSkeletonAsset(demoSkeleton);
         try
         {
-            var demoMap = SkeletonMap.Build(demoSkeleton, demoAsset);
-            Assert.IsNotNull(demoMap, "SkeletonMap.Build should match every demo MM joint by name.");
+            var demoMap = SkeletonMap.Build(demoAsset, demoAsset);
+            Assert.IsNotNull(demoMap, "SkeletonMap.Build should match every demo bone by name.");
             var demoAdapter = new PoseVectorAdapter(demoAsset, demoMap);
             var demoSkeletonData = demoAsset.GetSkeletonData();
 

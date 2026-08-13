@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -18,10 +19,10 @@ public class PoseSetVisualizerStage : MoSynthStage
     private int startFrame;
     
     
-    public override Skeleton GetSkeleton(in Skeleton inSkeleton)
+    public override SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton)
     {
         _poseSet = mmData.GetOrImportPoseSet();
-        return _poseSet.Skeleton;
+        return _poseSet.SkeletonAsset;
     }
     
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)

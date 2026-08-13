@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -8,7 +9,7 @@ namespace MotionMatching
 public abstract class MoSynthStage
 {
     public bool isEnabled = true;
-    
+
     /// <summary>
     /// Used by the <see cref="MotionSynthesisComponent"/> to get the skeleton.
     /// Called before <see cref="Init"/>
@@ -18,7 +19,7 @@ public abstract class MoSynthStage
     /// Will be null if this is the first stage.
     /// </param>
     /// <returns>The modified skeleton.</returns>
-    public virtual Skeleton GetSkeleton(in Skeleton inSkeleton)
+    public virtual SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton)
     {
         return inSkeleton;
     }

@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using AnimationTools;
 using NUnit.Framework;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace MotionMatching.Tests
@@ -12,7 +14,7 @@ public class PoseSetStorageTests
     {
         mmSkeleton = MmTestData.BuildMmSkeleton();
         var poseSet = new PoseSet(maximumFramesPrediction: 0);
-        poseSet.SetSkeletonFromFile(mmSkeleton);
+        poseSet.SetSkeleton(MmTestData.BuildSkeletonAsset(mmSkeleton));
         return poseSet;
     }
 
@@ -98,21 +100,42 @@ public class PoseSetStorageTests
     }
 
     [Test]
-    public void SkeletonAssetMirror_MatchesMmSkeleton()
+    public void SetSkeletonFromBvh_PrependsSimulationBone()
     {
-        var poseSet = BuildPoseSet(out var mmSkeleton);
-        var asset = poseSet.SkeletonAsset;
-
-        Assert.IsNotNull(asset);
-        Assert.AreEqual(mmSkeleton.Joints.Count, asset.BoneCount);
-        for (var i = 0; i < asset.BoneCount; i++)
+        // BVH-style skeleton: the mm test skeleton minus its SimulationBone, indices unshifted.
+        var bvhBones = new List<Bone>
         {
-            var bone = asset.GetBone(i);
-            var joint = mmSkeleton.Joints[i];
-            Assert.AreEqual(joint.name, bone.name);
-            Assert.AreEqual(i == 0 ? -1 : joint.parentIndex, bone.parentIndex);
-            Assert.AreEqual((Vector3)joint.localOffset, (Vector3)bone.restLocalPosition);
-            Assert.AreEqual(joint.type, bone.humanBone);
+            new() { id = 1, name = "Hips", parentIndex = -1, restLocalPosition = new float3(0f, 1f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Hips },
+            new() { id = 2, name = "Spine", parentIndex = 0, restLocalPosition = new float3(0f, 0.2f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Spine },
+            new() { id = 3, name = "LeftFoot", parentIndex = 0, restLocalPosition = new float3(0.2f, -0.9f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftFoot },
+            new() { id = 4, name = "LeftToe", parentIndex = 2, restLocalPosition = new float3(0f, -0.1f, 0.15f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftToes }
+        };
+        var bvhAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
+        try
+        {
+            bvhAsset.SetBones(bvhBones, bvhBones.Count + 1);
+
+            var poseSet = new PoseSet(maximumFramesPrediction: 0);
+            poseSet.SetSkeletonFromBvh(bvhAsset);
+            var asset = poseSet.SkeletonAsset;
+            var expected = MmTestData.BuildMmSkeleton();
+
+            Assert.IsNotNull(asset);
+            Assert.AreEqual(expected.Joints.Count, asset.BoneCount);
+            for (var i = 0; i < asset.BoneCount; i++)
+            {
+                var bone = asset.GetBone(i);
+                var joint = expected.Joints[i];
+                Assert.AreEqual(joint.name, bone.name);
+                Assert.AreEqual(i == 0 ? -1 : joint.parentIndex, bone.parentIndex);
+                Assert.AreEqual((Vector3)joint.localOffset, (Vector3)bone.restLocalPosition);
+                Assert.AreEqual(joint.type, bone.humanBone);
+                Assert.AreEqual(quaternion.identity.value, bone.restLocalRotation.value);
+            }
+        }
+        finally
+        {
+            Object.DestroyImmediate(bvhAsset);
         }
     }
 

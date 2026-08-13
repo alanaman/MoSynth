@@ -18,7 +18,7 @@ public class PoseVectorAdapterTests
     {
         mmSkeleton = MmTestData.BuildMmSkeleton();
         asset = MmTestData.BuildSkeletonAsset(mmSkeleton);
-        map = SkeletonMap.Build(mmSkeleton, asset);
+        map = SkeletonMap.Build(asset, asset);
     }
 
     [TearDown]
@@ -102,7 +102,7 @@ public class PoseVectorAdapterTests
         {
             // smallerMap.AssetToMm.Length == smallerAsset.BoneCount, which is one less than
             // `asset`'s bone count -- exactly the mismatch the constructor should reject.
-            var smallerMap = SkeletonMap.Build(smallerMmSkeleton, smallerAsset);
+            var smallerMap = SkeletonMap.Build(smallerAsset, smallerAsset);
             Assert.IsNotNull(smallerMap);
             Assert.Throws<ArgumentException>(() => new PoseVectorAdapter(asset, smallerMap));
         }
@@ -115,16 +115,17 @@ public class PoseVectorAdapterTests
     [Test]
     public void WriteThenRead_DemoPose_RoundTripsExactly()
     {
-        if (!MmTestData.TryLoadDemoPose(out var poseSet, out var demoSkeleton))
+        if (!MmTestData.TryLoadDemoPose(out var poseSet, out var poseSetSkeleton))
         {
             Assert.Ignore("Demo MotionMatchingData is not available in this environment.");
             return;
         }
 
+        var demoSkeleton = MmTestData.BuildMmSkeletonFromAsset(poseSetSkeleton);
         var demoAsset = MmTestData.BuildSkeletonAsset(demoSkeleton);
         try
         {
-            var demoMap = SkeletonMap.Build(demoSkeleton, demoAsset);
+            var demoMap = SkeletonMap.Build(demoAsset, demoAsset);
             var demoAdapter = new PoseVectorAdapter(demoAsset, demoMap);
 
             poseSet.GetPose(0, out var source);

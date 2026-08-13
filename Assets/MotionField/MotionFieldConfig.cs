@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using AnimationTools;
 using MotionMatching;
 using Unity.Mathematics;
 using UnityEngine;
@@ -360,7 +361,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     /// weight editor reads it here rather than from the source animation clips: the clips carry a
     /// BVH hierarchy with no simulation bone, so its joint list would not line up.
     /// </remarks>
-    public bool TryGetDatabaseSkeleton(out Skeleton skeleton) =>
+    public bool TryGetDatabaseSkeleton(out SkeletonAsset skeleton) =>
         PoseSerializer.TryDeserializeSkeleton(GetAssetPath(), name, out skeleton);
 }
 }
