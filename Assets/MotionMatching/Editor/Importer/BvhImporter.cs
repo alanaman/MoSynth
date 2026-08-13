@@ -1,52 +1,59 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using AnimationTools;
+using Unity.Mathematics;
 using UnityEditor.AssetImporters;
 using UnityEngine;
 
 namespace MotionMatching.Editor
 {
-    using Joint = Skeleton.Joint;
-    using EndSite = BvhAnimation.EndSite;
-    using Frame = BvhAnimation.Frame;
-
     /// <summary>
     /// Imports a BVH file and stores the animation data in Unity format (BVHAnimation).
     /// </summary>
-    [ScriptedImporter(1, "bvh")]
+    [ScriptedImporter(2, "bvh")]
     public class BvhImporter : ScriptedImporter
     {
         public float unitScale = 0.01f;
         public bool onlyFirstFrame;
         public override void OnImportAsset(AssetImportContext ctx)
         {
-            // Create a new instance of your custom ScriptableObject
-            var bvhAsset = Import(ctx, unitScale, onlyFirstFrame);
-            // Register the ScriptableObject as the main imported asset
-            ctx.AddObjectToAsset("main obj", bvhAsset);
+            var (bvhAsset, skeletonAsset) = Import(ctx, unitScale, onlyFirstFrame);
+            ctx.AddObjectToAsset("main obj", bvhAsset); // keep the "main obj" id — existing references depend on it
+            ctx.AddObjectToAsset("skeleton", skeletonAsset);
             ctx.SetMainObject(bvhAsset);
         }
 
-        private static BvhAnimation Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
+        private static (BvhAnimation bvhAsset, SkeletonAsset skeletonAsset) Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
         {
             var channelAxisOrders = new List<AxisOrder>();
-            var bvhSo = ScriptableObject.CreateInstance<BvhAnimation>();
 
             var parentIndexStack = new Stack<int>();
             var whitespace = new char[] { ' ', '\t', '\r', '\n' };
-            
+
             var words = File.ReadAllText(ctx.assetPath).Split(whitespace, System.StringSplitOptions.RemoveEmptyEntries);
             // string[] words = Regex.Split(bvh.text, "[\\s+|\\r*\\n+]+");
             var w = 0;
             // ROOT
             if (words[w++] != "HIERARCHY") Debug.LogError("[BVHImporter] HIERARCHY not found");
             if (words[w++] != "ROOT") Debug.LogError("[BVHImporter] ROOT not found");
-            var root = new Joint(words[w++], 0, -1, Vector3.zero);
+            var rootName = words[w++];
             ReadLeftBracket(words, ref w);
-            root.localOffset = ReadOffset(words, ref w) * scale;
-            root.localOffset = Vector3.zero; // even if we read the offset, it is not used... it should always be 0...
+            ReadOffset(words, ref w); // consumed but discarded: root position always comes from motion channel 0, never HIERARCHY
             ReadChannels(channelAxisOrders, words, ref w, true);
-            bvhSo.AddJoint(root);
+            var bones = new List<Bone>
+            {
+                new Bone
+                {
+                    id = 1,
+                    name = rootName,
+                    parentIndex = -1,
+                    restLocalPosition = float3.zero,
+                    restLocalRotation = quaternion.identity,
+                    humanBone = HumanBodyBones.LastBone
+                }
+            };
             // JOINTS
             var brackets = 1;
             var parent = 0;
@@ -56,22 +63,30 @@ namespace MotionMatching.Editor
             while (brackets > 0 && --it > 0)
             {
                 if (words[w++] != "JOINT") Debug.LogError("[BVHImporter] JOINT not found");
-                var joint = new Joint(words[w++], jointIndex++, parent, Vector3.zero);
+                var jointName = words[w++];
+                var boneIndex = jointIndex++;
                 ReadLeftBracket(words, ref w);
                 parentIndexStack.Push(parent);
-                parent = jointIndex - 1;
+                var boneParentIndex = parent;
+                parent = boneIndex;
                 brackets += 1;
-                joint.localOffset = ReadOffset(words, ref w) * scale;
+                var offset = ReadOffset(words, ref w) * scale;
                 ReadChannels(channelAxisOrders, words, ref w);
-                bvhSo.AddJoint(joint);
+                bones.Add(new Bone
+                {
+                    id = boneIndex + 1,
+                    name = jointName,
+                    parentIndex = boneParentIndex,
+                    restLocalPosition = (float3)offset,
+                    restLocalRotation = quaternion.identity,
+                    humanBone = HumanBodyBones.LastBone
+                });
                 if (words[w] == "End")
                 {
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    var offset = ReadOffset(words, ref w) * scale;
-                    var endSite = new EndSite(parent, offset);
-                    bvhSo.AddEndSite(endSite);
+                    ReadOffset(words, ref w);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (words[w] == "End")
@@ -79,9 +94,7 @@ namespace MotionMatching.Editor
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    var offset = ReadOffset(words, ref w) * scale;
-                    var endSite = new EndSite(parent, offset);
-                    bvhSo.AddEndSite(endSite);
+                    ReadOffset(words, ref w);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (ReadRightBracket(words, ref w))
@@ -94,9 +107,7 @@ namespace MotionMatching.Editor
                     w += 1;
                     if (words[w++] != "Site") Debug.LogError("[BVHImporter] End Site not found");
                     ReadLeftBracket(words, ref w);
-                    var offset = ReadOffset(words, ref w) * scale;
-                    var endSite = new EndSite(parent, offset);
-                    bvhSo.AddEndSite(endSite);
+                    ReadOffset(words, ref w);
                     if (!ReadRightBracket(words, ref w)) Debug.LogError("[BVHImporter] End Site right bracket not found");
                 }
                 while (ReadRightBracket(words, ref w))
@@ -111,18 +122,40 @@ namespace MotionMatching.Editor
             if (words[w++] != "MOTION") Debug.LogError("[BVHImporter] MOTION not found");
             if (words[w++] != "Frames:") Debug.LogError("[BVHImporter] Frames: not found");
             var numberFrames = int.Parse(words[w++]);
-            bvhSo.InitFrames(numberFrames);
             if (words[w++] != "Frame") Debug.LogError("[BVHImporter] Frame not found");
             if (words[w++] != "Time:") Debug.LogError("[BVHImporter] Time: not found");
             var frameTime = float.Parse(words[w++], CultureInfo.InvariantCulture);
-            bvhSo.SetFrameTime(frameTime);
-            // Frames
+
+            var skeletonAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
+            skeletonAsset.name = Path.GetFileNameWithoutExtension(ctx.assetPath) + "_Skeleton";
+            // Ids restart at 1 on every reimport: OnImportAsset cannot reliably read the previous
+            // sub-asset to merge, and no BoneReference targets BVH skeletons. Ids are deterministic
+            // (index + 1) for an unchanged file regardless.
+            skeletonAsset.SetBones(bones, bones.Count + 1);
+
+            var layout = PoseLayout.CreateFullPose(skeletonAsset, false, false);
+            var d = layout.Data;
+
             var numberChannels = channelAxisOrders.Count;
-            numberFrames = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
-            for (var i = 0; i < numberFrames; i++)
+            var framesStored = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
+            var frameData = new float[framesStored * d.FloatCount];
+
+            // One-frame template with every bone's rest position; slot 0 (root) is overwritten
+            // per frame below, identity rotations elsewhere are fine since every rotation slot
+            // is written per frame too.
+            var template = new float[d.FloatCount];
+            for (var b = 0; b < bones.Count; b++)
             {
-                var rootMotion = new Vector3();
-                var localRotations = new Quaternion[numberChannels - 1];
+                var restPosition = bones[b].restLocalPosition;
+                template[d.PositionStart + b * 3 + 0] = restPosition.x;
+                template[d.PositionStart + b * 3 + 1] = restPosition.y;
+                template[d.PositionStart + b * 3 + 2] = restPosition.z;
+            }
+
+            for (var f = 0; f < framesStored; f++)
+            {
+                var frameBase = f * d.FloatCount;
+                Array.Copy(template, 0, frameData, frameBase, d.FloatCount);
                 for (var j = 0; j < numberChannels; ++j)
                 {
                     var v1 = float.Parse(words[w++], CultureInfo.InvariantCulture);
@@ -131,17 +164,27 @@ namespace MotionMatching.Editor
                     var axisOrder = channelAxisOrders[j];
                     if (j == 0)
                     {
-                        rootMotion = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
+                        var rootMotion = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
+                        var positionBase = frameBase + d.PositionStart;
+                        frameData[positionBase + 0] = rootMotion.x;
+                        frameData[positionBase + 1] = rootMotion.y;
+                        frameData[positionBase + 2] = rootMotion.z;
                     }
                     else
                     {
-                        localRotations[j - 1] = BvhToUnityRotation(v1, v2, v3, axisOrder);
+                        var q = BvhToUnityRotation(v1, v2, v3, axisOrder);
+                        var rotationBase = frameBase + d.RotationStart + (j - 1) * 4;
+                        frameData[rotationBase + 0] = q.x;
+                        frameData[rotationBase + 1] = q.y;
+                        frameData[rotationBase + 2] = q.z;
+                        frameData[rotationBase + 3] = q.w;
                     }
                 }
-                var frame = new Frame(rootMotion, localRotations);
-                bvhSo.AddFrame(i, frame);
             }
-            return bvhSo;
+
+            var bvhAsset = ScriptableObject.CreateInstance<BvhAnimation>();
+            bvhAsset.Initialize(skeletonAsset, frameTime, framesStored, frameData);
+            return (bvhAsset, skeletonAsset);
         }
 
         private static void ReadLeftBracket(string[] words, ref int w)

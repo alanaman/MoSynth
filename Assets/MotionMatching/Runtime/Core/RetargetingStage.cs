@@ -40,18 +40,18 @@ public class RetargetingStage : MoSynthStage
         var poseJoints = poseSet.Skeleton.Joints;
 
         var tPoseAnimation = mmData.tPoseAnimationClip;
-        var animJoints = tPoseAnimation.Skeleton.Joints;
+        var boneCount = tPoseAnimation.Skeleton.BoneCount;
 
-        _animationTPose = new quaternion[animJoints.Count];
-        _characterTPose = new quaternion[animJoints.Count];
+        _animationTPose = new quaternion[boneCount];
+        _characterTPose = new quaternion[boneCount];
 
-        for (var i = 0; i < animJoints.Count; i++)
+        for (var i = 0; i < boneCount; i++)
         {
-            _animationTPose[i] = tPoseAnimation.GetWorldRotation(animJoints[i], tPoseAnimation.Frames[0]);
+            _animationTPose[i] = tPoseAnimation.GetWorldRotation(i, 0);
         }
 
         var tPoseSkeleton = _animator.avatar.humanDescription.skeleton;
-        for (var i = 0; i < animJoints.Count; i++)
+        for (var i = 0; i < boneCount; i++)
         {
             var jointTransform = _animator.GetBoneTransform(poseJoints[i + 1].type);
             var targetJointIndex = Array.FindIndex(tPoseSkeleton, bone => bone.name == jointTransform.name);

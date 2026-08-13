@@ -115,10 +115,10 @@ public class MotionMatchingSkinnedMeshRenderer : MonoBehaviour
         for (var i = 0; i < BodyJoints.Length; i++)
         {
             if (mmData.TryGetJointName(BodyJoints[i], out var jointName) &&
-                skeleton.TryFind(jointName, out var joint))
+                skeleton.TryFindByName(jointName, out var boneIndex))
             {
                 // Get the rotation for the first frame of the animation
-                _animationTPose[i] = tPoseAnimation.GetWorldRotation(joint, tPoseAnimation.Frames[0]);
+                _animationTPose[i] = tPoseAnimation.GetWorldRotation(boneIndex, 0);
             }
         }
 

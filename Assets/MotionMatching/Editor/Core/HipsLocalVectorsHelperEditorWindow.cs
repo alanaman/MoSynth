@@ -52,20 +52,27 @@ public class HipsLocalVectorsHelperEditorWindow : EditorWindow
     private void ImportBVH()
     {
         RemoveSkeleton();
+        var skeletonAsset = _animationClip.Skeleton;
+        var rawAnimation = _animationClip.GetRawAnimationClip();
+        if (skeletonAsset == null || rawAnimation.FrameCount == 0) return;
+
+        var rawFrame0 = rawAnimation.GetFrame(0);
+        var rawRotations = rawFrame0.Rotations;
+
         // Create skeleton
-        Skeleton = new Transform[_animationClip.Skeleton.Joints.Count];
+        Skeleton = new Transform[skeletonAsset.BoneCount];
         for (var j = 0; j < Skeleton.Length; j++)
         {
             // Joints
-            var joint = _animationClip.Skeleton.Joints[j];
+            var bone = skeletonAsset.GetBone(j);
             var t = (new GameObject()).transform;
-            t.name = joint.name;
+            t.name = bone.name;
             if (j > 0)
             {
-                t.SetParent(Skeleton[joint.parentIndex], false);
+                t.SetParent(Skeleton[bone.parentIndex], false);
             }
 
-            t.SetLocalPositionAndRotation(joint.localOffset, _animationClip.GetRawAnimationClip().Frames[0].localRotations[j]);
+            t.SetLocalPositionAndRotation(bone.restLocalPosition, rawRotations[j]);
             Skeleton[j] = t;
             // Visual
             var visual = (new GameObject()).transform;
@@ -86,7 +93,7 @@ public class HipsLocalVectorsHelperEditorWindow : EditorWindow
                 // Capsule
                 var capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule).transform;
                 capsule.name = "Capsule";
-                capsule.SetParent(Skeleton[joint.parentIndex].Find("Visual"), false);
+                capsule.SetParent(Skeleton[bone.parentIndex].Find("Visual"), false);
                 var distance = Vector3.Distance(t.position, t.parent.position) * (1.0f / visual.localScale.y) * 0.5f;
                 capsule.localScale = new Vector3(0.5f, distance, 0.5f);
                 var up = (t.position - t.parent.position).normalized;

@@ -33,7 +33,6 @@ namespace MotionMatching.Editor
 
         private SkeletonAsset _skeletonAsset;
         private SkeletonData _skeletonData;
-        private PoseBuffer _poseBuffer;
         private NativeArray<float3> _fkPositions;
         private NativeArray<quaternion> _fkRotations;
 
@@ -43,7 +42,13 @@ namespace MotionMatching.Editor
             EditorApplication.update += UpdateSimulation;
             _previousTime = (float)EditorApplication.timeSinceStartup;
 
-            InitPoseState();
+            _skeletonAsset = _bvhAnimation.Skeleton;
+            if (_skeletonAsset != null)
+            {
+                _skeletonData = _skeletonAsset.GetSkeletonData();
+                _fkPositions = new NativeArray<float3>(_skeletonAsset.BoneCount, Allocator.Persistent);
+                _fkRotations = new NativeArray<quaternion>(_skeletonAsset.BoneCount, Allocator.Persistent);
+            }
 
             Shader shader = Shader.Find("Hidden/Internal-Colored");
             if (shader != null)
@@ -68,29 +73,6 @@ namespace MotionMatching.Editor
                 _gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             }
             CreateGridMesh();
-        }
-
-        private void InitPoseState()
-        {
-            var skeleton = _bvhAnimation.Skeleton;
-            if (skeleton?.Joints == null || skeleton.Joints.Count == 0) return;
-
-            _skeletonAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
-            _skeletonAsset.hideFlags = HideFlags.HideAndDontSave;
-            SkeletonAssetFromMmData.Build(skeleton, _skeletonAsset);
-
-            var layout = PoseLayout.CreateFullPose(_skeletonAsset, false, false);
-            _skeletonData = _skeletonAsset.GetSkeletonData();
-            _poseBuffer = PoseBuffer.Allocate(layout, Allocator.Persistent);
-
-            var positions = _poseBuffer.Positions;
-            for (var i = 0; i < _skeletonAsset.BoneCount; i++)
-            {
-                positions[i] = _skeletonAsset.GetBone(i).restLocalPosition;
-            }
-
-            _fkPositions = new NativeArray<float3>(_skeletonAsset.BoneCount, Allocator.Persistent);
-            _fkRotations = new NativeArray<quaternion>(_skeletonAsset.BoneCount, Allocator.Persistent);
         }
 
         private void CreateGridMesh()
@@ -156,10 +138,6 @@ namespace MotionMatching.Editor
                 DestroyImmediate(_gridMesh);
             }
 
-            if (_poseBuffer.IsCreated)
-            {
-                _poseBuffer.Dispose();
-            }
             if (_fkPositions.IsCreated)
             {
                 _fkPositions.Dispose();
@@ -167,10 +145,6 @@ namespace MotionMatching.Editor
             if (_fkRotations.IsCreated)
             {
                 _fkRotations.Dispose();
-            }
-            if (_skeletonAsset != null)
-            {
-                DestroyImmediate(_skeletonAsset);
             }
         }
 
@@ -180,10 +154,10 @@ namespace MotionMatching.Editor
             float deltaTime = time - _previousTime;
             _previousTime = time;
 
-            if (_isPlaying && _bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0)
+            if (_isPlaying && _bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0)
             {
                 _currentTime += deltaTime;
-                float duration = _bvhAnimation.Frames.Length * _bvhAnimation.FrameTime;
+                float duration = _bvhAnimation.FrameCount * _bvhAnimation.FrameTime;
                 if (_currentTime >= duration)
                 {
                     _currentTime = _currentTime % duration;
@@ -194,7 +168,7 @@ namespace MotionMatching.Editor
 
         public override bool HasPreviewGUI()
         {
-            return _bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0;
+            return _bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0;
         }
 
         public override GUIContent GetPreviewTitle()
@@ -215,9 +189,9 @@ namespace MotionMatching.Editor
                 }
             }
 
-            if (_bvhAnimation != null && _bvhAnimation.Frames != null && _bvhAnimation.Frames.Length > 0)
+            if (_bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0)
             {
-                float duration = _bvhAnimation.Frames.Length * _bvhAnimation.FrameTime;
+                float duration = _bvhAnimation.FrameCount * _bvhAnimation.FrameTime;
                 EditorGUI.BeginChangeCheck();
                 _currentTime = GUILayout.HorizontalSlider(_currentTime, 0f, duration, GUILayout.Width(150));
                 if (EditorGUI.EndChangeCheck())
@@ -285,26 +259,16 @@ namespace MotionMatching.Editor
 
         private void DrawSkeleton()
         {
-            if (_bvhAnimation == null || _bvhAnimation.Frames == null || _bvhAnimation.Frames.Length == 0) return;
+            if (_bvhAnimation == null || _bvhAnimation.Skeleton == null || _bvhAnimation.FrameCount == 0) return;
+            if (!_fkPositions.IsCreated) return;
 
             int frameIndex = Mathf.FloorToInt(_currentTime / _bvhAnimation.FrameTime);
-            frameIndex = Mathf.Clamp(frameIndex, 0, _bvhAnimation.Frames.Length - 1);
+            frameIndex = Mathf.Clamp(frameIndex, 0, _bvhAnimation.FrameCount - 1);
 
-            var frame = _bvhAnimation.Frames[frameIndex];
             var boneCount = _skeletonData.BoneCount;
 
-            if (!_poseBuffer.IsCreated) return;
-            if (frame.localRotations == null || frame.localRotations.Length != boneCount) return;
-
-            var positions = _poseBuffer.Positions;
-            positions[0] = frame.rootMotion;
-            var rotations = _poseBuffer.Rotations;
-            for (var i = 0; i < boneCount; i++)
-            {
-                rotations[i] = frame.localRotations[i];
-            }
-
-            PoseFK.LocalToCharacter(_poseBuffer, _skeletonData, _fkPositions, _fkRotations);
+            var pose = _bvhAnimation.GetFrame(frameIndex);
+            PoseFK.LocalToCharacter(pose, _skeletonData, _fkPositions, _fkRotations);
 
             _lineVertices.Clear();
             _lineIndices.Clear();

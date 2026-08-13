@@ -108,11 +108,6 @@ public static class SkeletonAssetFromMmData
 
             sourceName = poseSetSource.name;
         }
-        else if (selected is BvhAnimation bvhAnimation)
-        {
-            mmSkeleton = bvhAnimation.Skeleton;
-            sourceName = bvhAnimation.name;
-        }
         else
         {
             return;
@@ -130,7 +125,7 @@ public static class SkeletonAssetFromMmData
     [MenuItem("MotionMatching/Create Skeleton Asset From Selection", true)]
     private static bool ValidateCreateSkeletonAssetFromSelection()
     {
-        return Selection.activeObject is IPoseSetSource || Selection.activeObject is BvhAnimation;
+        return Selection.activeObject is IPoseSetSource;
     }
 }
 }

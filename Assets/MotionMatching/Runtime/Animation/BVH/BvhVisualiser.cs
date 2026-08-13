@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -24,7 +25,7 @@ public class BvhVisualiser : MonoBehaviour
 
     private void Awake()
     {
-        if (!bvhAnimation) return;
+        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
         SetupSkeleton();
         UpdateSkeletonTransforms();
     }
@@ -32,15 +33,15 @@ public class BvhVisualiser : MonoBehaviour
     private void SetupSkeleton()
     {
         _skeletonBoneTransforms = EnsureSkeletonHierarchy(bvhAnimation.Skeleton);
-        for (int i = 0; i < _skeletonBoneTransforms.Length; i++)
+        for (var i = 0; i < _skeletonBoneTransforms.Length; i++)
         {
-            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.Joints[i].localOffset;
+            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.GetBone(i).restLocalPosition;
         }
     }
 
     private void Update()
     {
-        if (bvhAnimation == null) return;
+        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
 
         if (!play) return;
 
@@ -48,7 +49,7 @@ public class BvhVisualiser : MonoBehaviour
         _currentFrameTime += Time.deltaTime / bvhAnimation.FrameTime;
         currentFrame = (int)math.floor(_currentFrameTime);
 
-        if (currentFrame >= bvhAnimation.Frames.Length)
+        if (currentFrame >= bvhAnimation.FrameCount)
         {
             currentFrame = 0;
         }
@@ -58,17 +59,18 @@ public class BvhVisualiser : MonoBehaviour
 
     private void UpdateSkeletonTransforms()
     {
-        var frame = bvhAnimation.Frames[currentFrame];
-        _skeletonBoneTransforms[0].localPosition = frame.rootMotion;
-        for (int i = 0; i < frame.localRotations.Length; i++)
+        var frame = bvhAnimation.GetFrame(currentFrame);
+        _skeletonBoneTransforms[0].localPosition = (Vector3)(float3)frame.Positions[0];
+        var rotations = frame.Rotations;
+        for (var i = 0; i < rotations.Length; i++)
         {
-            _skeletonBoneTransforms[i].localRotation = frame.localRotations[i];
+            _skeletonBoneTransforms[i].localRotation = rotations[i];
         }
     }
 
     private void OnValidate()
     {
-        if (bvhAnimation == null) return;
+        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
         SetupSkeleton();
         UpdateSkeletonTransforms();
     }
@@ -77,18 +79,20 @@ public class BvhVisualiser : MonoBehaviour
     /// Ensures the GameObject hierarchy matches the provided Skeleton structure.
     /// Existing bones are preserved; missing bones are created at their proper local offsets.
     /// </summary>
-    private Transform[] EnsureSkeletonHierarchy(Skeleton skeleton)
+    private Transform[] EnsureSkeletonHierarchy(SkeletonAsset skeleton)
     {
-        if (skeleton?.Joints == null || skeleton.Joints.Count == 0)
+        if (skeleton == null || skeleton.BoneCount == 0)
         {
             return Array.Empty<Transform>();
         }
 
-        // Cache for transforms to avoid redundant lookups and handle unsorted lists
-        var boneTransforms = new Transform[skeleton.Joints.Count];
+        var boneCount = skeleton.BoneCount;
 
-        // Iterate through all joints to guarantee every bone is processed
-        for (int i = 0; i < skeleton.Joints.Count; i++)
+        // Cache for transforms to avoid redundant lookups and handle unsorted lists
+        var boneTransforms = new Transform[boneCount];
+
+        // Iterate through all bones to guarantee every bone is processed
+        for (var i = 0; i < boneCount; i++)
         {
             GetOrCreateBone(i);
         }
@@ -96,72 +100,66 @@ public class BvhVisualiser : MonoBehaviour
         return boneTransforms;
 
         // Local helper function to recursively resolve/create a bone and its parents
-        Transform GetOrCreateBone(int jointIndex)
+        Transform GetOrCreateBone(int boneIndex)
         {
             // Invalid index or root returns the component's base transform
-            if (jointIndex < 0 || jointIndex >= skeleton.Joints.Count)
+            if (boneIndex < 0 || boneIndex >= boneCount)
             {
                 return this.transform;
             }
 
             // Return immediately if this bone has already been resolved
-            if (boneTransforms[jointIndex])
+            if (boneTransforms[boneIndex])
             {
-                return boneTransforms[jointIndex];
+                return boneTransforms[boneIndex];
             }
 
-            var joint = skeleton.Joints[jointIndex];
+            var bone = skeleton.GetBone(boneIndex);
 
             // Resolve the parent transform first (recursion ensures parents exist before children)
             var parentTransform = this.transform;
-            if (joint.parentIndex >= 0)
+            if (bone.parentIndex >= 0)
             {
-                parentTransform = GetOrCreateBone(joint.parentIndex);
+                parentTransform = GetOrCreateBone(bone.parentIndex);
             }
 
             // Check if the bone already exists as a direct child of the resolved parent
-            var existingBone = parentTransform.Find(joint.name);
+            var existingBone = parentTransform.Find(bone.name);
 
             if (existingBone != null)
             {
                 // Bone exists, link it to the cache without modifying it
-                boneTransforms[jointIndex] = existingBone;
+                boneTransforms[boneIndex] = existingBone;
             }
             else
             {
                 // Bone is missing, create it
-                var newBone = new GameObject(joint.name);
+                var newBone = new GameObject(bone.name);
 
                 // SetParent with worldPositionStays = false to preserve local transform identity
                 newBone.transform.SetParent(parentTransform, false);
 
-                boneTransforms[jointIndex] = newBone.transform;
+                boneTransforms[boneIndex] = newBone.transform;
             }
 
-            return boneTransforms[jointIndex];
+            return boneTransforms[boneIndex];
         }
     }
 
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (_skeletonBoneTransforms == null || bvhAnimation == null || bvhAnimation.EndSites == null) return;
+        if (_skeletonBoneTransforms == null || bvhAnimation == null) return;
 
         Gizmos.color = Color.red;
-        for (int i = 1; i < _skeletonBoneTransforms.Length; i++)
+        for (var i = 1; i < _skeletonBoneTransforms.Length; i++)
         {
-            Transform t = _skeletonBoneTransforms[i];
+            var t = _skeletonBoneTransforms[i];
             GizmosExtensions.DrawLine(t.parent.position, t.position, 3);
         }
-        // Uncomment to show end sites
-        // foreach (BVHAnimation.EndSite endSite in Animation.EndSites)
-        // {
-        //     Transform t = Skeleton[endSite.ParentIndex];
-        //     GizmosExtensions.DrawLine(t.position, t.TransformPoint(endSite.Offset), 3);
-        // }
 
         Gizmos.color = new Color(1.0f, 0.3f, 0.1f, 1.0f);
-        foreach (Transform t in _skeletonBoneTransforms)
+        foreach (var t in _skeletonBoneTransforms)
         {
             if (t.name == "End Site") continue;
             Gizmos.DrawWireSphere(t.position, spheresRadius);

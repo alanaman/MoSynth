@@ -32,7 +32,10 @@ public struct PoseLayoutData
 /// Planned file format for later serialization work (not implemented by this layer):
 /// <c>magic 'MSPS' | int version (PoseFormatVersion) | skeleton table {id, name,
 /// parentIndex, restLocalPosition, restLocalRotation, humanBone} | channel table |
-/// LayoutHash | frame count | raw float frames</c>.
+/// LayoutHash | frame count | raw float frames</c>. Unity-serialized assets may instead skip
+/// that binary format entirely and store only raw frame floats plus a <see cref="SkeletonAsset"/>
+/// reference, rebuilding the layout on load via <see cref="CreateFullPose"/> (see
+/// <c>PoseSequence</c>'s asset-backed usage).
 /// <para/>
 /// Section order within the buffer is fixed: positions, rotations, scales, velocities,
 /// angular velocities, bools. Strides: Position/Scale/Velocity/AngularVelocity are 3

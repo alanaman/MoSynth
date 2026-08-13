@@ -129,19 +129,21 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         {
             // TODO: Check if SkeletonToMecanim should be reset
             data.animationChannelToMecanim.Clear();
-            foreach (Joint joint in data.tPoseAnimationClip.Skeleton.Joints)
+            var skeleton = data.tPoseAnimationClip.Skeleton;
+            for (var i = 0; i < skeleton.BoneCount; i++)
             {
+                var jointName = skeleton.GetBone(i).name;
                 HumanBodyBones bone;
                 try
                 {
-                    bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), joint.name);
+                    bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), jointName);
                 }
                 catch (Exception)
                 {
                     bone = HumanBodyBones.LastBone;
                 }
 
-                data.animationChannelToMecanim.Add(new MotionMatchingData.JointToMecanim(joint.name, bone));
+                data.animationChannelToMecanim.Add(new MotionMatchingData.JointToMecanim(jointName, bone));
             }
         }
 

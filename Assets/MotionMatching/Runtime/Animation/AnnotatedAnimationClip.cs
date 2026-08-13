@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -28,10 +29,11 @@ public class AnnotatedAnimationClip : ScriptableObject
     [Min(0)] [Tooltip("End frame of the animation clip. 0 indexing, exclusive.")]
     public int endFrame;
 
-    public Skeleton Skeleton => animation.Skeleton;
+    public SkeletonAsset Skeleton => animation.Skeleton;
 
-    public Span<BvhAnimation.Frame> Frames =>
-        animation.Frames.AsSpan(startFrame, Math.Max(0, endFrame - startFrame));
+    /// Number of frames in the [startFrame, endFrame) slice, clamped defensively — a serialized
+    /// endFrame can exceed the animation's frame count until OnValidate re-runs.
+    public int FrameCount => animation == null ? 0 : Math.Max(0, Math.Min(endFrame, animation.FrameCount) - startFrame);
 
     public float FrameTime => animation.FrameTime;
 
@@ -40,6 +42,9 @@ public class AnnotatedAnimationClip : ScriptableObject
     {
         return animation;
     }
+
+    /// Frame view offset by startFrame. Never Dispose the returned buffer.
+    public PoseBuffer GetFrame(int frameIndex) => animation.PoseSequence.GetFrame(startFrame + frameIndex);
 
     public List<Tag> GetTags()
     {
@@ -81,31 +86,18 @@ public class AnnotatedAnimationClip : ScriptableObject
         if (animation == null)
             return;
 
-        if (startFrame >= animation.Frames.Length)
-            startFrame = animation.Frames.Length;
+        if (startFrame >= animation.FrameCount)
+            startFrame = animation.FrameCount;
 
-        if (endFrame >= animation.Frames.Length)
-            endFrame = animation.Frames.Length;
+        if (endFrame >= animation.FrameCount)
+            endFrame = animation.FrameCount;
     }
 
     /// <summary>
-    /// Apply forward kinematics to obtain the quaternion rotating from the local
-    /// coordinate system of the joint to the world coordinate system.
+    /// Character-space (accumulated parent-chain) rotation of a bone at a sliced frame index.
     /// </summary>
-    public quaternion GetWorldRotation(Skeleton.Joint joint, BvhAnimation.Frame frame)
-    {
-        var worldRot = Quaternion.identity;
-
-        while (joint.index != 0) // while not root
-        {
-            worldRot = frame.localRotations[joint.index] * worldRot;
-            joint = Skeleton.GetParent(joint);
-        }
-
-        worldRot = frame.localRotations[0] * worldRot; // root
-
-        return worldRot;
-    }
+    public quaternion GetWorldRotation(int boneIndex, int frameIndex)
+        => PoseFK.CharacterRotation(GetFrame(frameIndex), animation.Skeleton.GetSkeletonData(), boneIndex);
 
     [Serializable]
     public struct Tag

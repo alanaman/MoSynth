@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AnimationTools;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -45,27 +46,18 @@ public class PoseSet
     /// <summary>
     /// Set skeleton from BVH. Adds simulation bone as root joint
     /// </summary>
-    public void SetSkeletonFromBvh(Skeleton skeleton)
+    public void SetSkeletonFromBvh(SkeletonAsset skeletonAsset)
     {
         Skeleton = new Skeleton();
         // Add Simulation Bone
-        Joint sb = new Joint("SimulationBone", 0, -1, Vector3.zero);
+        var sb = new Joint("SimulationBone", 0, -1, Vector3.zero);
         Skeleton.AddJoint(sb);
-        // Add Joints (adjusting indices, now SimulationBone is 0 and all indices are shifted by 1)
-        for (int i = 0; i < skeleton.Joints.Count; ++i)
+        // Add joints, shifting indices by 1 so SimulationBone is 0
+        for (var i = 0; i < skeletonAsset.BoneCount; ++i)
         {
-            Joint j = skeleton.Joints[i];
-            j.index = j.index + 1;
-            if (i == 0) // Root
-            {
-                j.parentIndex = 0;
-            }
-            else // Other Joints
-            {
-                j.parentIndex = j.parentIndex + 1;
-            }
-
-            Skeleton.Joints.Add(j);
+            var bone = skeletonAsset.GetBone(i);
+            Skeleton.AddJoint(new Joint(bone.name, i + 1, i == 0 ? 0 : bone.parentIndex + 1,
+                bone.restLocalPosition, bone.humanBone));
         }
     }
 

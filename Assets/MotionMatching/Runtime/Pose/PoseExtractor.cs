@@ -1,6 +1,7 @@
 using UnityEngine;
 using Unity.Mathematics;
 using System;
+using AnimationTools;
 
 namespace MotionMatching
 {
@@ -17,23 +18,35 @@ public static class PoseExtractor
     public static bool Extract(AnnotatedAnimationClip animationClip, PoseSet poseSet, IPoseSetSource source)
     {
         // Set Poses
-        var nFrames = animationClip.Frames.Length;
+        var nFrames = animationClip.FrameCount;
         var poses = new PoseVector[nFrames - 1];
-        var nBvhJoints = animationClip.Skeleton.Joints.Count;
+        var nBvhJoints = animationClip.Skeleton.BoneCount;
         var nPoseSetJoints = nBvhJoints + 1; // +1 for SimulationBone
 
-        if (!animationClip.Skeleton.TryFind(HumanBodyBones.LeftToes, out var leftToesJoint))
+        if (!animationClip.Skeleton.TryFindByHumanBone(HumanBodyBones.LeftToes, out var leftToesBoneIndex))
         {
             Debug.LogError("LeftToes not found in BVHAnimation");
+            leftToesBoneIndex = 0; // legacy TryFind left a default joint (index 0) on failure
         }
 
-        var leftToesIndex = leftToesJoint.index + 1; // +1 for SimulationBone
-        if (!animationClip.Skeleton.TryFind(HumanBodyBones.RightToes, out var rightToesJoint))
+        var leftToesIndex = leftToesBoneIndex + 1; // +1 for SimulationBone
+        if (!animationClip.Skeleton.TryFindByHumanBone(HumanBodyBones.RightToes, out var rightToesBoneIndex))
         {
             Debug.LogError("RightToes not found in BVHAnimation");
+            rightToesBoneIndex = 0; // legacy TryFind left a default joint (index 0) on failure
         }
 
-        var rightToesIndex = rightToesJoint.index + 1; // +1 for SimulationBone
+        var rightToesIndex = rightToesBoneIndex + 1; // +1 for SimulationBone
+
+        // Legacy contact-extraction path (GetWorldSpaceVelocity) walks a MotionMatching.Skeleton's
+        // Joint parent chain, unshifted (no SimulationBone) — mirror the SkeletonAsset bone list
+        // into that legacy shape rather than touching ExtractPoseContacts itself.
+        var bvhSkeleton = new Skeleton();
+        for (var i = 0; i < nBvhJoints; i++)
+        {
+            var bone = animationClip.Skeleton.GetBone(i);
+            bvhSkeleton.AddJoint(new Skeleton.Joint(bone.name, i, bone.parentIndex, bone.restLocalPosition, bone.humanBone));
+        }
 
         for (var i = 0; i < nFrames - 1; i++)
         {
@@ -53,7 +66,7 @@ public static class PoseExtractor
         {
             // Note: this requires velocities to be pre-calculated
             ExtractPoseContacts(ref poses[i],
-                animationClip.Skeleton,
+                bvhSkeleton,
                 leftToesIndex,
                 rightToesIndex,
                 source.ContactVelocityThreshold);
@@ -211,19 +224,23 @@ public static class PoseExtractor
     private static void ExtractPose(ref PoseVector pose, AnnotatedAnimationClip animationClip, int frameIndex,
         IPoseSetSource source)
     {
-        var frame = animationClip.Frames[frameIndex];
+        var frame = animationClip.GetFrame(frameIndex);
+        var rotations = frame.Rotations;
+        var skeleton = animationClip.Skeleton;
+
         // Joints
         for (var i = 1; i < pose.jointLocalPositions.Length; i++)
         {
-            pose.jointLocalPositions[i] = animationClip.Skeleton.Joints[i - 1].localOffset;
-            pose.jointLocalRotations[i] = frame.localRotations[i - 1];
+            // rest offsets come from the skeleton, not the frame's positions section (slot 0 there is root motion)
+            pose.jointLocalPositions[i] = skeleton.GetBone(i - 1).restLocalPosition;
+            pose.jointLocalRotations[i] = rotations[i - 1];
         }
 
         // SimulationBone
         // position and direction are hips projected on the ground
-        var frameRootMotion = frame.rootMotion;
+        Vector3 frameRootMotion = (float3)frame.Positions[0];
         var sbPos = new Vector3(frameRootMotion.x, 0.0f, frameRootMotion.z);
-        var hipsForwardDir = frame.localRotations[0] * source.HipsForwardLocalVector;
+        Vector3 hipsForwardDir = (Quaternion)rotations[0] * (Vector3)(float3)source.HipsForwardLocalVector;
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);
@@ -233,7 +250,7 @@ public static class PoseExtractor
         // make first joint (hips) position and direction relative to the simulation bone
         var inverseSbRot = math.inverse(sbRot);
         pose.jointLocalPositions[1] = math.mul(inverseSbRot, frameRootMotion - sbPos);
-        pose.jointLocalRotations[1] = math.mul(inverseSbRot, frame.localRotations[0]);
+        pose.jointLocalRotations[1] = math.mul(inverseSbRot, (quaternion)rotations[0]);
     }
 
     private static void ExtractPoseVelocities(ref PoseVector pose, in PoseVector nextPose, AnnotatedAnimationClip animationClip)

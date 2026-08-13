@@ -1,93 +1,92 @@
-using System.Collections.Generic;
-using UnityEngine;
-using Unity.Mathematics;
 using System;
-using UnityEngine.Serialization;
+using System.Collections.Generic;
+using AnimationTools;
+using Unity.Collections;
+using UnityEngine;
 
 namespace MotionMatching
 {
-using Joint = Skeleton.Joint;
-
 /// <summary>
-/// Stores the BVH animation data in Unity format as an asset.
+/// An imported BVH animation, stored as per-frame float data in the AnimationTools pose format.
 /// </summary>
 public class BvhAnimation : ScriptableObject
 {
     [SerializeField] private float frameTime;
+    [SerializeField] private SkeletonAsset skeletonAsset;
+    [SerializeField] private int frameCount;
+
+    // Per-frame layout is PoseLayout.CreateFullPose(skeletonAsset, false, false): positions then
+    // rotations, bone-index aligned. positions[0] holds the root motion for the frame;
+    // positions[i > 0] repeat the bone rest offsets so frames are PoseFK-ready.
+    [SerializeField] private float[] frameData;
+
     public float FrameTime => frameTime;
+    public SkeletonAsset Skeleton => skeletonAsset;
 
-    [SerializeField] private Skeleton skeleton = new();
-    public Skeleton Skeleton => skeleton;
+    // Plain field read; must not materialize the sequence.
+    public int FrameCount => frameCount;
 
-    public List<EndSite> EndSites { get; private set; } = new();
+    [NonSerialized] private PoseSequence _poseSequence;
+    [NonSerialized] private NativeArray<float> _nativeFrameData;
+    [NonSerialized] private int _poseSequenceSkeletonVersion = -1;
 
-    [SerializeField] private Frame[] frames;
-    public Frame[] Frames => frames;
-
-
-    public void SetFrameTime(float inFrameTime)
+    public PoseSequence PoseSequence
     {
-        this.frameTime = inFrameTime;
+        get
+        {
+            // Assets imported by an older importer version deserialize with these empty.
+            if (skeletonAsset == null || frameData == null || frameData.Length == 0) return null;
+
+            if (_poseSequence != null && _poseSequenceSkeletonVersion == skeletonAsset.Version) return _poseSequence;
+
+            var layout = PoseLayout.CreateFullPose(skeletonAsset, false, false);
+            Debug.Assert(frameData.Length == frameCount * layout.FloatCount,
+                $"BvhAnimation \"{name}\": frameData.Length ({frameData.Length}) does not match frameCount * layout.FloatCount ({frameCount * layout.FloatCount}).");
+
+            // Domain-allocated, never disposed: it lives for the domain's lifetime alongside
+            // this cache, the same pattern as SkeletonAsset.GetSkeletonData. A skeleton Version
+            // bump (UpdateMecanimInformation) only re-wraps this same native data with a fresh
+            // layout — FloatCount is unchanged because the bone list shape is unchanged.
+            if (!_nativeFrameData.IsCreated)
+                _nativeFrameData = new NativeArray<float>(frameData, Allocator.Domain);
+
+            _poseSequence = new PoseSequence(layout, _nativeFrameData);
+            _poseSequenceSkeletonVersion = skeletonAsset.Version;
+            return _poseSequence;
+        }
     }
 
-    public void InitFrames(int numberFrames)
-    {
-        frames = new Frame[numberFrames];
-    }
+    public PoseBuffer GetFrame(int frameIndex) => PoseSequence.GetFrame(frameIndex);
 
-    public void AddFrame(int index, Frame frame)
+    /// <summary>Importer-only setup: assigns the raw fields directly, no validation or copying.</summary>
+    public void Initialize(SkeletonAsset skeleton, float inFrameTime, int inFrameCount, float[] inFrameData)
     {
-        Frames[index] = frame;
-    }
-
-    public void AddJoint(Joint joint)
-    {
-        Skeleton.AddJoint(joint);
-    }
-
-    internal void AddEndSite(EndSite endSite)
-    {
-        EndSites.Add(endSite);
+        skeletonAsset = skeleton;
+        frameTime = inFrameTime;
+        frameCount = inFrameCount;
+        frameData = inFrameData;
     }
 
     public void UpdateMecanimInformation(IPoseSetSource source)
     {
-        for (var i = 0; i < Skeleton.Joints.Count; i++)
+        if (skeletonAsset == null) return;
+
+        var changed = false;
+        var newBones = new List<Bone>(skeletonAsset.BoneCount);
+        for (var i = 0; i < skeletonAsset.BoneCount; i++)
         {
-            var joint = Skeleton.Joints[i];
-            if (source.TryGetMecanimBone(joint.name, out HumanBodyBones bone))
+            var bone = skeletonAsset.GetBone(i);
+            if (source.TryGetMecanimBone(bone.name, out var humanBone) && bone.humanBone != humanBone)
             {
-                joint.type = bone;
-                Skeleton.Joints[i] = joint;
+                bone.humanBone = humanBone;
+                changed = true;
             }
+
+            newBones.Add(bone);
         }
-    }
 
-    public struct EndSite
-    {
-        public int ParentIndex;
-        public Vector3 Offset;
-
-        public EndSite(int parentIndex, Vector3 offset)
-        {
-            ParentIndex = parentIndex;
-            Offset = offset;
-        }
-    }
-
-    [Serializable]
-    public struct Frame
-    {
-        [FormerlySerializedAs("RootMotion")] public Vector3 rootMotion;
-
-        [FormerlySerializedAs("LocalRotations")]
-        public Quaternion[] localRotations;
-
-        public Frame(Vector3 rootMotion, Quaternion[] localRotations)
-        {
-            this.rootMotion = rootMotion;
-            this.localRotations = localRotations;
-        }
+        // Skipping a no-op SetBones avoids invalidating cached SkeletonData/layouts.
+        if (changed) skeletonAsset.SetBones(newBones, skeletonAsset.NextBoneId);
     }
 }
 }

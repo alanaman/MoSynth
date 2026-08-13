@@ -58,7 +58,7 @@ namespace MotionMatching
         private static readonly Color LightGray = new Color(0.4f, 0.4f, 0.4f, 1.0f);
         private static readonly Color DarkGray = new Color(0.3f, 0.3f, 0.3f, 1.0f);
 
-        private int NumberFrames { get { return _animationClip.GetRawAnimationClip().Frames.Length; } }
+        private int NumberFrames { get { return _animationClip.GetRawAnimationClip().FrameCount; } }
 
         [MenuItem("MotionMatching/Animation Viewer")]
         public static void ShowWindow()
@@ -1272,20 +1272,22 @@ namespace MotionMatching
         {
             RemoveSkeleton();
             BvhAnimation animation = _animationClip.GetRawAnimationClip();
+            if (animation.Skeleton == null || animation.FrameCount == 0) return;
             UpdateTargetFramerate(Mathf.RoundToInt(1.0f / animation.FrameTime));
             // Create skeleton
-            Skeleton = new Transform[animation.Skeleton.Joints.Count];
+            var skeletonAsset = animation.Skeleton;
+            Skeleton = new Transform[skeletonAsset.BoneCount];
             for (int j = 0; j < Skeleton.Length; j++)
             {
                 // Joints
-                Skeleton.Joint joint = animation.Skeleton.Joints[j];
+                var bone = skeletonAsset.GetBone(j);
                 Transform t = (new GameObject()).transform;
-                t.name = joint.name;
+                t.name = bone.name;
                 if (j > 0)
                 {
-                    t.SetParent(Skeleton[joint.parentIndex], false);
+                    t.SetParent(Skeleton[bone.parentIndex], false);
                 }
-                t.localPosition = joint.localOffset;
+                t.localPosition = bone.restLocalPosition;
                 Skeleton[j] = t;
                 // Visual
                 Transform visual = (new GameObject()).transform;
@@ -1306,7 +1308,7 @@ namespace MotionMatching
                     // Capsule
                     Transform capsule = GameObject.CreatePrimitive(PrimitiveType.Capsule).transform;
                     capsule.name = "Capsule";
-                    capsule.SetParent(Skeleton[joint.parentIndex].Find("Visual"), false);
+                    capsule.SetParent(Skeleton[bone.parentIndex].Find("Visual"), false);
                     float distance = Vector3.Distance(t.position, t.parent.position) * (1.0f / visual.localScale.y) * 0.5f;
                     capsule.localScale = new Vector3(0.5f, distance, 0.5f);
                     Vector3 up = (t.position - t.parent.position).normalized;
@@ -1324,7 +1326,7 @@ namespace MotionMatching
 
         private void UpdateCurrentFrame(int newValue)
         {
-            newValue = Mathf.Clamp(newValue, 0, _animationClip.GetRawAnimationClip().Frames.Length - 1);
+            newValue = Mathf.Clamp(newValue, 0, _animationClip.GetRawAnimationClip().FrameCount - 1);
             CurrentFrame = newValue;
             CurrentFrameField.value = CurrentFrame;
             UpdateCurrentFrameIndicator();
@@ -1350,21 +1352,23 @@ namespace MotionMatching
         private void UpdatePose(bool forward = true, int tagIndex = -1, bool queryTag = false)
         {
             BvhAnimation animation = _animationClip.GetRawAnimationClip();
-            if (animation != null && LastUpdateTime + (1.0 / TargetFramerate) < EditorApplication.timeSinceStartup)
+            if (animation != null && animation.Skeleton != null && animation.FrameCount > 0 &&
+                LastUpdateTime + (1.0 / TargetFramerate) < EditorApplication.timeSinceStartup)
             {
                 // Update skeleton
-                BvhAnimation.Frame frame = animation.Frames[CurrentFrame];
-                Skeleton[0].position = frame.rootMotion;
+                var frame = animation.GetFrame(CurrentFrame);
+                Skeleton[0].position = frame.Positions[0];
+                var rotations = frame.Rotations;
                 for (int i = 0; i < Skeleton.Length; i++)
                 {
-                    Skeleton[i].localRotation = frame.localRotations[i];
+                    Skeleton[i].localRotation = rotations[i];
                 }
                 // Update frame index
                 if (forward)
                 {
                     if (tagIndex == -1 && !queryTag)
                     {
-                        UpdateCurrentFrame((CurrentFrame + 1) % animation.Frames.Length);
+                        UpdateCurrentFrame((CurrentFrame + 1) % animation.FrameCount);
                     }
                     else if (!queryTag)
                     {

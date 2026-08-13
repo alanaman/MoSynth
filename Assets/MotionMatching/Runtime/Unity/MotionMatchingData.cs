@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AnimationTools;
 using UnityEngine;
 using Unity.Mathematics;
 using System.IO;
@@ -185,9 +186,13 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     public void ComputeJointsLocalForward()
     {
         // Import T-Pose
-        jointsLocalForward = new float3[tPoseAnimationClip.Skeleton.Joints.Count + 1]; // +1 for the simulation bone
+        var skeleton = tPoseAnimationClip.Skeleton;
+        var skeletonData = skeleton.GetSkeletonData();
+        var pose = tPoseAnimationClip.GetFrame(0);
+        var localRotations = pose.Rotations;
+
+        jointsLocalForward = new float3[skeleton.BoneCount + 1]; // +1 for the simulation bone
         // Find forward character vector by projecting hips forward vector onto the ground
-        Quaternion[] localRotations = tPoseAnimationClip.Frames[0].localRotations;
         float3 hipsWorldForwardProjected = math.mul(localRotations[0], hipsForwardLocalVector);
         hipsWorldForwardProjected.y = 0;
         hipsWorldForwardProjected = math.normalize(hipsWorldForwardProjected);
@@ -198,21 +203,12 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         jointsLocalForward[0] = math.forward();
         for (int i = 1; i < jointsLocalForward.Length; i++)
         {
-            quaternion worldRot = quaternion.identity;
-            int joint = i - 1;
-            while (joint != 0) // while not root
-            {
-                worldRot = math.mul(localRotations[joint], worldRot);
-                joint = tPoseAnimationClip.Skeleton.Joints[joint].parentIndex;
-            }
-
-            worldRot = math.mul(localRotations[0], worldRot); // root
-            joint = i - 1;
+            quaternion worldRot = PoseFK.CharacterRotation(pose, skeletonData, i - 1);
             // Change to Local
-            if (!TryGetMecanimBone(tPoseAnimationClip.Skeleton.Joints[joint].name, out HumanBodyBones bone))
+            if (!TryGetMecanimBone(skeleton.GetBone(i - 1).name, out HumanBodyBones bone))
             {
                 Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " +
-                                 tPoseAnimationClip.Skeleton.Joints[joint].name);
+                                 skeleton.GetBone(i - 1).name);
             }
 
             float3 worldForward = hipsWorldForwardProjected;
