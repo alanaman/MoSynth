@@ -9,7 +9,7 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
-    public class CrowdSplineControlInput : MoSynthControlInput, IObstacleAwareCharacterControler
+    public class CrowdSplineControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler
     {
         public string TrajectoryPositionFeatureName = "FuturePosition";
         public string TrajectoryDirectionFeatureName = "FutureDirection";

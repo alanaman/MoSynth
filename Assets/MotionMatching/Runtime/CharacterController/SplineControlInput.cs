@@ -7,7 +7,7 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
-    public class SplineControlInput : MoSynthControlInput
+    public class SplineControlInput : MotionMatchingControlInput
     {
         public string TrajectoryPositionFeatureName = "FuturePosition";
         public string TrajectoryDirectionFeatureName = "FutureDirection";

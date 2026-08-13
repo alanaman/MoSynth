@@ -10,8 +10,10 @@ namespace MotionMatching
 {
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
-    // TODO: rename: MM shouldn't be in the name?
-    public abstract class MoSynthControlInput : MonoBehaviour
+    /// <summary>
+    /// Converts general input to MotionMatching specific input 
+    /// </summary>
+    public abstract class MotionMatchingControlInput : MonoBehaviour
     {
         // TODO: Create a OnValidate() (other name because it will collide with Unity's
         //       that validates if the current MMData has the necessary trajectories requeried
@@ -21,13 +23,13 @@ namespace MotionMatching
         public UnityAction OnHighInputChange;
 
         [FormerlySerializedAs("motionMatching")] [SerializeReference]
-        public MotionSynthesizer motionSynthesizer; // MotionMatchingController's transform is the SimulationBone of the character
+        public MotionSynthesisComponent motionSynthesizer; // MotionMatchingController's transform is the SimulationBone of the character
 
         public float DatabaseDeltaTime { get; private set; }
 
         private void LateUpdate()
         {
-            DatabaseDeltaTime = motionSynthesizer.DatabaseFrameTime;
+            DatabaseDeltaTime = motionSynthesizer.MmData.GetOrImportPoseSet().FrameTime;
             // Update the character
             OnUpdate();
             // Update other components depending on the character controller

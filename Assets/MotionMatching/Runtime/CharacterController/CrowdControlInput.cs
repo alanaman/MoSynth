@@ -9,7 +9,7 @@ namespace MotionMatching
     using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 
 
-    public class CrowdControlInput : MoSynthControlInput, IObstacleAwareCharacterControler, IPlayerInputCharacterController
+    public class CrowdControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler, IPlayerInputCharacterController
     {
         [Header("Crowd")]
         public Obstacle IgnoreObstacle;

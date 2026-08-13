@@ -16,7 +16,7 @@ public class MotionMatchingStage : MoSynthStage
 {
     private MotionSynthesisComponent _owner;
     
-    [FormerlySerializedAs("characterController")] public MoSynthControlInput controlInput;
+    [FormerlySerializedAs("characterController")] public MotionMatchingControlInput controlInput;
     
     
     public MotionMatchingData mmData;

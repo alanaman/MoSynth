@@ -10,7 +10,7 @@ using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
 // Adjustment between Character Controller and Motion Matching Character Entity
 /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-public class SpringControlInput : MoSynthControlInput, IPlayerInputCharacterController
+public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharacterController
 {
     // Features ----------------------------------------------------------
     [Header("Features")] public string TrajectoryPositionFeatureName = "FuturePosition";

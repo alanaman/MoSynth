@@ -9,7 +9,7 @@ namespace MotionMatching
     // Adjustment between Character Controller and Motion Matching Character Entity
     /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-    public class CollisionsSpringControlInput : MoSynthControlInput, IPlayerInputCharacterController
+    public class CollisionsSpringControlInput : MotionMatchingControlInput, IPlayerInputCharacterController
     {
         // Features ----------------------------------------------------------
         [Header("Features")]

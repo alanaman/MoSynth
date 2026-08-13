@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace MotionMatching
 {
-public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
+public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
 {
     [NonSerialized] public PoseBuffer CurrentPose;
 
@@ -59,7 +59,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
     /// The <see cref="MotionMatchingData"/> of the first <see cref="MotionMatchingStage"/> in
     /// <see cref="stages"/>, or null when no such stage exists (e.g. a motion-field-only stack).
     /// </summary>
-    public override MotionMatchingData MmData
+    public MotionMatchingData MmData
     {
         get
         {
@@ -72,10 +72,10 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
         }
     }
 
-    public override float3 RootVelocity { get; protected set; }
-    public override float3 RootAngularVelocity { get; protected set; }
-    public override float3 RootPosition { get; protected set; }
-    public override quaternion RootRotation { get; protected set; }
+    public float3 RootVelocity { get; protected set; }
+    public float3 RootAngularVelocity { get; protected set; }
+    public float3 RootPosition { get; protected set; }
+    public quaternion RootRotation { get; protected set; }
 
     /// <summary>
     /// Time.DeltaTime if frame rate is not restricted. 1/animationFrameRate if restricted.
@@ -375,22 +375,22 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
     }
 
 
-    public override void SetRotAdjustment(quaternion adjustmentRotation)
+    public void SetRotAdjustment(quaternion adjustmentRotation)
     {
         throw new NotImplementedException();
     }
 
-    public override void SetPosAdjustment(float3 adjustmentPosition)
+    public void SetPosAdjustment(float3 adjustmentPosition)
     {
         throw new NotImplementedException();
     }
 
-    public override float3 GetMainPositionFeature(int trajectoryIndex)
+    public float3 GetMainPositionFeature(int trajectoryIndex)
     {
         throw new NotImplementedException();
     }
 
-    public override float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
+    public float4 GetEnvironmentFeature(string featureName, int trajectoryIndex)
     {
         throw new NotImplementedException();
     }
