@@ -11,8 +11,6 @@ namespace MotionMatching
 
     public class CollisionsSpringControlInput : MoSynthControlInput, IPlayerInputCharacterController
     {
-        public MotionMatchingSkinnedMeshRenderer MMSkinnedMeshRenderer;
-
         // Features ----------------------------------------------------------
         [Header("Features")]
         public string TrajectoryPositionFeatureName = "FuturePosition";
@@ -183,7 +181,6 @@ namespace MotionMatching
             var pos = transform.position;
             pos.y = floorY;
             transform.position = pos;
-            MMSkinnedMeshRenderer.SetFloorHeight(floorY);
         }
 
         private void PredictRotations(quaternion currentRotation, float averagedDeltaTime)
