@@ -31,12 +31,13 @@ public abstract class MoSynthStage
     }
 
     /// <summary>
-    /// 
+    /// Transforms the pipeline pose in place. <see cref="PoseBuffer"/> is a view struct, so
+    /// the by-value parameter aliases the caller's pose data.
     /// </summary>
-    /// <param name="pose"></param>
+    /// <param name="pose">The pipeline pose; its layout is the owning component's PoseLayout.</param>
     /// <param name="deltaTime"></param>
     /// <returns>Return false to tell MSC to stop at this stage.</returns>
-    public abstract bool Apply(PoseVector pose, float deltaTime);
+    public abstract bool Apply(PoseBuffer pose, float deltaTime);
 
     public virtual void OnDestroy()
     {

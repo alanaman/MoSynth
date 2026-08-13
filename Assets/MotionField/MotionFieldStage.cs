@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using AnimationTools;
 using MotionMatching;
 using Python.Runtime;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -30,6 +32,7 @@ public class MotionFieldStage : MoSynthStage, IDisposable
     private dynamic _currentContacts;
 
     private Transform _rootTransform;
+    private MotionSynthesisComponent _owner;
 
     /// <summary>
     /// Sink for the Python side's own diagnostics.
@@ -140,6 +143,8 @@ public class MotionFieldStage : MoSynthStage, IDisposable
     {
         if (_isInitialized || _initializationFailed) return;
 
+        _owner = motionSynthesisComponent;
+
         if (config == null)
         {
             Debug.LogError("[MotionField] MotionFieldStage has no MotionFieldConfig assigned.");
@@ -165,7 +170,6 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 dynamic motionFieldModule = PythonRuntime.Import("MotionField");
 
                 string dataPath = config.GetAssetPath();
-                var poseSet = config.GetOrImportPoseSet();
                 
                 var animData = _actionPredictor.load_animations(dataPath, config.name);
                 _skeleton = animData[0];
@@ -304,7 +308,7 @@ public class MotionFieldStage : MoSynthStage, IDisposable
         LastChosenSlot = (int)debug[2];
     }
 
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
         if (!_isInitialized) return true;
 
@@ -331,23 +335,28 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 float[] lvArray = (float[])poseArrays[2];
                 float[] lavArray = (float[])poseArrays[3];
 
-                pose.leftFootContact = (bool)poseArrays[4];
-                pose.rightFootContact = (bool)poseArrays[5];
+                pose.SetBool(_owner.LeftFootContactHandle, (bool)poseArrays[4]);
+                pose.SetBool(_owner.RightFootContactHandle, (bool)poseArrays[5]);
 
-                int numJoints = pose.jointLocalPositions.Length;
+                var positions = pose.Positions;
+                var rotations = pose.Rotations;
+                var velocities = pose.Velocities;
+                var angularVelocities = pose.AngularVelocities;
+
+                int numJoints = positions.Length;
 
                 for (int i = 0; i < numJoints; i++)
                 {
-                    pose.jointLocalPositions[i] = new Unity.Mathematics.float3(
+                    positions[i] = new float3(
                         posArray[i * 3], posArray[i * 3 + 1], posArray[i * 3 + 2]);
 
-                    pose.jointLocalRotations[i] = new Unity.Mathematics.quaternion(
+                    rotations[i] = new quaternion(
                         quatArray[i * 4], quatArray[i * 4 + 1], quatArray[i * 4 + 2], quatArray[i * 4 + 3]);
 
-                    pose.jointLocalVelocities[i] = new Unity.Mathematics.float3(
+                    velocities[i] = new float3(
                         lvArray[i * 3], lvArray[i * 3 + 1], lvArray[i * 3 + 2]);
 
-                    pose.jointLocalAngularVelocities[i] = new Unity.Mathematics.float3(
+                    angularVelocities[i] = new float3(
                         lavArray[i * 3], lavArray[i * 3 + 1], lavArray[i * 3 + 2]);
                 }
             }

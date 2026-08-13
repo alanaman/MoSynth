@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -28,27 +29,30 @@ public class RootMotionCorrectionStage : MoSynthStage
         _rootRotation = _root.rotation;
     }
 
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
+
         if (_hasRootJumped)
         {
-            _animSpacePos = pose.jointLocalPositions[0];
-            _animSpaceRot = pose.jointLocalRotations[0];
+            _animSpacePos = positions[0];
+            _animSpaceRot = rotations[0];
             _transformPosAtLastJump = _owner.transform.position;
             _transformRotAtLastJump = _owner.transform.rotation;
-            
+
             _hasRootJumped = false;
         }
         else
         {
-            var newAnimSpacePos = pose.jointLocalPositions[0];
-            var newAnimSpaceRot = pose.jointLocalRotations[0];
-            var posWrtLastJump = math.mul(math.inverse(_animSpaceRot), 
+            var newAnimSpacePos = positions[0];
+            var newAnimSpaceRot = rotations[0];
+            var posWrtLastJump = math.mul(math.inverse(_animSpaceRot),
                                    (newAnimSpacePos - _animSpacePos));
             var rotWrtLastJump = math.mul(math.inverse(_animSpaceRot), newAnimSpaceRot);
-            
-            pose.jointLocalPositions[0] = _transformPosAtLastJump + math.mul(_transformRotAtLastJump, posWrtLastJump);
-            pose.jointLocalRotations[0] = math.mul(_transformRotAtLastJump, rotWrtLastJump);
+
+            positions[0] = _transformPosAtLastJump + math.mul(_transformRotAtLastJump, posWrtLastJump);
+            rotations[0] = math.mul(_transformRotAtLastJump, rotWrtLastJump);
         }
         return true;
     }

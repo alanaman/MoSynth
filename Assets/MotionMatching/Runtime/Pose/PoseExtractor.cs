@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Collections;
 using Unity.Mathematics;
 using System;
 using AnimationTools;
@@ -19,9 +20,7 @@ public static class PoseExtractor
     {
         // Set Poses
         var nFrames = animationClip.FrameCount;
-        var poses = new PoseVector[nFrames - 1];
         var nBvhJoints = animationClip.Skeleton.BoneCount;
-        var nPoseSetJoints = nBvhJoints + 1; // +1 for SimulationBone
 
         if (!animationClip.Skeleton.TryFindByHumanBone(HumanBodyBones.LeftToes, out var leftToesBoneIndex))
         {
@@ -38,69 +37,74 @@ public static class PoseExtractor
 
         var rightToesIndex = rightToesBoneIndex + 1; // +1 for SimulationBone
 
-        // Legacy contact-extraction path (GetWorldSpaceVelocity) walks a MotionMatching.Skeleton's
-        // Joint parent chain, unshifted (no SimulationBone) — mirror the SkeletonAsset bone list
-        // into that legacy shape rather than touching ExtractPoseContacts itself.
-        var bvhSkeleton = new Skeleton();
+        // The animation skeleton's own unshifted parent hierarchy, followed verbatim by the
+        // contact-velocity walk (see GetContactVelocity).
+        var localParentIndex = new int[nBvhJoints];
         for (var i = 0; i < nBvhJoints; i++)
         {
-            var bone = animationClip.Skeleton.GetBone(i);
-            bvhSkeleton.AddJoint(new Skeleton.Joint(bone.name, i, bone.parentIndex, bone.restLocalPosition, bone.humanBone));
+            localParentIndex[i] = animationClip.Skeleton.GetBone(i).parentIndex;
         }
+
+        var frames = poseSet.BeginClip(nFrames - 1, animationClip.FrameTime);
 
         for (var i = 0; i < nFrames - 1; i++)
         {
-            poses[i] = new PoseVector(nPoseSetJoints);
-            ExtractPose(ref poses[i], animationClip, i, source);
+            ExtractPose(frames[i], animationClip, i, source);
         }
 
         for (var i = 0; i < nFrames - 2; i++)
         {
-            ExtractPoseVelocities(ref poses[i], poses[i + 1], animationClip);
+            ExtractPoseVelocities(frames[i], frames[i + 1], animationClip);
         }
-        var lastPose = new PoseVector(nPoseSetJoints);
-        ExtractPose(ref lastPose, animationClip, nFrames - 1, source);
-        ExtractPoseVelocities(ref poses[^1], lastPose, animationClip);
+
+        var lastPose = PoseBuffer.Allocate(poseSet.PoseLayout, Allocator.Temp);
+        try
+        {
+            ExtractPose(lastPose, animationClip, nFrames - 1, source);
+            ExtractPoseVelocities(frames[frames.Count - 1], lastPose, animationClip);
+        }
+        finally
+        {
+            lastPose.Dispose();
+        }
 
         for (var i = 0; i < nFrames - 1; i++)
         {
             // Note: this requires velocities to be pre-calculated
-            ExtractPoseContacts(ref poses[i],
-                bvhSkeleton,
+            ExtractPoseContacts(frames[i],
+                localParentIndex,
                 leftToesIndex,
                 rightToesIndex,
-                source.ContactVelocityThreshold);
+                source.ContactVelocityThreshold,
+                poseSet.LeftFootContactHandle,
+                poseSet.RightFootContactHandle);
         }
 
+        SmoothContacts(frames, poseSet.LeftFootContactHandle, poseSet.RightFootContactHandle);
 
-        SmoothContacts(poses);
-
-        if (poseSet.AddClip(poses, animationClip.FrameTime, animationClip.tags))
-        {
-            return true;
-        }
-
-        return false;
+        poseSet.EndClip(animationClip.tags);
+        return true;
     }
 
-    private static void SmoothContacts(PoseVector[] poses)
+    private static void SmoothContacts(PoseSet.PoseFrameRange frames, BoolHandle leftHandle, BoolHandle rightHandle)
     {
         const int windowsRadius = 6;
         // Median filter to remove small regions where contact is either active or inactive
-        var leftFootContact = new bool[poses.Length];
-        var rightFootContact = new bool[poses.Length];
-        for (var i = 0; i < poses.Length; i++)
+        var count = frames.Count;
+        var leftFootContact = new bool[count];
+        var rightFootContact = new bool[count];
+        for (var i = 0; i < count; i++)
         {
-            leftFootContact[i] = poses[i].leftFootContact;
-            rightFootContact[i] = poses[i].rightFootContact;
+            var frame = frames[i];
+            leftFootContact[i] = frame.GetBool(leftHandle);
+            rightFootContact[i] = frame.GetBool(rightHandle);
         }
 
         // Median Filter
         Span<bool> leftFootContactWindow = stackalloc bool[windowsRadius * 2 + 1];
         Span<bool> rightFootContactWindow = stackalloc bool[windowsRadius * 2 + 1];
-        for (var i = 0; i < poses.Length; i++)
+        for (var i = 0; i < count; i++)
         {
-            var pose = poses[i];
             var windowIndex = 0;
             for (var j = -windowsRadius; j <= windowsRadius; j++)
             {
@@ -110,10 +114,10 @@ public static class PoseExtractor
                     leftFootContactWindow[windowIndex] = leftFootContact[0];
                     rightFootContactWindow[windowIndex] = rightFootContact[0];
                 }
-                else if (index >= poses.Length)
+                else if (index >= count)
                 {
-                    leftFootContactWindow[windowIndex] = leftFootContact[poses.Length - 1];
-                    rightFootContactWindow[windowIndex] = rightFootContact[poses.Length - 1];
+                    leftFootContactWindow[windowIndex] = leftFootContact[count - 1];
+                    rightFootContactWindow[windowIndex] = rightFootContact[count - 1];
                 }
                 else
                 {
@@ -151,77 +155,134 @@ public static class PoseExtractor
 
             // Find median
             var medianIndex = windowsRadius;
-            pose.leftFootContact = leftFootContactWindow[medianIndex];
-            pose.rightFootContact = rightFootContactWindow[medianIndex];
-            poses[i] = pose;
+            var frame = frames[i];
+            frame.SetBool(leftHandle, leftFootContactWindow[medianIndex]);
+            frame.SetBool(rightHandle, rightFootContactWindow[medianIndex]);
         }
     }
 
-    private static void ExtractPose(ref PoseVector pose, AnnotatedAnimationClip animationClip, int frameIndex,
+    private static void ExtractPose(PoseBuffer pose, AnnotatedAnimationClip animationClip, int frameIndex,
         IPoseSetSource source)
     {
         var frame = animationClip.GetFrame(frameIndex);
         var rotations = frame.Rotations;
         var skeleton = animationClip.Skeleton;
+        var posePositions = pose.Positions;
+        var poseRotations = pose.Rotations;
 
         // Joints
-        for (var i = 1; i < pose.jointLocalPositions.Length; i++)
+        for (var i = 1; i < posePositions.Length; i++)
         {
             // rest offsets come from the skeleton, not the frame's positions section (slot 0 there is root motion)
-            pose.jointLocalPositions[i] = skeleton.GetBone(i - 1).restLocalPosition;
-            pose.jointLocalRotations[i] = rotations[i - 1];
+            posePositions[i] = skeleton.GetBone(i - 1).restLocalPosition;
+            poseRotations[i] = rotations[i - 1];
         }
 
         // SimulationBone
         // position and direction are hips projected on the ground
-        Vector3 frameRootMotion = (float3)frame.Positions[0];
+        Vector3 frameRootMotion = frame.Positions[0];
         var sbPos = new Vector3(frameRootMotion.x, 0.0f, frameRootMotion.z);
-        Vector3 hipsForwardDir = (Quaternion)rotations[0] * (Vector3)(float3)source.HipsForwardLocalVector;
+        var hipsForwardDir = (Quaternion)rotations[0] * source.HipsForwardLocalVector;
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);
-        pose.jointLocalPositions[0] = sbPos;
-        pose.jointLocalRotations[0] = sbRot;
+        posePositions[0] = sbPos;
+        poseRotations[0] = sbRot;
 
         // make first joint (hips) position and direction relative to the simulation bone
         var inverseSbRot = math.inverse(sbRot);
-        pose.jointLocalPositions[1] = math.mul(inverseSbRot, frameRootMotion - sbPos);
-        pose.jointLocalRotations[1] = math.mul(inverseSbRot, (quaternion)rotations[0]);
+        posePositions[1] = math.mul(inverseSbRot, (float3)(frameRootMotion - sbPos));
+        poseRotations[1] = math.mul(inverseSbRot, (quaternion)rotations[0]);
     }
 
-    private static void ExtractPoseVelocities(ref PoseVector pose, in PoseVector nextPose, AnnotatedAnimationClip animationClip)
+    private static void ExtractPoseVelocities(PoseBuffer pose, PoseBuffer nextPose, AnnotatedAnimationClip animationClip)
     {
-        for (var jointIdx = 0; jointIdx < pose.jointLocalPositions.Length; jointIdx++)
-        {
-            var nextPos = nextPose.jointLocalPositions[jointIdx];
-            var pos = pose.jointLocalPositions[jointIdx];
-            pose.jointLocalVelocities[jointIdx] = (nextPos - pos) / animationClip.FrameTime;
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
+        var velocities = pose.Velocities;
+        var angularVelocities = pose.AngularVelocities;
+        var nextPositions = nextPose.Positions;
+        var nextRotations = nextPose.Rotations;
 
-            var nextRot = nextPose.jointLocalRotations[jointIdx];
-            var rot = pose.jointLocalRotations[jointIdx];
-            pose.jointLocalAngularVelocities[jointIdx] =
+        for (var jointIdx = 0; jointIdx < positions.Length; jointIdx++)
+        {
+            var nextPos = nextPositions[jointIdx];
+            var pos = positions[jointIdx];
+            velocities[jointIdx] = (nextPos - pos) / animationClip.FrameTime;
+
+            var nextRot = nextRotations[jointIdx];
+            var rot = rotations[jointIdx];
+            angularVelocities[jointIdx] =
                 MathExtensions.AngularVelocity(rot, nextRot, animationClip.FrameTime);
         }
 
         // root motion
-        var vel = (nextPose.jointLocalPositions[0] - pose.jointLocalPositions[0]) / animationClip.FrameTime;
+        var vel = (nextPositions[0] - positions[0]) / animationClip.FrameTime;
 
         // transform the root velocity so that it is
         // with respect to the root space of the current pose
-        vel = math.mul(math.inverse(pose.jointLocalRotations[0]), vel);
-        pose.jointLocalVelocities[0] = vel;
+        vel = math.mul(math.inverse(rotations[0]), vel);
+        velocities[0] = vel;
     }
 
-    private static void ExtractPoseContacts(ref PoseVector pose, Skeleton skeleton, int leftToesIndex,
-        int rightToesIndex, float contactVelocityThreshold)
+    private static void ExtractPoseContacts(PoseBuffer pose, int[] localParentIndex, int leftToesIndex,
+        int rightToesIndex, float contactVelocityThreshold, BoolHandle leftHandle, BoolHandle rightHandle)
     {
         // Contact with the ground when the joint is below a velocity threshold
         // TODO: Consider distance from the ground/contact when the joint is below a velocity threshold
-        var leftToeVel = skeleton.GetWorldSpaceVelocity(skeleton.Joints[leftToesIndex], pose);
-        var rightToeVel = skeleton.GetWorldSpaceVelocity(skeleton.Joints[rightToesIndex], pose);
+        var leftToeVel = GetContactVelocity(pose, localParentIndex, leftToesIndex);
+        var rightToeVel = GetContactVelocity(pose, localParentIndex, rightToesIndex);
 
-        pose.leftFootContact = math.length(leftToeVel) < contactVelocityThreshold;
-        pose.rightFootContact = math.length(rightToeVel) < contactVelocityThreshold;
+        pose.SetBool(leftHandle, math.length(leftToeVel) < contactVelocityThreshold);
+        pose.SetBool(rightHandle, math.length(rightToeVel) < contactVelocityThreshold);
+    }
+
+    /// <summary>
+    /// World-space velocity of a contact joint via FK over the pose. The walk starts at the
+    /// SimulationBone-shifted index but follows <paramref name="localParentIndex"/> — the
+    /// animation skeleton's own unshifted hierarchy — so only the first read is guaranteed to
+    /// land on the intended bone. The shipped databases' contacts were generated by exactly
+    /// this walk; it must stay byte-reproducible, so do not "correct" the topology or swap in
+    /// <see cref="PoseFK.CharacterVelocity"/>.
+    /// </summary>
+    private static float3 GetContactVelocity(PoseBuffer pose, int[] localParentIndex, int startIndex)
+    {
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
+        var velocities = pose.Velocities;
+        var angularVelocities = pose.AngularVelocities;
+
+        var posAcc = float3.zero;
+        var linVelAcc = float3.zero;
+        var angVelAcc = float3.zero;
+
+        var index = startIndex;
+        while (index != 0) // while not root
+        {
+            var p = positions[index];
+            var q = rotations[index];
+            var v = velocities[index];
+            var w = angularVelocities[index];
+
+            var rotatedPosAcc = math.mul(q, posAcc);
+
+            // Spatial velocity transfer formula: V = v + (w x rotated_pos) + q * V_acc
+            linVelAcc = v + math.cross(w, rotatedPosAcc) + math.mul(q, linVelAcc);
+            angVelAcc = w + math.mul(q, angVelAcc);
+            posAcc = p + rotatedPosAcc;
+
+            index = localParentIndex[index];
+        }
+
+        // Apply root (Simulation Bone) transform
+        var rootQ = rotations[0];
+        var rootV = velocities[0];
+        var rootW = angularVelocities[0];
+
+        var rootRotatedPosAcc = math.mul(rootQ, posAcc);
+        linVelAcc = rootV + math.cross(rootW, rootRotatedPosAcc) + math.mul(rootQ, linVelAcc);
+
+        return linVelAcc;
     }
 }
 }

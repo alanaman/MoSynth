@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AnimationTools;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -9,7 +10,17 @@ namespace MotionMatching
 {
 public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 {
-    [NonSerialized] public PoseVector CurrentPose;
+    [NonSerialized] public PoseBuffer CurrentPose;
+
+    /// <summary>Layout of <see cref="CurrentPose"/> and the pose passed to every stage's Apply.</summary>
+    public PoseLayout PoseLayout { get; private set; }
+
+    /// <summary>Foot-contact Bool channels of the pipeline pose.</summary>
+    public BoolHandle LeftFootContactHandle { get; private set; }
+    public BoolHandle RightFootContactHandle { get; private set; }
+
+    // Reused every LateUpdate as the mutable pose the stage chain runs on.
+    private PoseBuffer _scratchPose;
 
     private SkeletonAsset _skeleton;
     public SkeletonAsset Skeleton => _skeleton;
@@ -186,7 +197,8 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
         ConstructCurrentPoseFromSkeletonTransforms();
 
-        var pose = new PoseVector(CurrentPose);
+        _scratchPose.CopyFrom(CurrentPose);
+        var pose = _scratchPose;
         foreach (var stage in stages)
         {
             if (stage.isEnabled)
@@ -203,18 +215,21 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     void InitCurrentPose()
     {
-        CurrentPose = new PoseVector(_skeleton.BoneCount);
+        PoseLayout = MmPoseLayoutBuilder.Build(_skeleton, out var contacts);
+        LeftFootContactHandle = contacts.Left;
+        RightFootContactHandle = contacts.Right;
 
+        CurrentPose = PoseBuffer.Allocate(PoseLayout, Allocator.Persistent);
+        _scratchPose = PoseBuffer.Allocate(PoseLayout, Allocator.Persistent);
+
+        var positions = CurrentPose.Positions;
+        var rotations = CurrentPose.Rotations;
         for (var i = 0; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.jointLocalRotations[i] = SkeletonTransforms[i].localRotation;
-            CurrentPose.jointLocalPositions[i] = SkeletonTransforms[i].localPosition;
-            CurrentPose.jointLocalVelocities[i] = float3.zero;
-            CurrentPose.jointLocalAngularVelocities[i] = float3.zero;
+            rotations[i] = SkeletonTransforms[i].localRotation;
+            positions[i] = SkeletonTransforms[i].localPosition;
         }
-
-        CurrentPose.leftFootContact = false;
-        CurrentPose.rightFootContact = false;
+        // Velocities, angular velocities and contacts are already zeroed by Allocate.
     }
 
     void ConstructCurrentPoseFromSkeletonTransforms()
@@ -232,33 +247,41 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
         //
         // pose.JointLocalPositions[0] = math.mul(_inverseAnimationSpaceOriginRot, localSpacePos) + _animationSpaceOriginPos;
 
-        for (var i = 0; i < CurrentPose.jointLocalAngularVelocities.Length; i++)
+        var positions = CurrentPose.Positions;
+        var rotations = CurrentPose.Rotations;
+        var velocities = CurrentPose.Velocities;
+        var angularVelocities = CurrentPose.AngularVelocities;
+
+        for (var i = 0; i < angularVelocities.Length; i++)
         {
-            var inverseLocalRotation = Quaternion.Inverse(CurrentPose.jointLocalRotations[i]);
-            CurrentPose.jointLocalAngularVelocities[i] =
+            var inverseLocalRotation = Quaternion.Inverse(rotations[i]);
+            angularVelocities[i] =
                 (SkeletonTransforms[i].localRotation * inverseLocalRotation).eulerAngles;
-            CurrentPose.jointLocalVelocities[i] =
-                (float3)SkeletonTransforms[i].localPosition - CurrentPose.jointLocalPositions[i];
+            velocities[i] =
+                (float3)SkeletonTransforms[i].localPosition - positions[i];
         }
 
-        CurrentPose.jointLocalPositions[0] = SkeletonTransforms[0].localPosition;
-        CurrentPose.jointLocalRotations[0] = SkeletonTransforms[0].localRotation;
+        positions[0] = SkeletonTransforms[0].localPosition;
+        rotations[0] = SkeletonTransforms[0].localRotation;
 
         for (var i = 1; i < SkeletonTransforms.Length; i++)
         {
-            CurrentPose.jointLocalRotations[i] = SkeletonTransforms[i].localRotation;
+            rotations[i] = SkeletonTransforms[i].localRotation;
         }
 
         // hip
-        CurrentPose.jointLocalPositions[1] = SkeletonTransforms[1].localPosition;
+        positions[1] = SkeletonTransforms[1].localPosition;
 
 
         // CurrentPose.LeftFootContact = ?;
         // CurrentPose.RightFootContact = ?;
     }
 
-    private void ApplyPoseToSkeletonTransforms(PoseVector pose)
+    private void ApplyPoseToSkeletonTransforms(PoseBuffer pose)
     {
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
+
         // Motion
         // if (rootPositionsMask)
         // {
@@ -270,19 +293,19 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
         for (var i = 1; i < _skeleton.BoneCount; i++)
         {
-            SkeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
+            SkeletonTransforms[i].localRotation = rotations[i];
         }
 
         // hips
-        SkeletonTransforms[1].localPosition = pose.jointLocalPositions[1];
+        SkeletonTransforms[1].localPosition = positions[1];
 
         // root
         if (rootPositionsMask)
         {
             var rootTransform = SkeletonTransforms[0];
             rootTransform.localPosition +=
-                rootTransform.localRotation * pose.jointLocalVelocities[0] * _animationDeltaTime;
-            var angVel = pose.jointLocalAngularVelocities[0];
+                rootTransform.localRotation * pose.Velocities[0] * _animationDeltaTime;
+            var angVel = pose.AngularVelocities[0];
             var rootRotation = MathExtensions.QuaternionFromScaledAngleAxis(angVel * _animationDeltaTime);
             rootTransform.localRotation = rootRotation * rootTransform.localRotation;
         }
@@ -346,6 +369,9 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
         {
             stage?.OnDestroy();
         }
+
+        if (CurrentPose.IsCreated) CurrentPose.Dispose();
+        if (_scratchPose.IsCreated) _scratchPose.Dispose();
     }
 
 

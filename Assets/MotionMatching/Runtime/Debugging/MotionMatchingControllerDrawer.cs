@@ -69,7 +69,7 @@ public class MotionMatchingControllerDrawer : MonoBehaviour
                 {
                     Gizmos.color = Color.red + Color.cyan * ((float)p / feature.framesPrediction.Length);
                     int frame = currentFrame + feature.framesPrediction[p];
-                    mmc.PoseSet.GetPose(frame, out PoseVector futurePose);
+                    var futurePose = mmc.PoseSet.GetPoseBuffer(frame);
                     var simulationBoneTransform = mmc.GetSimulationBoneWorldSpaceTransform(futurePose);
                     var worldPositions = mmc.PoseSet.GetWorldPositions(futurePose, simulationBoneTransform);
                     for (int i = 2; i < mmc.PoseSet.SkeletonAsset.BoneCount; i++)

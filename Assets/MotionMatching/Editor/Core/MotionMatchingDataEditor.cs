@@ -7,8 +7,6 @@ using System;
 
 namespace MotionMatching
 {
-using Joint = Skeleton.Joint;
-
 [CustomEditor(typeof(MotionMatchingData))]
 public class MotionMatchingDataEditor : UnityEditor.Editor
 {

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AnimationTools;
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -10,92 +11,165 @@ public class PoseSetStorageTests
 {
     private const float FrameTime = 1f / 30f;
 
-    private static PoseSet BuildPoseSet(out Skeleton mmSkeleton)
+    private static PoseSet BuildPoseSet(out SkeletonAsset skeleton)
     {
-        mmSkeleton = MmTestData.BuildMmSkeleton();
-        var poseSet = new PoseSet(maximumFramesPrediction: 0);
-        poseSet.SetSkeleton(MmTestData.BuildSkeletonAsset(mmSkeleton));
+        skeleton = MmTestData.BuildSkeletonAsset();
+        var poseSet = new PoseSet();
+        poseSet.SetSkeleton(skeleton);
         return poseSet;
     }
 
-    private static PoseVector[] BuildPoses(Skeleton mmSkeleton, int count, uint seedOffset = 0)
+    private static void AssertPoseEqual(PoseBuffer expected, PoseBuffer actual, int jointCount)
     {
-        var poses = new PoseVector[count];
-        for (var i = 0; i < count; i++)
-        {
-            poses[i] = MmTestData.BuildRandomPose(mmSkeleton, (uint)(i + 1) + seedOffset);
-            poses[i].leftFootContact = i % 2 == 0;
-            poses[i].rightFootContact = i % 3 == 0;
-        }
+        var expectedPositions = expected.Positions;
+        var actualPositions = actual.Positions;
+        var expectedRotations = expected.Rotations;
+        var actualRotations = actual.Rotations;
+        var expectedVelocities = expected.Velocities;
+        var actualVelocities = actual.Velocities;
+        var expectedAngularVelocities = expected.AngularVelocities;
+        var actualAngularVelocities = actual.AngularVelocities;
 
-        return poses;
-    }
-
-    private static void AssertPoseEqual(PoseVector expected, PoseVector actual, int jointCount)
-    {
         for (var i = 0; i < jointCount; i++)
         {
-            Assert.AreEqual(expected.jointLocalPositions[i], actual.jointLocalPositions[i]);
-            Assert.AreEqual(expected.jointLocalRotations[i].value, actual.jointLocalRotations[i].value);
-            Assert.AreEqual(expected.jointLocalVelocities[i], actual.jointLocalVelocities[i]);
-            Assert.AreEqual(expected.jointLocalAngularVelocities[i], actual.jointLocalAngularVelocities[i]);
+            Assert.AreEqual(expectedPositions[i], actualPositions[i]);
+            Assert.AreEqual(expectedRotations[i].value, actualRotations[i].value);
+            Assert.AreEqual(expectedVelocities[i], actualVelocities[i]);
+            Assert.AreEqual(expectedAngularVelocities[i], actualAngularVelocities[i]);
         }
-
-        Assert.AreEqual(expected.leftFootContact, actual.leftFootContact);
-        Assert.AreEqual(expected.rightFootContact, actual.rightFootContact);
     }
 
     [Test]
     public void AddClipThenGetPose_RoundTripsExactly()
     {
-        var poseSet = BuildPoseSet(out var mmSkeleton);
-        var poses = BuildPoses(mmSkeleton, 10);
-
-        Assert.IsTrue(poseSet.AddClip(poses, FrameTime, new List<AnnotatedAnimationClip.Tag>()));
-        Assert.AreEqual(poses.Length, poseSet.NumberPoses);
-
-        for (var i = 0; i < poses.Length; i++)
+        var poseSet = BuildPoseSet(out var skeleton);
+        const int count = 10;
+        var frames = poseSet.BeginClip(count, FrameTime);
+        for (var i = 0; i < count; i++)
         {
-            poseSet.GetPose(i, out var actual);
-            AssertPoseEqual(poses[i], actual, mmSkeleton.Joints.Count);
+            var frame = frames[i];
+            MmTestData.FillRandomPose(frame, skeleton, (uint)(i + 1));
+            frame.SetBool(poseSet.LeftFootContactHandle, i % 2 == 0);
+            frame.SetBool(poseSet.RightFootContactHandle, i % 3 == 0);
+        }
+
+        poseSet.EndClip(new List<AnnotatedAnimationClip.Tag>());
+
+        Assert.AreEqual(count, poseSet.NumberPoses);
+
+        var expected = PoseBuffer.Allocate(poseSet.PoseLayout, Allocator.Temp);
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                MmTestData.FillRandomPose(expected, skeleton, (uint)(i + 1));
+                expected.SetBool(poseSet.LeftFootContactHandle, i % 2 == 0);
+                expected.SetBool(poseSet.RightFootContactHandle, i % 3 == 0);
+
+                var actual = poseSet.GetPoseBuffer(i);
+                AssertPoseEqual(expected, actual, skeleton.BoneCount);
+                Assert.AreEqual(expected.GetBool(poseSet.LeftFootContactHandle), actual.GetBool(poseSet.LeftFootContactHandle));
+                Assert.AreEqual(expected.GetBool(poseSet.RightFootContactHandle), actual.GetBool(poseSet.RightFootContactHandle));
+            }
+        }
+        finally
+        {
+            expected.Dispose();
         }
     }
 
     [Test]
     public void StorageGrowth_PreservesEarlierPoses()
     {
-        var poseSet = BuildPoseSet(out var mmSkeleton);
-        var firstClip = BuildPoses(mmSkeleton, 50);
-        var secondClip = BuildPoses(mmSkeleton, 80, seedOffset: 1000);
+        var poseSet = BuildPoseSet(out var skeleton);
+        const int firstCount = 50;
+        const int secondCount = 80;
+        const uint secondSeedOffset = 1000;
 
-        poseSet.AddClip(firstClip, FrameTime, new List<AnnotatedAnimationClip.Tag>());
-        poseSet.AddClip(secondClip, FrameTime, new List<AnnotatedAnimationClip.Tag>());
+        var firstFrames = poseSet.BeginClip(firstCount, FrameTime);
+        for (var i = 0; i < firstCount; i++)
+        {
+            var frame = firstFrames[i];
+            MmTestData.FillRandomPose(frame, skeleton, (uint)(i + 1));
+            frame.SetBool(poseSet.LeftFootContactHandle, i % 2 == 0);
+            frame.SetBool(poseSet.RightFootContactHandle, i % 3 == 0);
+        }
 
-        Assert.AreEqual(firstClip.Length + secondClip.Length, poseSet.NumberPoses);
-        poseSet.GetPose(0, out var first);
-        AssertPoseEqual(firstClip[0], first, mmSkeleton.Joints.Count);
-        poseSet.GetPose(firstClip.Length + secondClip.Length - 1, out var last);
-        AssertPoseEqual(secondClip[^1], last, mmSkeleton.Joints.Count);
+        poseSet.EndClip(new List<AnnotatedAnimationClip.Tag>());
+
+        var secondFrames = poseSet.BeginClip(secondCount, FrameTime);
+        for (var i = 0; i < secondCount; i++)
+        {
+            var frame = secondFrames[i];
+            MmTestData.FillRandomPose(frame, skeleton, (uint)(i + 1) + secondSeedOffset);
+            frame.SetBool(poseSet.LeftFootContactHandle, i % 2 == 0);
+            frame.SetBool(poseSet.RightFootContactHandle, i % 3 == 0);
+        }
+
+        poseSet.EndClip(new List<AnnotatedAnimationClip.Tag>());
+
+        Assert.AreEqual(firstCount + secondCount, poseSet.NumberPoses);
+
+        var expected = PoseBuffer.Allocate(poseSet.PoseLayout, Allocator.Temp);
+        try
+        {
+            MmTestData.FillRandomPose(expected, skeleton, 1u);
+            expected.SetBool(poseSet.LeftFootContactHandle, true);
+            expected.SetBool(poseSet.RightFootContactHandle, true);
+            var first = poseSet.GetPoseBuffer(0);
+            AssertPoseEqual(expected, first, skeleton.BoneCount);
+
+            var lastLocalIndex = secondCount - 1;
+            MmTestData.FillRandomPose(expected, skeleton, (uint)(lastLocalIndex + 1) + secondSeedOffset);
+            expected.SetBool(poseSet.LeftFootContactHandle, lastLocalIndex % 2 == 0);
+            expected.SetBool(poseSet.RightFootContactHandle, lastLocalIndex % 3 == 0);
+            var last = poseSet.GetPoseBuffer(firstCount + secondCount - 1);
+            AssertPoseEqual(expected, last, skeleton.BoneCount);
+        }
+        finally
+        {
+            expected.Dispose();
+        }
     }
 
     [Test]
     public void GetPoseBuffer_AliasesStorageAndExposesContacts()
     {
-        var poseSet = BuildPoseSet(out var mmSkeleton);
-        var poses = BuildPoses(mmSkeleton, 3);
-        poseSet.AddClip(poses, FrameTime, new List<AnnotatedAnimationClip.Tag>());
-
-        for (var i = 0; i < poses.Length; i++)
+        var poseSet = BuildPoseSet(out var skeleton);
+        const int count = 3;
+        var frames = poseSet.BeginClip(count, FrameTime);
+        for (var i = 0; i < count; i++)
         {
-            var frame = poseSet.GetPoseBuffer(i);
-            var rotations = frame.Rotations;
-            for (var j = 0; j < mmSkeleton.Joints.Count; j++)
-            {
-                Assert.AreEqual(poses[i].jointLocalRotations[j].value, rotations[j].value);
-            }
+            var frame = frames[i];
+            MmTestData.FillRandomPose(frame, skeleton, (uint)(i + 1));
+            frame.SetBool(poseSet.LeftFootContactHandle, i % 2 == 0);
+            frame.SetBool(poseSet.RightFootContactHandle, i % 3 == 0);
+        }
 
-            Assert.AreEqual(poses[i].leftFootContact, frame.GetBool(poseSet.LeftFootContactHandle));
-            Assert.AreEqual(poses[i].rightFootContact, frame.GetBool(poseSet.RightFootContactHandle));
+        poseSet.EndClip(new List<AnnotatedAnimationClip.Tag>());
+
+        var expected = PoseBuffer.Allocate(poseSet.PoseLayout, Allocator.Temp);
+        try
+        {
+            for (var i = 0; i < count; i++)
+            {
+                MmTestData.FillRandomPose(expected, skeleton, (uint)(i + 1));
+
+                var frame = poseSet.GetPoseBuffer(i);
+                var rotations = frame.Rotations;
+                var expectedRotations = expected.Rotations;
+                for (var j = 0; j < skeleton.BoneCount; j++)
+                {
+                    Assert.AreEqual(expectedRotations[j].value, rotations[j].value);
+                }
+
+                Assert.AreEqual(i % 2 == 0, frame.GetBool(poseSet.LeftFootContactHandle));
+                Assert.AreEqual(i % 3 == 0, frame.GetBool(poseSet.RightFootContactHandle));
+            }
+        }
+        finally
+        {
+            expected.Dispose();
         }
     }
 
@@ -115,21 +189,21 @@ public class PoseSetStorageTests
         {
             bvhAsset.SetBones(bvhBones, bvhBones.Count + 1);
 
-            var poseSet = new PoseSet(maximumFramesPrediction: 0);
+            var poseSet = new PoseSet();
             poseSet.SetSkeletonFromBvh(bvhAsset);
             var asset = poseSet.SkeletonAsset;
-            var expected = MmTestData.BuildMmSkeleton();
+            var expected = MmTestData.BuildSkeletonAsset();
 
             Assert.IsNotNull(asset);
-            Assert.AreEqual(expected.Joints.Count, asset.BoneCount);
+            Assert.AreEqual(expected.BoneCount, asset.BoneCount);
             for (var i = 0; i < asset.BoneCount; i++)
             {
                 var bone = asset.GetBone(i);
-                var joint = expected.Joints[i];
-                Assert.AreEqual(joint.name, bone.name);
-                Assert.AreEqual(i == 0 ? -1 : joint.parentIndex, bone.parentIndex);
-                Assert.AreEqual((Vector3)joint.localOffset, (Vector3)bone.restLocalPosition);
-                Assert.AreEqual(joint.type, bone.humanBone);
+                var expectedBone = expected.GetBone(i);
+                Assert.AreEqual(expectedBone.name, bone.name);
+                Assert.AreEqual(i == 0 ? -1 : expectedBone.parentIndex, bone.parentIndex);
+                Assert.AreEqual((Vector3)expectedBone.restLocalPosition, (Vector3)bone.restLocalPosition);
+                Assert.AreEqual(expectedBone.humanBone, bone.humanBone);
                 Assert.AreEqual(quaternion.identity.value, bone.restLocalRotation.value);
             }
         }
@@ -144,13 +218,14 @@ public class PoseSetStorageTests
     {
         // MmTestData's skeleton has left-side bones only, forcing the right contact channel
         // onto a fallback bone; both handles must still resolve and stay independent.
-        var poseSet = BuildPoseSet(out var mmSkeleton);
-        var pose = MmTestData.BuildRandomPose(mmSkeleton, 5u);
-        pose.leftFootContact = true;
-        pose.rightFootContact = false;
-        poseSet.AddClip(pose);
+        var poseSet = BuildPoseSet(out var skeleton);
+        var frames = poseSet.BeginClip(1, FrameTime);
+        var frame = frames[0];
+        MmTestData.FillRandomPose(frame, skeleton, 5u);
+        frame.SetBool(poseSet.LeftFootContactHandle, true);
+        frame.SetBool(poseSet.RightFootContactHandle, false);
+        poseSet.EndClip(new List<AnnotatedAnimationClip.Tag>());
 
-        var frame = poseSet.GetPoseBuffer(0);
         Assert.IsTrue(poseSet.LeftFootContactHandle.IsValid);
         Assert.IsTrue(poseSet.RightFootContactHandle.IsValid);
         Assert.IsTrue(frame.GetBool(poseSet.LeftFootContactHandle));
@@ -159,6 +234,20 @@ public class PoseSetStorageTests
         frame.SetBool(poseSet.RightFootContactHandle, true);
         Assert.IsTrue(frame.GetBool(poseSet.LeftFootContactHandle));
         Assert.IsTrue(frame.GetBool(poseSet.RightFootContactHandle));
+    }
+
+    [Test]
+    public void Layout_SharedBetweenBuilderCalls()
+    {
+        var skeleton = MmTestData.BuildSkeletonAsset();
+
+        var first = MmPoseLayoutBuilder.Build(skeleton, out _);
+        var second = MmPoseLayoutBuilder.Build(skeleton, out _);
+        Assert.AreSame(first, second);
+
+        var poseSet = new PoseSet();
+        poseSet.SetSkeleton(skeleton);
+        Assert.AreSame(first, poseSet.PoseLayout);
     }
 }
 }

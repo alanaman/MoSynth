@@ -558,7 +558,7 @@ namespace MotionMatching
             // Extract Features
             for (var poseIndex = 0; poseIndex < nPoses; ++poseIndex)
             {
-                if (poseSet.IsPoseValidForPrediction(poseIndex))
+                if (poseSet.IsPoseValidForPrediction(poseIndex, mmData.MaximumFramesPrediction))
                 {
                     _valid[poseIndex] = true;
                     ExtractFeature(poseSet, poseIndex, jointsTrajectory, jointsPose, jointsEnvironment, mmData);
@@ -574,13 +574,13 @@ namespace MotionMatching
         {
             var featureIndex = poseIndex * FeatureSize;
             var nextPose = poseIndex + 1;
-            if (nextPose >= poseSet.NumberPoses - poseSet.MaximumFramesPrediction)
+            if (nextPose >= poseSet.NumberPoses - mmData.MaximumFramesPrediction)
             {
                 nextPose = poseIndex;
             }
             var nextFeatureIndex = nextPose * FeatureSize;
-            poseSet.GetPose(poseIndex, out var pose);
-            poseSet.GetPose(nextPose, out var poseNext);
+            var pose = poseSet.GetPoseBuffer(poseIndex);
+            var poseNext = poseSet.GetPoseBuffer(nextPose);
             var skeletonData = poseSet.SkeletonAsset.GetSkeletonData();
             // Compute local features based on the Simulation Bone
             // so hips and feet are local to a stable position with respect to the character
@@ -654,8 +654,9 @@ namespace MotionMatching
                                               int[] joints, int featureIt, int predictionOffset, float3 characterOrigin, float3 characterForward,
                                               MotionMatchingData mmData, bool isStartFeature, in SkeletonData skeletonData)
         {
-            poseSet.GetPose(futurePoseIndex, out var futurePose, out var animationClip);
-            poseSet.GetPose(nextFuturePoseIndex, out var nextFuturePose, out var nextAnimationClip);
+            var futurePose = poseSet.GetPoseBuffer(futurePoseIndex);
+            var animationClip = poseSet.GetAnimationClipIndex(futurePoseIndex);
+            var nextFuturePose = poseSet.GetPoseBuffer(nextFuturePoseIndex);
 
             float3 value = new();
             switch (feature.featureType)
@@ -756,49 +757,49 @@ namespace MotionMatching
             return isStartFeature;
         }
 
-        private static void GetTrajectoryPosition(PoseVector pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterOrigin, float3 characterForward,
+        private static void GetTrajectoryPosition(PoseBuffer pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterOrigin, float3 characterForward,
                                                   out float3 futureLocalPosition)
         {
             float3 worldPosition;
             if (simulationBone)
             {
-                worldPosition = pose.jointLocalPositions[0];
+                worldPosition = pose.Positions[0];
             }
             else
             {
-                worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
+                worldPosition = PoseBufferFK.WorldPosition(skeleton, pose, jointIndex);
             }
             futureLocalPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
         }
-        private static void GetTrajectoryDirection(PoseVector pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterForward, MotionMatchingData mmData,
+        private static void GetTrajectoryDirection(PoseBuffer pose, in SkeletonData skeleton, bool simulationBone, int jointIndex, float3 characterForward, MotionMatchingData mmData,
                                                    out float3 futureLocalDirection)
         {
             quaternion worldRotation;
             float3 localForward;
             if (simulationBone)
             {
-                worldRotation = pose.jointLocalRotations[0];
+                worldRotation = pose.Rotations[0];
                 localForward = math.forward();
             }
             else
             {
-                worldRotation = PoseVectorFK.WorldRotation(skeleton, pose, jointIndex);
+                worldRotation = PoseBufferFK.WorldRotation(skeleton, pose, jointIndex);
                 localForward = mmData.GetLocalForward(jointIndex);
             }
             var worldDirection = math.mul(worldRotation, localForward);
             futureLocalDirection = GetLocalDirectionFromCharacter(worldDirection, characterForward);
         }
 
-        private static float3 GetJointPosition(PoseVector pose, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward)
+        private static float3 GetJointPosition(PoseBuffer pose, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward)
         {
-            var worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
+            var worldPosition = PoseBufferFK.WorldPosition(skeleton, pose, jointIndex);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             return localPosition;
         }
-        private static float3 GetJointVelocity(PoseVector pose, PoseVector poseNext, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward, float frameTime)
+        private static float3 GetJointVelocity(PoseBuffer pose, PoseBuffer poseNext, in SkeletonData skeleton, int jointIndex, float3 characterOrigin, float3 characterForward, float frameTime)
         {
-            var worldPosition = PoseVectorFK.WorldPosition(skeleton, pose, jointIndex);
-            var worldPositionNext = PoseVectorFK.WorldPosition(skeleton, poseNext, jointIndex);
+            var worldPosition = PoseBufferFK.WorldPosition(skeleton, pose, jointIndex);
+            var worldPositionNext = PoseBufferFK.WorldPosition(skeleton, poseNext, jointIndex);
             var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
             var localVelocity = (GetLocalPositionFromCharacter(worldPositionNext, characterOrigin, characterForward) - localPosition) / frameTime;
             return localVelocity;
@@ -810,10 +811,10 @@ namespace MotionMatching
         /// <param name="poseVector"></param>
         /// <param name="center"></param>
         /// <param name="forward"></param>
-        public static void GetWorldOriginCharacter(PoseVector poseVector, out float3 center, out float3 forward)
+        public static void GetWorldOriginCharacter(PoseBuffer poseVector, out float3 center, out float3 forward)
         {
-            center = poseVector.jointLocalPositions[0]; // Simulation Bone World Position
-            forward = math.mul(poseVector.jointLocalRotations[0], math.forward()); // Simulation Bone World Rotation
+            center = poseVector.Positions[0]; // Simulation Bone World Position
+            forward = math.mul(poseVector.Rotations[0], math.forward()); // Simulation Bone World Rotation
         }
 
         public static float3 GetLocalPositionFromCharacter(float3 worldPos, float3 characterOrigin, float3 characterForward)

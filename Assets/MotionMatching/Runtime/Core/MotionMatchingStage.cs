@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using AnimationTools;
 using Unity.Collections;
-using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Assertions;
@@ -124,7 +123,7 @@ public class MotionMatchingStage : MoSynthStage
         return _poseSet.SkeletonAsset;
     }
     
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
         // _searchTimeLeft -= deltaTime;
         if (_searchTimeLeft <= 0)
@@ -162,9 +161,7 @@ public class MotionMatchingStage : MoSynthStage
         _currentFrameTime += deltaTime * _databaseFrameRate;
         CurrentFrame = (int)math.floor(_currentFrameTime);
         
-        _poseSet.GetPose(CurrentFrame, out var newPose);
-
-        pose.CopyFrom(newPose);
+        pose.CopyFrom(_poseSet.GetPoseBuffer(CurrentFrame));
         
         // pose.jointLocalPositions[0] = math.transform(_animToWorld, pose.jointLocalPositions[0]);
         // pose.jointLocalRotations[0] = math.mul(new quaternion(_animToWorld), pose.jointLocalRotations[0]);
@@ -259,24 +256,7 @@ public class MotionMatchingStage : MoSynthStage
         
         // featureSet.NormalizeFeatureVector(_queryFeatureVector);
     }
-    
-    /// <summary>
-    /// Motion Matching will only search over those poses belonging to the query tag
-    /// </summary>
-    public void SetQueryTag(QueryTag query)
-    {
-        var poseSet = mmData.GetOrImportPoseSet();
-        query.ComputeRanges(poseSet);
-        var job = new SetTagBurst
-        {
-            MaximumFramesPrediction = poseSet.MaximumFramesPrediction,
-            TagMask = _tagMask,
-            StartRanges = query.GetStartRanges(),
-            EndRanges = query.GetEndRanges(),
-        };
-        job.Schedule().Complete();
-    }
-    
+
     // TODO call from editor
     public void UpdateFeatureWeights()
     {

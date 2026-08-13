@@ -67,13 +67,13 @@ public class PoseSerializer
                 // Serialize Poses
                 for (int i = 0; i < poseSet.NumberPoses; ++i)
                 {
-                    poseSet.GetPose(i, out PoseVector pose);
-                    WriteFloat3Array(writer, pose.jointLocalPositions);
-                    WriteQuaternionArray(writer, pose.jointLocalRotations);
-                    WriteFloat3Array(writer, pose.jointLocalVelocities);
-                    WriteFloat3Array(writer, pose.jointLocalAngularVelocities);
-                    writer.Write(pose.leftFootContact ? 1u : 0u);
-                    writer.Write(pose.rightFootContact ? 1u : 0u);
+                    var frame = poseSet.GetPoseBuffer(i);
+                    WriteFloat3Slice(writer, frame.Positions);
+                    WriteQuaternionSlice(writer, frame.Rotations);
+                    WriteFloat3Slice(writer, frame.Velocities);
+                    WriteFloat3Slice(writer, frame.AngularVelocities);
+                    writer.Write(frame.GetBool(poseSet.LeftFootContactHandle) ? 1u : 0u);
+                    writer.Write(frame.GetBool(poseSet.RightFootContactHandle) ? 1u : 0u);
                 }
 
                 // Serialize Tags
@@ -152,9 +152,9 @@ public class PoseSerializer
     /// in the specified path with name filename and extension .mmpose and .mmskeleton
     /// Returns true if poseSet was successfully deserialized, false otherwise
     /// </summary>
-    public bool Deserialize(string path, string fileName, IPoseSetSource source, out PoseSet poseSet)
+    public bool Deserialize(string path, string fileName, out PoseSet poseSet)
     {
-        poseSet = new PoseSet(source);
+        poseSet = new PoseSet();
 
         // --------------------
         // Read Skeleton File
@@ -200,18 +200,22 @@ public class PoseSerializer
                 byte[] quaternionBuffer = new byte[quaternionBufferSize];
 
                 poseSet.SetPoseCapacity(nPoses);
+                var frames = poseSet.AppendRawFrames((int)nPoses);
                 for (int i = 0; i < nPoses; i++)
                 {
-                    PoseVector pose = new PoseVector();
+                    var frame = frames[i];
+                    var positions = frame.Positions;
+                    var rotations = frame.Rotations;
+                    var velocities = frame.Velocities;
+                    var angularVelocities = frame.AngularVelocities;
 
                     // --- Read JointLocalPositions ---
                     var read = reader.Read(float3Buffer, 0, float3BufferSize);
                     Assert.IsTrue(read == float3BufferSize);
                     var positionsSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                    pose.jointLocalPositions = new float3[nJoints];
                     for (int j = 0; j < nJoints; j++)
                     {
-                        pose.jointLocalPositions[j] = new float3(
+                        positions[j] = new float3(
                             positionsSpan[j * 3],
                             positionsSpan[j * 3 + 1],
                             positionsSpan[j * 3 + 2]
@@ -222,10 +226,9 @@ public class PoseSerializer
                     read = reader.Read(quaternionBuffer, 0, quaternionBufferSize);
                     Assert.IsTrue(read == quaternionBufferSize);
                     Span<float> rotationsSpan = MemoryMarshal.Cast<byte, float>(quaternionBuffer);
-                    pose.jointLocalRotations = new quaternion[nJoints];
                     for (int j = 0; j < nJoints; j++)
                     {
-                        pose.jointLocalRotations[j] = new quaternion(
+                        rotations[j] = new quaternion(
                             rotationsSpan[j * 4],
                             rotationsSpan[j * 4 + 1],
                             rotationsSpan[j * 4 + 2],
@@ -237,10 +240,9 @@ public class PoseSerializer
                     read = reader.Read(float3Buffer, 0, float3BufferSize);
                     Assert.IsTrue(read == float3BufferSize);
                     Span<float> velocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                    pose.jointLocalVelocities = new float3[nJoints];
                     for (int j = 0; j < nJoints; j++)
                     {
-                        pose.jointLocalVelocities[j] = new float3(
+                        velocities[j] = new float3(
                             velocitiesSpan[j * 3],
                             velocitiesSpan[j * 3 + 1],
                             velocitiesSpan[j * 3 + 2]
@@ -251,10 +253,9 @@ public class PoseSerializer
                     read = reader.Read(float3Buffer, 0, float3BufferSize);
                     Assert.IsTrue(read == float3BufferSize);
                     Span<float> angularVelocitiesSpan = MemoryMarshal.Cast<byte, float>(float3Buffer);
-                    pose.jointLocalAngularVelocities = new float3[nJoints];
                     for (int j = 0; j < nJoints; j++)
                     {
-                        pose.jointLocalAngularVelocities[j] = new float3(
+                        angularVelocities[j] = new float3(
                             angularVelocitiesSpan[j * 3],
                             angularVelocitiesSpan[j * 3 + 1],
                             angularVelocitiesSpan[j * 3 + 2]
@@ -262,10 +263,8 @@ public class PoseSerializer
                     }
 
                     // --- Read contact flags ---
-                    pose.leftFootContact = reader.ReadUInt32() == 1u;
-                    pose.rightFootContact = reader.ReadUInt32() == 1u;
-
-                    poseSet.AddClip(pose);
+                    frame.SetBool(poseSet.LeftFootContactHandle, reader.ReadUInt32() == 1u);
+                    frame.SetBool(poseSet.RightFootContactHandle, reader.ReadUInt32() == 1u);
                 }
 
                 for (int i = 0; i < nTags; i++)

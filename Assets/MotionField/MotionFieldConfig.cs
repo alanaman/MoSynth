@@ -307,8 +307,8 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     {
         if (_poseSet != null) return _poseSet;
 
-        PoseSerializer serializer = new PoseSerializer();
-        if (serializer.Deserialize(GetAssetPath(), name, this, out PoseSet poseSet))
+        var serializer = new PoseSerializer();
+        if (serializer.Deserialize(GetAssetPath(), name, out PoseSet poseSet))
         {
             _poseSet = poseSet;
             return _poseSet;
@@ -332,7 +332,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
             clip.UpdateMecanimInformation(this);
         }
 
-        _poseSet = new PoseSet(this);
+        _poseSet = new PoseSet();
         _poseSet.SetSkeletonFromBvh(animationClips[0].Skeleton);
 
         for (int i = 0; i < animationClips.Count; i++)

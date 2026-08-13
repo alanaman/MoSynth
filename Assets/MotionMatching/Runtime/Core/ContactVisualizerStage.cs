@@ -8,10 +8,9 @@ using UnityEngine;
 namespace MotionMatching
 {
 /// <summary>
-/// Read-only pass-through stage that estimates foot-style contact from a
-/// <see cref="PoseVectorAdapter"/>-driven <see cref="PoseBuffer"/> and draws it as a
-/// gizmo-free debug marker. Exists to prove the AnimationTools adapter path end to end;
-/// it never mutates the pose.
+/// Read-only pass-through stage that estimates foot-style contact from a remapped
+/// <see cref="PoseBuffer"/> and draws it as a gizmo-free debug marker. Exists to prove the
+/// AnimationTools pose-remap path end to end; it never mutates the pose.
 /// </summary>
 [Serializable]
 public class ContactVisualizerStage : MoSynthStage
@@ -22,7 +21,8 @@ public class ContactVisualizerStage : MoSynthStage
     [SerializeField] private float markerSize = 0.08f;
 
     private MotionSynthesisComponent _component;
-    private PoseVectorAdapter _adapter;
+    private SkeletonAsset _effectiveSkeleton;
+    private SkeletonMap _map;
     private PoseBuffer _buffer;
     private SkeletonData _skeletonData;
     private bool _inert;
@@ -67,8 +67,13 @@ public class ContactVisualizerStage : MoSynthStage
             });
         }
 
-        _adapter = new PoseVectorAdapter(effectiveSkeleton, map, extraChannels);
-        _buffer = PoseBuffer.Allocate(_adapter.Layout, Allocator.Persistent);
+        _effectiveSkeleton = effectiveSkeleton;
+        _map = map;
+
+        var channels = MmPoseLayoutBuilder.BuildFullPoseChannels(effectiveSkeleton);
+        channels.AddRange(extraChannels);
+        var layout = PoseLayout.Build(effectiveSkeleton, channels);
+        _buffer = PoseBuffer.Allocate(layout, Allocator.Persistent);
         _skeletonData = effectiveSkeleton.GetSkeletonData();
 
         var handles = new List<BoolHandle>();
@@ -87,7 +92,7 @@ public class ContactVisualizerStage : MoSynthStage
                 continue;
             }
 
-            handles.Add(_adapter.Layout.BindBool(boneRef, ChannelUsage.Contact));
+            handles.Add(layout.BindBool(boneRef, ChannelUsage.Contact));
             assetIndices.Add(assetIndex);
             mmJointIndices.Add(mmJointIndex);
         }
@@ -97,11 +102,36 @@ public class ContactVisualizerStage : MoSynthStage
         _contactMmJointIndices = mmJointIndices.ToArray();
     }
 
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
         if (_inert) return true;
 
-        _adapter.Write(pose, _buffer);
+        var srcPositions = pose.Positions;
+        var srcRotations = pose.Rotations;
+        var srcVelocities = pose.Velocities;
+        var srcAngularVelocities = pose.AngularVelocities;
+        var dstPositions = _buffer.Positions;
+        var dstRotations = _buffer.Rotations;
+        var dstVelocities = _buffer.Velocities;
+        var dstAngularVelocities = _buffer.AngularVelocities;
+        var boneCount = _effectiveSkeleton.BoneCount;
+        for (var i = 0; i < boneCount; i++)
+        {
+            var mmIndex = _map.AssetToMm[i];
+            if (mmIndex < 0)
+            {
+                var bone = _effectiveSkeleton.GetBone(i);
+                dstPositions[i] = bone.restLocalPosition;
+                dstRotations[i] = bone.restLocalRotation;
+                dstVelocities[i] = float3.zero;
+                dstAngularVelocities[i] = float3.zero;
+                continue;
+            }
+            dstPositions[i] = srcPositions[mmIndex];
+            dstRotations[i] = srcRotations[mmIndex];
+            dstVelocities[i] = srcVelocities[mmIndex];
+            dstAngularVelocities[i] = srcAngularVelocities[mmIndex];
+        }
 
         for (var k = 0; k < _contactHandles.Length; k++)
         {

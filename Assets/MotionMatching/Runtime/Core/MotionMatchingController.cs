@@ -286,10 +286,10 @@ public class MotionMatchingController : MotionSynthesizer
 
     private void UpdateAnimationSpaceOrigin()
     {
-        PoseSet.GetPose(CurrentFrame, out var mmPose);
-        _animationSpaceOriginPos = mmPose.jointLocalPositions[0];
-        _animationSpaceOriginRot = mmPose.jointLocalRotations[0];
-        _inverseAnimationSpaceOriginRot = Quaternion.Inverse(mmPose.jointLocalRotations[0]);
+        var mmPose = PoseSet.GetPoseBuffer(CurrentFrame);
+        _animationSpaceOriginPos = mmPose.Positions[0];
+        _animationSpaceOriginRot = mmPose.Rotations[0];
+        _inverseAnimationSpaceOriginRot = Quaternion.Inverse(mmPose.Rotations[0]);
         _mmTransformOriginPos = SkeletonTransforms[0].position;
         _mmTransformOriginRot = SkeletonTransforms[0].rotation;
     }
@@ -382,21 +382,23 @@ public class MotionMatchingController : MotionSynthesizer
 
     private void UpdateTransformAndSkeleton(int frameIndex)
     {
-        
-        PoseSet.GetPose(frameIndex, out var pose);
+
+        var pose = PoseSet.GetPoseBuffer(frameIndex);
         if (inertialize)
         {
             _inertialization.Update(pose, inertializeHalfLife, Time.deltaTime);
         }
-        
+
         // Simulation Bone
         float3 previousPosition = SkeletonTransforms[0].position;
         quaternion previousRotation = SkeletonTransforms[0].rotation;
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
         // animation space to local space
-        var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot, 
-                            (pose.jointLocalPositions[0] - _animationSpaceOriginPos));
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, pose.jointLocalRotations[0]);
-        
+        var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
+                            (positions[0] - _animationSpaceOriginPos));
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, rotations[0]);
+
         // local space to world space
         SkeletonTransforms[0].SetPositionAndRotation(
             math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos,
@@ -415,22 +417,22 @@ public class MotionMatchingController : MotionSynthesizer
         }
         else
         {
-            for (int i = 1; i < pose.jointLocalRotations.Length; i++)
+            for (int i = 1; i < rotations.Length; i++)
             {
-                SkeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
+                SkeletonTransforms[i].localRotation = rotations[i];
             }
         }
 
         // Hips Position
         SkeletonTransforms[1].localPosition =
-            inertialize ? _inertialization.InertializedHips : pose.jointLocalPositions[1];
+            inertialize ? _inertialization.InertializedHips : positions[1];
         // Foot Lock
         UpdateFootLock(pose);
         // Post-processing the transforms
         OnSkeletonTransformUpdated?.Invoke();
     }
 
-    private void UpdateFootLock(PoseVector targetPose)
+    private void UpdateFootLock(PoseBuffer targetPose)
     {
         float3 currentLeftToesPosition = SkeletonTransforms[LeftToesIndex].position;
         float3 currentRightToesPosition = SkeletonTransforms[RightToesIndex].position;
@@ -475,7 +477,7 @@ public class MotionMatchingController : MotionSynthesizer
         // If the contact was previously inactive and now it is active,
         // transition to the locked contact state
         // Also, make sure the inertialization returns an almost 0 velocity before locking
-        if (!IsLeftFootContact && targetPose.leftFootContact &&
+        if (!IsLeftFootContact && targetPose.GetBool(PoseSet.LeftFootContactHandle) &&
             math.length(leftContactVelocity) < mmData.contactVelocityThreshold)
         {
             // Contact point is the current position of the foot
@@ -499,7 +501,7 @@ public class MotionMatchingController : MotionSynthesizer
         }
         // If we need to unlock or previously in contact but now not
         // we transition to the input position
-        else if (unlockLeftContact || (IsLeftFootContact && !targetPose.leftFootContact))
+        else if (unlockLeftContact || (IsLeftFootContact && !targetPose.GetBool(PoseSet.LeftFootContactHandle)))
         {
             IsLeftFootContact = false;
 
@@ -516,7 +518,7 @@ public class MotionMatchingController : MotionSynthesizer
         }
 
         // Same for Right Foot
-        if (!IsRightFootContact && targetPose.rightFootContact &&
+        if (!IsRightFootContact && targetPose.GetBool(PoseSet.RightFootContactHandle) &&
             math.length(rightContactVelocity) < mmData.contactVelocityThreshold)
         {
             IsRightFootContact = true;
@@ -536,7 +538,7 @@ public class MotionMatchingController : MotionSynthesizer
                     currentRightToesPosition, currentRightToesVelocity);
             }
         }
-        else if (unlockRightContact || (IsRightFootContact && !targetPose.rightFootContact))
+        else if (unlockRightContact || (IsRightFootContact && !targetPose.GetBool(PoseSet.RightFootContactHandle)))
         {
             IsRightFootContact = false;
 
@@ -574,13 +576,15 @@ public class MotionMatchingController : MotionSynthesizer
         }
     }
 
-    void UpdateSkeletonTransformsFromPose(PoseVector targetPose)
+    void UpdateSkeletonTransformsFromPose(PoseBuffer targetPose)
     {
+        var positions = targetPose.Positions;
+        var rotations = targetPose.Rotations;
         // animation space to local space
         var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
-            targetPose.jointLocalPositions[0] - _animationSpaceOriginPos);
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, targetPose.jointLocalRotations[0]);
-        
+            positions[0] - _animationSpaceOriginPos);
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, rotations[0]);
+
         // Simulation Bone
         float3 currentPos = SkeletonTransforms[0].position;
         quaternion currentRot = SkeletonTransforms[0].rotation;
@@ -591,17 +595,17 @@ public class MotionMatchingController : MotionSynthesizer
         RootVelocity = ((float3)SkeletonTransforms[0].position - currentPos) / Time.deltaTime;
         RootAngularVelocity = MathExtensions.AngularVelocity(
             currentRot, SkeletonTransforms[0].rotation, Time.deltaTime);
-        
+
         SkeletonTransforms[0].SetPositionAndRotation(newPos,newRot);
 
-        for (var i = 1; i < targetPose.jointLocalRotations.Length; i++)
+        for (var i = 1; i < rotations.Length; i++)
         {
-            SkeletonTransforms[i].localRotation = targetPose.jointLocalRotations[i];
+            SkeletonTransforms[i].localRotation = rotations[i];
         }
-        
+
         // Hips Position
         SkeletonTransforms[1].localPosition =
-            inertialize ? _inertialization.InertializedHips : targetPose.jointLocalPositions[1];
+            inertialize ? _inertialization.InertializedHips : positions[1];
     }
     
     /// <summary>
@@ -612,41 +616,6 @@ public class MotionMatchingController : MotionSynthesizer
         var job = new DisableTagBurst
         {
             TagMask = TagMask,
-        };
-        job.Schedule().Complete();
-        OnInputChangedQuickly();
-    }
-
-    /// <summary>
-    /// Motion Matching will only search over those poses belonging to the tag
-    /// </summary>
-    public void SetQueryTag(string tagName)
-    {
-        var animTag = PoseSet.GetTag(tagName);
-        // TODO: cache results to avoid duplicated computations...
-        var job = new SetTagBurst
-        {
-            MaximumFramesPrediction = PoseSet.MaximumFramesPrediction,
-            TagMask = TagMask,
-            StartRanges = animTag.GetStartRanges(),
-            EndRanges = animTag.GetEndRanges(),
-        };
-        job.Schedule().Complete();
-        OnInputChangedQuickly();
-    }
-
-    /// <summary>
-    /// Motion Matching will only search over those poses belonging to the query tag
-    /// </summary>
-    public void SetQueryTag(QueryTag query)
-    {
-        query.ComputeRanges(PoseSet);
-        var job = new SetTagBurst
-        {
-            MaximumFramesPrediction = PoseSet.MaximumFramesPrediction,
-            TagMask = TagMask,
-            StartRanges = query.GetStartRanges(),
-            EndRanges = query.GetEndRanges(),
         };
         job.Schedule().Complete();
         OnInputChangedQuickly();
@@ -797,12 +766,12 @@ public class MotionMatchingController : MotionSynthesizer
 
 #if UNITY_EDITOR
 
-    public Matrix4x4 GetSimulationBoneWorldSpaceTransform(PoseVector futurePose)
+    public Matrix4x4 GetSimulationBoneWorldSpaceTransform(PoseBuffer futurePose)
     {
         // animation space to local space
         var localSpacePos = math.mul(_inverseAnimationSpaceOriginRot,
-            futurePose.jointLocalPositions[0] - _animationSpaceOriginPos);
-        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.jointLocalRotations[0]);
+            futurePose.Positions[0] - _animationSpaceOriginPos);
+        var localSpaceRot = math.mul(_inverseAnimationSpaceOriginRot, futurePose.Rotations[0]);
         // local space to world space
         var simulationBonePos = math.mul(_mmTransformOriginRot, localSpacePos) + _mmTransformOriginPos;
         var simulationBoneRot = math.mul(_mmTransformOriginRot, localSpaceRot);

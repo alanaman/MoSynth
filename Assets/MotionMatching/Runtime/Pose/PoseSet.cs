@@ -11,13 +11,13 @@ namespace MotionMatching
 /// Stores the full pose representation of all poses for Motion Matching.
 /// Poses are stored as flat <see cref="PoseBuffer"/> frames in a single
 /// <see cref="PoseSequence"/> over a <see cref="AnimationTools.SkeletonAsset"/> whose bone
-/// index 0 is the SimulationBone; <see cref="GetPose"/> converts back to
-/// <see cref="PoseVector"/> through a <see cref="PoseVectorAdapter"/>.
+/// index 0 is the SimulationBone. Read frames with <see cref="GetPoseBuffer"/>; write new
+/// ones through <see cref="BeginClip"/>/<see cref="EndClip"/> or <see cref="AppendRawFrames"/>.
 /// </summary>
 public class PoseSet
 {
     // Public ---
-    public float FrameTime { get; private set; }
+    public float FrameTime { get; private set; } = -1.0f;
     public int NumberPoses => _poseCount;
     public int NumberClips => _clips.Count;
     public int NumberTags => _tags.Count;
@@ -26,39 +26,24 @@ public class PoseSet
     public SkeletonAsset SkeletonAsset => _skeletonAsset;
 
     /// <summary>Layout of the buffers returned by <see cref="GetPoseBuffer"/>.</summary>
-    public PoseLayout PoseLayout => _adapter?.Layout;
+    public PoseLayout PoseLayout => _layout;
 
     /// <summary>Reads the foot-contact Bool channels of a <see cref="GetPoseBuffer"/> frame.</summary>
     public BoolHandle LeftFootContactHandle => _leftFootContactHandle;
     public BoolHandle RightFootContactHandle => _rightFootContactHandle;
 
-    public readonly int MaximumFramesPrediction; // Number of prediction frames of the longest trajectory feature
-
     // Private ---
-    private readonly List<AnimationClip> _clips;
-    private readonly List<AnimationTag> _tags;
-    private readonly Dictionary<string, int> _tagNameToIndex;
+    private readonly List<AnimationClip> _clips = new();
+    private readonly List<AnimationTag> _tags = new();
+    private readonly Dictionary<string, int> _tagNameToIndex = new();
 
     private SkeletonAsset _skeletonAsset;
-    private PoseVectorAdapter _adapter;
+    private PoseLayout _layout;
     // Capacity view over Domain-backed storage; only the first _poseCount frames hold poses.
     private PoseSequence _poseStorage;
     private int _poseCount;
     private BoolHandle _leftFootContactHandle;
     private BoolHandle _rightFootContactHandle;
-
-    public PoseSet(IPoseSetSource source) : this(source.MaximumFramesPrediction)
-    {
-    }
-
-    public PoseSet(int maximumFramesPrediction)
-    {
-        _clips = new List<AnimationClip>();
-        _tags = new List<AnimationTag>();
-        _tagNameToIndex = new Dictionary<string, int>();
-        FrameTime = -1.0f;
-        MaximumFramesPrediction = maximumFramesPrediction;
-    }
 
     /// <summary>
     /// Set skeleton from BVH. Adds simulation bone as root joint
@@ -97,14 +82,14 @@ public class PoseSet
 
     /// <summary>
     /// Adopts an already-complete skeleton (SimulationBone expected at index 0) and rebuilds
-    /// the adapter/layout over it. Pose storage starts empty: every real caller sets the
+    /// the layout over it. Pose storage starts empty: every real caller sets the
     /// skeleton exactly once, before adding any pose.
     /// </summary>
     public void SetSkeleton(SkeletonAsset skeletonAsset)
     {
         Debug.Assert(_poseCount == 0, "Setting the skeleton discards previously stored poses");
         _skeletonAsset = skeletonAsset;
-        RebuildAdapterAndChannels();
+        RebuildLayout();
     }
 
     /// <summary>
@@ -122,93 +107,76 @@ public class PoseSet
         return asset;
     }
 
-    private void RebuildAdapterAndChannels()
+    private void RebuildLayout()
     {
-        var boneCount = _skeletonAsset.BoneCount;
-        var mmToAsset = new int[boneCount];
-        var assetToMm = new int[boneCount];
-        for (var i = 0; i < boneCount; i++)
-        {
-            mmToAsset[i] = i;
-            assetToMm[i] = i;
-        }
-        var map = new SkeletonMap { MmToAsset = mmToAsset, AssetToMm = assetToMm, IsIdentity = true };
-
-        var leftContactBone = PickContactBoneIndex(HumanBodyBones.LeftToes, HumanBodyBones.LeftFoot, 0);
-        var rightContactBone = PickContactBoneIndex(HumanBodyBones.RightToes, HumanBodyBones.RightFoot,
-            _skeletonAsset.BoneCount - 1);
-        // The layout rejects duplicate (bone, type, usage) triples, so a skeleton missing one
-        // side must still end up with two distinct host bones.
-        if (rightContactBone == leftContactBone)
-        {
-            rightContactBone = leftContactBone == 0 ? _skeletonAsset.BoneCount - 1 : 0;
-        }
-
-        var contactChannels = new List<ChannelDescriptor>
-        {
-            new() { boneId = _skeletonAsset.GetBone(leftContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact },
-            new() { boneId = _skeletonAsset.GetBone(rightContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact }
-        };
-
-        _adapter = new PoseVectorAdapter(_skeletonAsset, map, contactChannels);
-        _leftFootContactHandle = _adapter.Layout.BindBool(
-            BoneRef(leftContactBone), ChannelUsage.Contact);
-        _rightFootContactHandle = _adapter.Layout.BindBool(
-            BoneRef(rightContactBone), ChannelUsage.Contact);
+        _layout = MmPoseLayoutBuilder.Build(_skeletonAsset, out var contacts);
+        _leftFootContactHandle = contacts.Left;
+        _rightFootContactHandle = contacts.Right;
 
         _poseStorage = null;
         _poseCount = 0;
     }
 
-    private BoneReference BoneRef(int boneIndex)
+    /// <summary>
+    /// Writable view over a range of freshly appended frames. Frames are views into this
+    /// set's storage — never Dispose them.
+    /// </summary>
+    public readonly struct PoseFrameRange
     {
-        var bone = _skeletonAsset.GetBone(boneIndex);
-        return new BoneReference(bone.id, bone.name);
-    }
+        private readonly PoseSet _owner;
+        public readonly int Start;
+        public readonly int Count;
 
-    private int PickContactBoneIndex(HumanBodyBones toes, HumanBodyBones foot, int fallbackIndex)
-    {
-        if (_skeletonAsset.TryFindByHumanBone(toes, out var index)) return index;
-        if (_skeletonAsset.TryFindByHumanBone(foot, out index)) return index;
-        return fallbackIndex;
+        internal PoseFrameRange(PoseSet owner, int start, int count)
+        {
+            _owner = owner;
+            Start = start;
+            Count = count;
+        }
+
+        public PoseBuffer this[int localIndex] => _owner.GetPoseBuffer(Start + localIndex);
     }
 
     /// <summary>
-    /// Add the animation clip to the current pose set
-    /// Returns true if the clip was added, false if the skeleton is not compatible and the clip was not added
+    /// Registers a new animation clip of <paramref name="frameCount"/> poses and returns
+    /// writable frames for it (zero-initialized). Finish with <see cref="EndClip"/> so tag
+    /// ranges resolve against the clip's start offset.
     /// </summary>
-    public bool AddClip(PoseVector[] poses, float frameTime, List<AnnotatedAnimationClip.Tag> tags)
+    public PoseFrameRange BeginClip(int frameCount, float frameTime)
     {
         // Check if the skeleton and frameTime are compatible
         Debug.Assert(_skeletonAsset != null, "Skeleton should be set first. Use SetSkeleton(...)");
         if (FrameTime == -1.0f) FrameTime = frameTime;
         Debug.Assert(math.abs(FrameTime - frameTime) < 0.001f, "Frame time should be the same for all clips");
 
-        // Add poses
-        int start = _poseCount;
-        int nPoses = poses.Length;
+        var start = _poseCount;
+        _clips.Add(new AnimationClip(start, start + frameCount, frameTime));
+        EnsureCapacity(_poseCount + frameCount);
+        _poseCount += frameCount;
+        return new PoseFrameRange(this, start, frameCount);
+    }
 
-        _clips.Add(new AnimationClip(start, start + nPoses, frameTime));
-        EnsureCapacity(_poseCount + nPoses);
-        for (var i = 0; i < nPoses; i++)
-        {
-            WritePose(_poseCount + i, poses[i]);
-        }
-        _poseCount += nPoses;
-
+    /// <summary>Adds <paramref name="tags"/> to the clip opened by the last <see cref="BeginClip"/>.</summary>
+    public void EndClip(List<AnnotatedAnimationClip.Tag> tags)
+    {
         foreach (var tag in tags)
         {
             AddTag(_clips.Count - 1, tag);
         }
-
-        return true;
     }
 
-    public void AddClip(PoseVector pose)
+    /// <summary>
+    /// Appends <paramref name="frameCount"/> zero-initialized poses with no clip/tag
+    /// bookkeeping and returns writable frames — the deserialization path, where clips and
+    /// tags are registered separately.
+    /// </summary>
+    public PoseFrameRange AppendRawFrames(int frameCount)
     {
-        EnsureCapacity(_poseCount + 1);
-        WritePose(_poseCount, pose);
-        _poseCount++;
+        Debug.Assert(_skeletonAsset != null, "Skeleton should be set first. Use SetSkeleton(...)");
+        EnsureCapacity(_poseCount + frameCount);
+        var range = new PoseFrameRange(this, _poseCount, frameCount);
+        _poseCount += frameCount;
+        return range;
     }
 
     public void SetPoseCapacity(uint numPoses)
@@ -228,27 +196,19 @@ public class PoseSet
     /// </summary>
     private void EnsureCapacity(int poseCapacity)
     {
-        Debug.Assert(_adapter != null, "Skeleton should be set first. Use SetSkeleton(...)");
+        Debug.Assert(_layout != null, "Skeleton should be set first. Use SetSkeleton(...)");
         if (poseCapacity <= 0) return;
         if (_poseStorage != null && poseCapacity <= _poseStorage.FrameCount) return;
 
         var newCapacity = math.max(poseCapacity, _poseStorage == null ? 64 : _poseStorage.FrameCount * 2);
-        var floatCount = _adapter.Layout.FloatCount;
+        var floatCount = _layout.FloatCount;
         var newData = new NativeArray<float>(newCapacity * floatCount, Allocator.Domain, NativeArrayOptions.ClearMemory);
         if (_poseStorage != null)
         {
             NativeArray<float>.Copy(_poseStorage.Data, newData, _poseCount * floatCount);
         }
 
-        _poseStorage = new PoseSequence(_adapter.Layout, newData);
-    }
-
-    private void WritePose(int poseIndex, in PoseVector pose)
-    {
-        var frame = _poseStorage.GetFrame(poseIndex);
-        _adapter.Write(pose, frame);
-        frame.SetBool(_leftFootContactHandle, pose.leftFootContact);
-        frame.SetBool(_rightFootContactHandle, pose.rightFootContact);
+        _poseStorage = new PoseSequence(_layout, newData);
     }
 
     /// <summary>
@@ -297,20 +257,6 @@ public class PoseSet
     }
 
     /// <summary>
-    /// Add the set of poses to the current pose set
-    /// Used when deserializing from binary format
-    /// </summary>
-    public void AddClipDeserialized(PoseVector[] poses)
-    {
-        EnsureCapacity(_poseCount + poses.Length);
-        for (var i = 0; i < poses.Length; i++)
-        {
-            WritePose(_poseCount + i, poses[i]);
-        }
-        _poseCount += poses.Length;
-    }
-
-    /// <summary>
     /// Add the animation clip to the current clips
     /// Used when deserializing from binary format
     /// </summary>
@@ -322,7 +268,7 @@ public class PoseSet
         _clips.Add(clip);
     }
 
-    public bool IsPoseValidForPrediction(int poseIndex)
+    public bool IsPoseValidForPrediction(int poseIndex, int maxFramePrediction)
     {
         Debug.Assert(poseIndex >= 0 && poseIndex < _poseCount, "Pose index out of range");
         // Check the validity of the pose
@@ -332,7 +278,7 @@ public class PoseSet
             AnimationClip clip = _clips[i];
             if (poseIndex >= clip.Start && poseIndex < clip.End)
             {
-                if (poseIndex >= clip.End - MaximumFramesPrediction) isPredictionSafe = false;
+                if (poseIndex >= clip.End - maxFramePrediction) isPredictionSafe = false;
             }
         }
 
@@ -340,27 +286,11 @@ public class PoseSet
     }
 
     /// <summary>
-    /// Returns the pose at the given index.
-    /// Return true if the pose can be used for prediction
+    /// Returns the index of the animation clip that contains the pose at the given index.
     /// </summary>
-    public bool GetPose(int poseIndex, out PoseVector pose)
+    public int GetAnimationClipIndex(int poseIndex)
     {
-        bool isPredictionSafe = IsPoseValidForPrediction(poseIndex);
-        var frame = GetPoseBuffer(poseIndex);
-        pose = new PoseVector(_skeletonAsset.BoneCount);
-        _adapter.Read(frame, ref pose);
-        pose.leftFootContact = frame.GetBool(_leftFootContactHandle);
-        pose.rightFootContact = frame.GetBool(_rightFootContactHandle);
-        return isPredictionSafe;
-    }
-
-    /// <summary>
-    /// Returns the pose at the given index.
-    /// Return true if the pose can be used for prediction
-    /// </summary>
-    public bool GetPose(int poseIndex, out PoseVector pose, out int animationClip)
-    {
-        animationClip = -1;
+        var animationClip = -1;
         for (int clipIdx = 0; clipIdx < _clips.Count; ++clipIdx)
         {
             if (poseIndex >= _clips[clipIdx].Start && poseIndex < _clips[clipIdx].End)
@@ -371,7 +301,7 @@ public class PoseSet
         }
 
         Debug.Assert(animationClip != -1, "Clip index not found");
-        return GetPose(poseIndex, out pose);
+        return animationClip;
     }
 
     /// <summary>
@@ -388,13 +318,15 @@ public class PoseSet
     /// Returns the position of each joint in world space after applying FK using the pose.
     /// worldJoints has size SkeletonAsset.BoneCount
     /// </summary>
-    public NativeArray<float3> GetWorldPositions(PoseVector pose, quaternion inverseRotAnimationSpace,
+    public NativeArray<float3> GetWorldPositions(PoseBuffer pose, quaternion inverseRotAnimationSpace,
         float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
     {
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
 
         // animation space to local space
-        float3 localSpacePos = math.mul(inverseRotAnimationSpace, pose.jointLocalPositions[0] - posAnimationSpace);
-        quaternion localSpaceRot = math.mul(inverseRotAnimationSpace, pose.jointLocalRotations[0]);
+        float3 localSpacePos = math.mul(inverseRotAnimationSpace, positions[0] - posAnimationSpace);
+        quaternion localSpaceRot = math.mul(inverseRotAnimationSpace, rotations[0]);
         // local space to world space
         float3 simulationBonePos = math.mul(rotWorld, localSpacePos) + posWorld;
         quaternion simulationBoneRot = math.mul(rotWorld, localSpaceRot);
@@ -403,8 +335,10 @@ public class PoseSet
         return GetWorldPositions(pose, simulationBoneTransform);
     }
 
-    public NativeArray<float3> GetWorldPositions(PoseVector pose, Matrix4x4 simulationBoneTransform)
+    public NativeArray<float3> GetWorldPositions(PoseBuffer pose, Matrix4x4 simulationBoneTransform)
     {
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
         var boneCount = _skeletonAsset.BoneCount;
         var skeletonData = _skeletonAsset.GetSkeletonData();
         Span<Matrix4x4> localToWorldRes = stackalloc Matrix4x4[boneCount];
@@ -416,8 +350,7 @@ public class PoseSet
 
         for (int i = 1; i < boneCount; i++)
         {
-            Matrix4x4 current = Matrix4x4.TRS(pose.jointLocalPositions[i],
-                pose.jointLocalRotations[i], Vector3.one);
+            Matrix4x4 current = Matrix4x4.TRS(positions[i], rotations[i], Vector3.one);
             localToWorldRes[i] = localToWorldRes[skeletonData.ParentIndices[i]] * current;
         }
 

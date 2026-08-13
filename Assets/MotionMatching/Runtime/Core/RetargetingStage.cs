@@ -1,5 +1,6 @@
 using System;
 using AnimationTools;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -29,10 +30,14 @@ public class RetargetingStage : MoSynthStage
 
     private quaternion _hipsCorrection;
 
+    private PoseBuffer _sourcePoseScratch;
+
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         _owner = motionSynthesisComponent;
         _animator = motionSynthesisComponent.GetComponent<Animator>();
+
+        _sourcePoseScratch = PoseBuffer.Allocate(motionSynthesisComponent.PoseLayout, Allocator.Persistent);
 
         // TODO: use only one list of joints
         // currently animJoints dont have Joint.type set correctly
@@ -89,12 +94,15 @@ public class RetargetingStage : MoSynthStage
     }
 
 
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
         var animationSkeleton = _owner.Skeleton;
         var skeletonData = animationSkeleton.GetSkeletonData();
 
-        var sourcePose = new PoseVector(pose);
+        _sourcePoseScratch.CopyFrom(pose);
+        var sourcePose = _sourcePoseScratch;
+
+        var poseRotations = pose.Rotations;
 
         // Retargeting
         for (var i = 0; i < animationSkeleton.BoneCount - 1; i++)
@@ -106,7 +114,7 @@ public class RetargetingStage : MoSynthStage
             // TODO: precalculate for entire skeleton
 
             var newSourceRot =
-                PoseVectorFK.RootSpaceRotation(skeletonData, sourcePose, i + 1);
+                PoseBufferFK.RootSpaceRotation(skeletonData, sourcePose, i + 1);
 
             // targetTPoseRotation -> Local Target -> World (Target TPose)
             /*
@@ -130,11 +138,11 @@ public class RetargetingStage : MoSynthStage
                 );
 
 
-            var parentRot = PoseVectorFK.RootSpaceRotation(skeletonData, pose, skeletonData.ParentIndices[i + 1]);
+            var parentRot = PoseBufferFK.RootSpaceRotation(skeletonData, pose, skeletonData.ParentIndices[i + 1]);
 
             var newTargetLocalRot = Quaternion.Inverse(parentRot) * newTargetRot;
 
-            pose.jointLocalRotations[i + 1] = newTargetLocalRot;
+            poseRotations[i + 1] = newTargetLocalRot;
         }
 
         return true;
@@ -156,6 +164,11 @@ public class RetargetingStage : MoSynthStage
         //     hipsPos.y += _toesPenetrationMovingCorrection;
         //     _targetBones[0].position = hipsPos;
         // }
+    }
+
+    public override void OnDestroy()
+    {
+        if (_sourcePoseScratch.IsCreated) _sourcePoseScratch.Dispose();
     }
 }
 }

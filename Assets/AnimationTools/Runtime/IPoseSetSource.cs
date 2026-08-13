@@ -22,20 +22,11 @@ public interface IPoseSetSource
     /// <summary>Asset name. Doubles as the database folder and file base name.</summary>
     string name { get; }
 
-    /// <summary>Clips to extract, in order. The first one supplies the skeleton.</summary>
-    List<AnnotatedAnimationClip> AnimationClips { get; }
-
     /// <summary>Local axis of the hips pointing forward, used to orient the simulation bone.</summary>
     float3 HipsForwardLocalVector { get; }
 
     /// <summary>Foot speed below which a toe counts as planted.</summary>
     float ContactVelocityThreshold { get; }
-
-    /// <summary>
-    /// Frames of lookahead the longest trajectory feature needs, so poses too close to the end of a
-    /// clip can be excluded from prediction. Zero when the consumer has no trajectory features.
-    /// </summary>
-    int MaximumFramesPrediction { get; }
 
     /// <summary>
     /// Maps an animation channel name onto a Mecanim bone. Pose extraction needs this to locate the

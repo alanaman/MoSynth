@@ -107,7 +107,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         {
             PROFILE.BEGIN_SAMPLE_PROFILING("Pose Import");
             PoseSerializer serializer = new PoseSerializer();
-            if (!serializer.Deserialize(GetAssetPath(), name, this, out PoseSet poseSet))
+            if (!serializer.Deserialize(GetAssetPath(), name, out PoseSet poseSet))
             {
                 Debug.LogWarning("Failed to read pose set. Creating it in runtime instead.");
                 ImportPoseSet();
@@ -132,7 +132,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     public void ImportPoseSet()
     {
         ImportAnimations();
-        _poseSet = new PoseSet(this);
+        _poseSet = new PoseSet();
         _poseSet.SetSkeletonFromBvh(animationClips[0].Skeleton);
         for (int i = 0; i < animationClips.Count; i++)
         {

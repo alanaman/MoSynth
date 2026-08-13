@@ -1,12 +1,8 @@
-using System;
 using System.Collections.Generic;
 using AnimationTools;
-using AnimationTools.Editor;
 using Unity.Mathematics;
 using UnityEditor;
 using UnityEngine;
-// Types below (Skeleton, PoseVector, PoseSet, MotionMatchingData) live in the enclosing
-// MotionMatching namespace and resolve unqualified; no `using MotionMatching;` needed.
 
 namespace MotionMatching.Tests
 {
@@ -18,108 +14,64 @@ namespace MotionMatching.Tests
 static class MmTestData
 {
     /// <summary>SimulationBone(0) -&gt; Hips(1) -&gt; {Spine(2), LeftFoot(3) -&gt; LeftToe(4)}.</summary>
-    public static Skeleton BuildMmSkeleton()
+    public static SkeletonAsset BuildSkeletonAsset()
     {
-        var skeleton = new Skeleton();
-        skeleton.AddJoint(new Skeleton.Joint("SimulationBone", 0, -1, float3.zero, HumanBodyBones.LastBone));
-        skeleton.AddJoint(new Skeleton.Joint("Hips", 1, 0, new float3(0f, 1f, 0f), HumanBodyBones.Hips));
-        skeleton.AddJoint(new Skeleton.Joint("Spine", 2, 1, new float3(0f, 0.2f, 0f), HumanBodyBones.Spine));
-        skeleton.AddJoint(new Skeleton.Joint("LeftFoot", 3, 1, new float3(0.2f, -0.9f, 0f), HumanBodyBones.LeftFoot));
-        skeleton.AddJoint(new Skeleton.Joint("LeftToe", 4, 3, new float3(0f, -0.1f, 0.15f), HumanBodyBones.LeftToes));
-        return skeleton;
-    }
-
-    /// <summary>Converts an MM skeleton into a fresh, in-memory <see cref="SkeletonAsset"/>.</summary>
-    public static SkeletonAsset BuildSkeletonAsset(Skeleton mm)
-    {
-        var asset = ScriptableObject.CreateInstance<SkeletonAsset>();
-        SkeletonAssetAuthoring.BuildOrMerge(asset, ConvertToBoneSources(mm));
-        return asset;
-    }
-
-    /// <summary>
-    /// Inverse of <see cref="BuildSkeletonAsset"/>: rebuilds the legacy MM skeleton shape from
-    /// an asset, for parity tests that compare against the legacy FK implementation.
-    /// </summary>
-    public static Skeleton BuildMmSkeletonFromAsset(SkeletonAsset asset)
-    {
-        var skeleton = new Skeleton();
-        for (var i = 0; i < asset.BoneCount; i++)
+        var bones = new List<Bone>
         {
-            var bone = asset.GetBone(i);
-            skeleton.AddJoint(new Skeleton.Joint(bone.name, i, bone.parentIndex,
-                bone.restLocalPosition, bone.humanBone));
-        }
-
-        return skeleton;
-    }
-
-    // Mirrors MotionMatching.SkeletonAssetFromMmData.ConvertToBoneSources, which lives in the
-    // editor-only MotionMatching.Editor assembly that this test asmdef doesn't reference.
-    private static List<SkeletonAssetAuthoring.BoneSource> ConvertToBoneSources(Skeleton mmSkeleton)
-    {
-        var joints = mmSkeleton.Joints;
-        var source = new List<SkeletonAssetAuthoring.BoneSource>(joints.Count);
-
-        for (var i = 0; i < joints.Count; i++)
-        {
-            var joint = joints[i];
-
-            var parentIndex = joint.parentIndex;
-            if (parentIndex == i || parentIndex < 0)
+            new()
             {
-                if (i != 0)
-                {
-                    throw new InvalidOperationException(
-                        $"MM joint \"{joint.name}\" at index {i} has no valid parent " +
-                        $"(parentIndex {joint.parentIndex}) but is not the root.");
-                }
-
-                parentIndex = -1;
+                id = 1, name = "SimulationBone", parentIndex = -1, restLocalPosition = float3.zero,
+                restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LastBone
+            },
+            new()
+            {
+                id = 2, name = "Hips", parentIndex = 0, restLocalPosition = new float3(0f, 1f, 0f),
+                restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Hips
+            },
+            new()
+            {
+                id = 3, name = "Spine", parentIndex = 1, restLocalPosition = new float3(0f, 0.2f, 0f),
+                restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Spine
+            },
+            new()
+            {
+                id = 4, name = "LeftFoot", parentIndex = 1, restLocalPosition = new float3(0.2f, -0.9f, 0f),
+                restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftFoot
+            },
+            new()
+            {
+                id = 5, name = "LeftToe", parentIndex = 3, restLocalPosition = new float3(0f, -0.1f, 0.15f),
+                restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftToes
             }
+        };
 
-            source.Add(new SkeletonAssetAuthoring.BoneSource
-            {
-                name = joint.name,
-                parentIndex = parentIndex,
-                restLocalPosition = joint.localOffset,
-                restLocalRotation = quaternion.identity,
-                humanBone = joint.type
-            });
-        }
-
-        return source;
+        return PoseSet.CreateRuntimeSkeletonAsset(bones);
     }
 
     /// <summary>
-    /// A deterministic pseudo-random pose over <paramref name="mm"/>. Positions are only
-    /// meaningful for the root (0) and hips (1), matching <see cref="PoseExtractor"/>'s
-    /// convention -- every other joint holds its rest offset. Rotations are uniformly
-    /// distributed normalized quaternions; velocities/angular velocities are uniform in
-    /// [-2, 2]. Both contacts are false.
+    /// Fills <paramref name="pose"/> with a deterministic pseudo-random pose over
+    /// <paramref name="asset"/>. Positions are only meaningful for the root (0) and hips (1),
+    /// matching <see cref="PoseExtractor"/>'s convention -- every other joint holds its rest
+    /// offset. Rotations are uniformly distributed normalized quaternions; velocities/angular
+    /// velocities are uniform in [-2, 2]. Contacts are left untouched (Allocate zero-initializes
+    /// them, i.e. false).
     /// </summary>
-    public static PoseVector BuildRandomPose(Skeleton mm, uint seed)
+    public static void FillRandomPose(PoseBuffer pose, SkeletonAsset asset, uint seed)
     {
         var random = new Unity.Mathematics.Random(seed == 0 ? 1u : seed);
-        var jointCount = mm.Joints.Count;
-        var pose = new PoseVector(jointCount);
+        var boneCount = asset.BoneCount;
+        var positions = pose.Positions;
+        var rotations = pose.Rotations;
+        var velocities = pose.Velocities;
+        var angularVelocities = pose.AngularVelocities;
 
-        for (var i = 0; i < jointCount; i++)
+        for (var i = 0; i < boneCount; i++)
         {
-            pose.jointLocalPositions[i] = i <= 1 ? random.NextFloat3(-2f, 2f) : mm.Joints[i].localOffset;
-            pose.jointLocalRotations[i] = RandomRotation(ref random);
-            pose.jointLocalVelocities[i] = random.NextFloat3(-2f, 2f);
-            pose.jointLocalAngularVelocities[i] = random.NextFloat3(-2f, 2f);
+            positions[i] = i <= 1 ? random.NextFloat3(-2f, 2f) : asset.GetBone(i).restLocalPosition;
+            rotations[i] = random.NextQuaternionRotation();
+            velocities[i] = random.NextFloat3(-2f, 2f);
+            angularVelocities[i] = random.NextFloat3(-2f, 2f);
         }
-
-        pose.leftFootContact = false;
-        pose.rightFootContact = false;
-        return pose;
-    }
-
-    private static quaternion RandomRotation(ref Unity.Mathematics.Random random)
-    {
-        return random.NextQuaternionRotation();
     }
 
     /// <summary>

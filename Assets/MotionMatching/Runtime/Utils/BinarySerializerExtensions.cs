@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Collections;
 using Unity.Mathematics;
 using System.IO;
 
@@ -44,6 +45,22 @@ namespace MotionMatching
             foreach (float3 value in array)
             {
                 WriteFloat3(writer, value);
+            }
+        }
+
+        public static void WriteFloat3Slice(BinaryWriter writer, NativeSlice<float3> slice)
+        {
+            for (var i = 0; i < slice.Length; i++)
+            {
+                WriteFloat3(writer, slice[i]);
+            }
+        }
+
+        public static void WriteQuaternionSlice(BinaryWriter writer, NativeSlice<quaternion> slice)
+        {
+            for (var i = 0; i < slice.Length; i++)
+            {
+                WriteQuaternion(writer, slice[i]);
             }
         }
         

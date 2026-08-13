@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
+using AnimationTools;
 using MotionMatching;
 using NetMQ;
 using NetMQ.Sockets;
 using Newtonsoft.Json;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace MotionField
@@ -12,14 +14,27 @@ namespace MotionField
 [Serializable]
 public class MfConnector : MoSynthStage, IDisposable
 {
+    [Serializable]
+    private class PoseVectorDto
+    {
+        public float3[] jointLocalPositions;
+        public quaternion[] jointLocalRotations;
+        public float3[] jointLocalVelocities;
+        public float3[] jointLocalAngularVelocities;
+        public bool leftFootContact;
+        public bool rightFootContact;
+    }
+
     private Thread _clientThread;
     private volatile bool _isRunning;
     private int _disposeState;
     private volatile string _workerError;
 
+    private MotionSynthesisComponent _owner;
+
     // Thread-safe queues for communication between main thread and ZMQ thread
     private ConcurrentQueue<float> _deltaTimeRequests = new();
-    private ConcurrentQueue<PoseVector> _receivedPoses = new();
+    private ConcurrentQueue<PoseVectorDto> _receivedPoses = new();
 
     [SerializeField] private int port = 5555;
 
@@ -29,6 +44,8 @@ public class MfConnector : MoSynthStage, IDisposable
 
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
+        _owner = motionSynthesisComponent;
+
         // A serialized stage can be initialized again after leaving and re-entering play mode.
         Interlocked.Exchange(ref _disposeState, 0);
         _workerError = null;
@@ -47,7 +64,7 @@ public class MfConnector : MoSynthStage, IDisposable
         _clientThread.Start();
     }
 
-    public override bool Apply(PoseVector pose, float deltaTime)
+    public override bool Apply(PoseBuffer pose, float deltaTime)
     {
         if (_workerError != null)
         {
@@ -65,7 +82,7 @@ public class MfConnector : MoSynthStage, IDisposable
 
         // Process received poses on Unity's main thread
         float dequeueStartTime = Time.realtimeSinceStartup;
-        while (_receivedPoses.TryDequeue(out PoseVector newPose))
+        while (_receivedPoses.TryDequeue(out PoseVectorDto newPose))
         {
             if ((Time.realtimeSinceStartup - dequeueStartTime) * 1000f >= dequeueTimeoutMs)
             {
@@ -74,7 +91,25 @@ public class MfConnector : MoSynthStage, IDisposable
             }
 
             Debug.Log($"Successfully received pose! Left Foot Contact: {newPose.leftFootContact}");
-            pose.CopyFrom(newPose);
+
+            var positions = pose.Positions;
+            var rotations = pose.Rotations;
+            var velocities = pose.Velocities;
+            var angularVelocities = pose.AngularVelocities;
+
+            int numJoints = positions.Length;
+
+            for (int i = 0; i < numJoints; i++)
+            {
+                positions[i] = newPose.jointLocalPositions[i];
+                rotations[i] = newPose.jointLocalRotations[i];
+                velocities[i] = newPose.jointLocalVelocities[i];
+                angularVelocities[i] = newPose.jointLocalAngularVelocities[i];
+            }
+
+            pose.SetBool(_owner.LeftFootContactHandle, newPose.leftFootContact);
+            pose.SetBool(_owner.RightFootContactHandle, newPose.rightFootContact);
+
             return true;
         }
 
@@ -115,7 +150,7 @@ public class MfConnector : MoSynthStage, IDisposable
                         continue;
                     }
 
-                    PoseVector pose = JsonConvert.DeserializeObject<PoseVector>(message);
+                    PoseVectorDto pose = JsonConvert.DeserializeObject<PoseVectorDto>(message);
                     _receivedPoses.Enqueue(pose);
                     break;
                 }

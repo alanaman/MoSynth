@@ -64,12 +64,14 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
     {
         if (play)
         {
-            _poseSet.GetPose(currentFrame, out PoseVector pose);
-            _skeletonTransforms[0].localPosition = pose.jointLocalPositions[0];
-            _skeletonTransforms[1].localPosition = pose.jointLocalPositions[1];
-            for (int i = 0; i < pose.jointLocalRotations.Length; i++)
+            var pose = _poseSet.GetPoseBuffer(currentFrame);
+            var positions = pose.Positions;
+            var rotations = pose.Rotations;
+            _skeletonTransforms[0].localPosition = positions[0];
+            _skeletonTransforms[1].localPosition = positions[1];
+            for (int i = 0; i < rotations.Length; i++)
             {
-                _skeletonTransforms[i].localRotation = pose.jointLocalRotations[i];
+                _skeletonTransforms[i].localRotation = rotations[i];
             }
             currentFrame = (currentFrame + 1) % _poseSet.NumberPoses;
         }
@@ -113,7 +115,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         if (!play) return;
         // Character
         int currentFrame = math.max(0, this.currentFrame - 1); // FeatureDebug increments CurrentFrame after update... OnDrawGizmos is called after update
-        _poseSet.GetPose(currentFrame, out PoseVector pose);
+        var pose = _poseSet.GetPoseBuffer(currentFrame);
         FeatureSet.GetWorldOriginCharacter(pose, out float3 characterOrigin, out float3 characterForward);
         Gizmos.color = new Color(1.0f, 0.0f, 0.5f, 1.0f);
         Gizmos.DrawSphere(characterOrigin, spheresRadius);
@@ -140,11 +142,11 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             int leftToesIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(HumanBodyBones.LeftToes);
             int rightToesIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(HumanBodyBones.RightToes);
             Gizmos.color = Color.green;
-            if (pose.leftFootContact)
+            if (pose.GetBool(_poseSet.LeftFootContactHandle))
             {
                 Gizmos.DrawSphere(_skeletonTransforms[leftToesIndex].position, spheresRadius);
             }
-            if (pose.rightFootContact)
+            if (pose.GetBool(_poseSet.RightFootContactHandle))
             {
                 Gizmos.DrawSphere(_skeletonTransforms[rightToesIndex].position, spheresRadius);
             }
