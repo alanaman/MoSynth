@@ -1,6 +1,8 @@
 using UnityEditor;
 using UnityEngine;
+using Unity.Collections;
 using Unity.Mathematics;
+using AnimationTools;
 using MotionMatching;
 using System.Collections.Generic;
 using UnityEditor.AnimatedValues;
@@ -29,11 +31,19 @@ namespace MotionMatching.Editor
         private Material _gridMaterial;
         private Mesh _gridMesh;
 
+        private SkeletonAsset _skeletonAsset;
+        private SkeletonData _skeletonData;
+        private PoseBuffer _poseBuffer;
+        private NativeArray<float3> _fkPositions;
+        private NativeArray<quaternion> _fkRotations;
+
         private void OnEnable()
         {
             _bvhAnimation = (BvhAnimation)target;
             EditorApplication.update += UpdateSimulation;
             _previousTime = (float)EditorApplication.timeSinceStartup;
+
+            InitPoseState();
 
             Shader shader = Shader.Find("Hidden/Internal-Colored");
             if (shader != null)
@@ -58,6 +68,29 @@ namespace MotionMatching.Editor
                 _gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             }
             CreateGridMesh();
+        }
+
+        private void InitPoseState()
+        {
+            var skeleton = _bvhAnimation.Skeleton;
+            if (skeleton?.Joints == null || skeleton.Joints.Count == 0) return;
+
+            _skeletonAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
+            _skeletonAsset.hideFlags = HideFlags.HideAndDontSave;
+            SkeletonAssetFromMmData.Build(skeleton, _skeletonAsset);
+
+            var layout = PoseLayout.CreateFullPose(_skeletonAsset, false, false);
+            _skeletonData = _skeletonAsset.GetSkeletonData();
+            _poseBuffer = PoseBuffer.Allocate(layout, Allocator.Persistent);
+
+            var positions = _poseBuffer.Positions;
+            for (var i = 0; i < _skeletonAsset.BoneCount; i++)
+            {
+                positions[i] = _skeletonAsset.GetBone(i).restLocalPosition;
+            }
+
+            _fkPositions = new NativeArray<float3>(_skeletonAsset.BoneCount, Allocator.Persistent);
+            _fkRotations = new NativeArray<quaternion>(_skeletonAsset.BoneCount, Allocator.Persistent);
         }
 
         private void CreateGridMesh()
@@ -121,6 +154,23 @@ namespace MotionMatching.Editor
             if (_gridMesh != null)
             {
                 DestroyImmediate(_gridMesh);
+            }
+
+            if (_poseBuffer.IsCreated)
+            {
+                _poseBuffer.Dispose();
+            }
+            if (_fkPositions.IsCreated)
+            {
+                _fkPositions.Dispose();
+            }
+            if (_fkRotations.IsCreated)
+            {
+                _fkRotations.Dispose();
+            }
+            if (_skeletonAsset != null)
+            {
+                DestroyImmediate(_skeletonAsset);
             }
         }
 
@@ -240,61 +290,36 @@ namespace MotionMatching.Editor
             int frameIndex = Mathf.FloorToInt(_currentTime / _bvhAnimation.FrameTime);
             frameIndex = Mathf.Clamp(frameIndex, 0, _bvhAnimation.Frames.Length - 1);
 
-            BvhAnimation.Frame frame = _bvhAnimation.Frames[frameIndex];
-            Skeleton skeleton = _bvhAnimation.Skeleton;
+            var frame = _bvhAnimation.Frames[frameIndex];
+            var boneCount = _skeletonData.BoneCount;
 
-            if (skeleton == null || skeleton.Joints == null || skeleton.Joints.Count == 0) return;
+            if (!_poseBuffer.IsCreated) return;
+            if (frame.localRotations == null || frame.localRotations.Length != boneCount) return;
 
-            Vector3[] jointPositions = new Vector3[skeleton.Joints.Count];
-            Quaternion[] jointRotations = new Quaternion[skeleton.Joints.Count];
-
-            // Compute global positions and rotations
-            if (skeleton.Joints.Count > 0)
+            var positions = _poseBuffer.Positions;
+            positions[0] = frame.rootMotion;
+            var rotations = _poseBuffer.Rotations;
+            for (var i = 0; i < boneCount; i++)
             {
-                jointPositions[0] = frame.rootMotion;
-                jointRotations[0] = frame.localRotations[0];
+                rotations[i] = frame.localRotations[i];
             }
 
-            for (int i = 1; i < skeleton.Joints.Count; i++)
-            {
-                Skeleton.Joint joint = skeleton.Joints[i];
-                int parentIndex = joint.parentIndex;
-                jointRotations[i] = jointRotations[parentIndex] * frame.localRotations[i];
-                jointPositions[i] = jointPositions[parentIndex] + jointRotations[parentIndex] * joint.localOffset;
-            }
+            PoseFK.LocalToCharacter(_poseBuffer, _skeletonData, _fkPositions, _fkRotations);
 
             _lineVertices.Clear();
             _lineIndices.Clear();
 
             // Root to children
-            for (int i = 1; i < skeleton.Joints.Count; i++)
+            for (var i = 1; i < boneCount; i++)
             {
-                Skeleton.Joint joint = skeleton.Joints[i];
-                int parentIndex = joint.parentIndex;
+                var parentIndex = _skeletonData.ParentIndices[i];
 
-                _lineVertices.Add(jointPositions[parentIndex]);
-                _lineVertices.Add(jointPositions[i]);
+                _lineVertices.Add(_fkPositions[parentIndex]);
+                _lineVertices.Add(_fkPositions[i]);
 
-                int indexCount = _lineIndices.Count;
+                var indexCount = _lineIndices.Count;
                 _lineIndices.Add(indexCount);
                 _lineIndices.Add(indexCount + 1);
-            }
-
-            // End sites
-            if (_bvhAnimation.EndSites != null)
-            {
-                for (int i = 0; i < _bvhAnimation.EndSites.Count; i++)
-                {
-                    BvhAnimation.EndSite endSite = _bvhAnimation.EndSites[i];
-                    Vector3 endPos = jointPositions[endSite.ParentIndex] + jointRotations[endSite.ParentIndex] * endSite.Offset;
-
-                    _lineVertices.Add(jointPositions[endSite.ParentIndex]);
-                    _lineVertices.Add(endPos);
-
-                    int indexCount = _lineIndices.Count;
-                    _lineIndices.Add(indexCount);
-                    _lineIndices.Add(indexCount + 1);
-                }
             }
 
             _skeletonMesh.Clear();
@@ -302,7 +327,7 @@ namespace MotionMatching.Editor
             _skeletonMesh.SetIndices(_lineIndices, MeshTopology.Lines, 0);
 
             // Setup Camera
-            Vector3 rootPos = jointPositions[0];
+            Vector3 rootPos = _fkPositions[0];
 
             // Adjust target if needed, maybe slowly lerp?
             // For now, center around rootPos + _targetPos (pan offset)

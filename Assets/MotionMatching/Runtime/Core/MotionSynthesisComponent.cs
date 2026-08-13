@@ -16,6 +16,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
 
     [SerializeField] [Tooltip("Optional skeleton asset binding for AnimationTools-based stages.")]
     private SkeletonAsset poseSkeleton;
+
     public SkeletonAsset PoseSkeleton => poseSkeleton;
     public SkeletonMap PoseSkeletonMap { get; private set; }
 
@@ -59,6 +60,7 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
             return null;
         }
     }
+
     public override float3 RootVelocity { get; protected set; }
     public override float3 RootAngularVelocity { get; protected set; }
     public override float3 RootPosition { get; protected set; }
@@ -105,7 +107,8 @@ public class MotionSynthesisComponent : MotionSynthesizer, ISkeletonProvider
             PoseSkeletonMap = SkeletonMap.Build(_skeleton, poseSkeleton);
             if (PoseSkeletonMap == null)
             {
-                Debug.LogError($"MotionSynthesisComponent \"{name}\": could not map the MotionMatching skeleton onto poseSkeleton \"{poseSkeleton.name}\" (some joint has no matching bone by name or HumanBodyBones type).");
+                Debug.LogError(
+                    $"MotionSynthesisComponent \"{name}\": could not map the MotionMatching skeleton onto poseSkeleton \"{poseSkeleton.name}\" (some joint has no matching bone by name or HumanBodyBones type).");
             }
         }
 

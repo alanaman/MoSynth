@@ -23,13 +23,11 @@ public static class SkeletonAssetFromMmData
     /// </summary>
     public static SkeletonAsset CreateOrUpdate(Skeleton mmSkeleton, string assetPath)
     {
-        var source = ConvertToBoneSources(mmSkeleton);
-
         var asset = AssetDatabase.LoadAssetAtPath<SkeletonAsset>(assetPath);
         var isNew = asset == null;
         if (isNew) asset = ScriptableObject.CreateInstance<SkeletonAsset>();
 
-        SkeletonAssetAuthoring.BuildOrMerge(asset, source);
+        Build(mmSkeleton, asset);
 
         if (isNew)
         {
@@ -38,6 +36,15 @@ public static class SkeletonAssetFromMmData
         }
 
         return asset;
+    }
+
+    /// <summary>
+    /// Converts <paramref name="mmSkeleton"/> into <paramref name="target"/> without touching the
+    /// AssetDatabase, for transient (in-memory) skeleton assets.
+    /// </summary>
+    public static void Build(Skeleton mmSkeleton, SkeletonAsset target)
+    {
+        SkeletonAssetAuthoring.BuildOrMerge(target, ConvertToBoneSources(mmSkeleton));
     }
 
     private static List<SkeletonAssetAuthoring.BoneSource> ConvertToBoneSources(Skeleton mmSkeleton)

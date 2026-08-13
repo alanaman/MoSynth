@@ -17,37 +17,30 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     // TODO: DefaultHipsForward... detect/suggest automatically? try to fix automatically at BVHAnimation level? 
     // (if it is fixed some code can be deleted... all code related to DefaultHipsForward and in the UpdateTransform() when correcting the hips forward)
 
-    [FormerlySerializedAs("AnimationDatas")] [SerializeField]
+    [SerializeField]
     public List<AnnotatedAnimationClip> animationClips = new();
 
     [Tooltip("Animation with T-Pose, Animation with a T-Pose in the first frame, used for retargeting")]
-    [FormerlySerializedAs("AnimationDataTPose")]
     public AnnotatedAnimationClip tPoseAnimationClip; // Animation with a TPose in the first frame, used for retargeting
 
-    [FormerlySerializedAs("HipsForwardLocalVector")]
     public float3
         hipsForwardLocalVector = new(0, 0, 1); // Local vector (axis) pointing in the forward direction of the hips
 
-    [FormerlySerializedAs("HipsUpLocalVector")]
     public float3 hipsUpLocalVector = new(0, 1, 0); // Local vector (axis) pointing in the up direction of the hips
 
     // TODO: Implement Savitzky-Golay filter or similar low-pass filter in Unity (before I was using Python implementation)
     //public bool SmoothSimulationBone; // Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter
-    [FormerlySerializedAs("ContactVelocityThreshold")]
     public float
         contactVelocityThreshold =
             0.15f; // Minimum velocity of the foot to be considered in movement and not in contact with the ground
 
-    [FormerlySerializedAs("SkeletonToMecanim")]
     public List<JointToMecanim> animationChannelToMecanim = new();
 
     // TODO: these should prolly be inside FeatureSet
-    [FormerlySerializedAs("TrajectoryFeatures")]
     public List<TrajectoryFeature> trajectoryFeatures = new();
 
-    [FormerlySerializedAs("PoseFeatures")] public List<PoseFeature> poseFeatures = new();
+    public List<PoseFeature> poseFeatures = new();
 
-    [FormerlySerializedAs("EnvironmentFeatures")]
     public List<TrajectoryFeature>
         environmentFeatures =
             new(); // Features used for dynamic computations and not used during the standard distance check in the Motion Matching search
@@ -61,7 +54,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     }
 
     // Information extracted form T-Pose
-    [FormerlySerializedAs("JointsLocalForward")] [SerializeField]
+    [SerializeField]
     private float3[] jointsLocalForward; // Local forward vector of each joint 
 
     private FeatureSet _featureSet;

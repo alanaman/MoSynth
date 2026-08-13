@@ -14,11 +14,15 @@ public struct Bone
 {
     /// <summary>Stable, unique within the asset, greater than 0, never reused even after deletion.</summary>
     public int id;
+
     public string name;
+
     /// <summary>Index into the owning asset's bone list; -1 for the root.</summary>
     public int parentIndex;
+
     public float3 restLocalPosition;
     public quaternion restLocalRotation;
+
     /// <summary><see cref="HumanBodyBones.LastBone"/> when this bone has no Mecanim mapping.</summary>
     public HumanBodyBones humanBone;
 }
@@ -58,7 +62,7 @@ public sealed class SkeletonAsset : ScriptableObject
     public int IndexOfId(int boneId)
     {
         EnsureIdMap();
-        return idToIndex.TryGetValue(boneId, out var index) ? index : -1;
+        return idToIndex.GetValueOrDefault(boneId, -1);
     }
 
     public bool TryFindByHumanBone(HumanBodyBones humanBone, out int index)
@@ -107,7 +111,8 @@ public sealed class SkeletonAsset : ScriptableObject
             var bone = newBones[i];
 
             if (bone.id <= 0)
-                throw new ArgumentException($"Bone \"{bone.name}\" at index {i} has non-positive id {bone.id}.", nameof(newBones));
+                throw new ArgumentException($"Bone \"{bone.name}\" at index {i} has non-positive id {bone.id}.",
+                    nameof(newBones));
 
             if (!seenIds.Add(bone.id))
                 throw new ArgumentException($"Duplicate bone id {bone.id} at index {i}.", nameof(newBones));
@@ -115,7 +120,8 @@ public sealed class SkeletonAsset : ScriptableObject
             if (i == 0) continue;
 
             if (bone.parentIndex < 0)
-                throw new ArgumentException($"Bone \"{bone.name}\" at index {i} has no parent but is not the root.", nameof(newBones));
+                throw new ArgumentException($"Bone \"{bone.name}\" at index {i} has no parent but is not the root.",
+                    nameof(newBones));
 
             if (bone.parentIndex >= i)
                 throw new ArgumentException(
@@ -126,7 +132,9 @@ public sealed class SkeletonAsset : ScriptableObject
         var maxId = 0;
         foreach (var id in seenIds) maxId = math.max(maxId, id);
         if (newNextBoneId <= maxId)
-            throw new ArgumentException($"newNextBoneId ({newNextBoneId}) must be greater than every existing bone id (max {maxId}).", nameof(newNextBoneId));
+            throw new ArgumentException(
+                $"newNextBoneId ({newNextBoneId}) must be greater than every existing bone id (max {maxId}).",
+                nameof(newNextBoneId));
 
         bones = new List<Bone>(newBones);
         nextBoneId = newNextBoneId;
