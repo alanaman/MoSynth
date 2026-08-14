@@ -222,7 +222,7 @@ namespace MotionMatching
                             }
                         }
 
-                        featureSet = new FeatureSet(mmData, (int)numberFeatureVectors);
+                        featureSet = new FeatureSet(mmData);
                         featureSet.SetValid(valid);
                         featureSet.SetFeatures(features);
                         featureSet.SetMean(mean);

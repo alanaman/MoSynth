@@ -63,9 +63,9 @@ namespace MotionMatching
         // Environment acceleration structures
         private NativeArray<int> _adaptativeFeaturesIndices; // Index to the real Features array
 
-        public FeatureSet(MotionMatchingData mmData, int numberFeatureVectors)
+        public FeatureSet(MotionMatchingData mmData)
         {
-            NumberFeatureVectors = numberFeatureVectors;
+            NumberFeatureVectors = mmData.GetOrImportPoseSet().NumberPoses;
 
             // Trajectory Features
             NumberTrajectoryFeatures = mmData.trajectoryFeatures.Count;

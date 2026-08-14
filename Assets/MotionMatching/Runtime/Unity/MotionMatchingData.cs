@@ -179,7 +179,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     public void ImportFeatureSet()
     {
         _poseSet = GetOrImportPoseSet();
-        FeatureSet = new FeatureSet(this, _poseSet.NumberPoses);
+        FeatureSet = new FeatureSet(this);
         FeatureSet.Extract(_poseSet, this);
         FeatureSet.NormalizeFeatures();
     }
