@@ -1,7 +1,11 @@
 {
-    "name": "AnimationTools",
+    "name": "MotionField",
     "rootNamespace": "",
-    "references": ["Unity.Burst", "Unity.Mathematics", "Unity.Collections", "MackySoft.SerializeReferenceExtensions"],
+    "references": [
+        "Unity.Mathematics",
+        "Unity.InputSystem",
+        "AnimationTools"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

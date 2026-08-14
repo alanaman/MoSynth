@@ -8,11 +8,11 @@ using System;
 using System.Runtime.InteropServices;
 using NUnit.Framework;
 
-namespace MotionMatching
+namespace AnimationTools
 {
-using static BinarySerializerExtensions;
+    using static AnimationTools.BinarySerializerExtensions;
 
-public class PoseSerializer
+    public class PoseSerializer
 {
     /// <summary>
     /// Stores the full pose representation of all poses for Motion Matching in a binary format

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Everything the pose-database pipeline needs from the asset it is extracting.
@@ -14,8 +14,8 @@ namespace MotionMatching
 /// exactly that handful, so a consumer such as MotionField's config can supply a database without
 /// dragging in the feature-set machinery it never uses.
 ///
-/// Note this lives in the MotionMatching runtime assembly rather than beside its other
-/// implementor: Assembly-CSharp can reference MotionMatching, but not the other way round.
+/// This lives in the AnimationTools runtime assembly since it is generic pose-database
+/// infrastructure, not specific to any one motion-synthesis technique.
 /// </summary>
 public interface IPoseSetSource
 {
@@ -27,6 +27,9 @@ public interface IPoseSetSource
 
     /// <summary>Foot speed below which a toe counts as planted.</summary>
     float ContactVelocityThreshold { get; }
+
+    /// <summary>Maps animation channel names onto Mecanim bones. Pose extraction needs the toes.</summary>
+    IReadOnlyList<JointToMecanim> AnimationChannelToMecanim { get; }
 
     /// <summary>
     /// Maps an animation channel name onto a Mecanim bone. Pose extraction needs this to locate the

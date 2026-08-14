@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Unity.Mathematics;
 
-namespace MotionMatching
+namespace AnimationTools
 {
     public static class MathExtensions
     {

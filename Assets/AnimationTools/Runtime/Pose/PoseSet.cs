@@ -5,7 +5,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Stores the full pose representation of all poses for Motion Matching.
@@ -109,7 +109,7 @@ public class PoseSet
 
     private void RebuildLayout()
     {
-        _layout = MmPoseLayoutBuilder.Build(_skeletonAsset, out var contacts);
+        _layout = PoseLayoutBuilder.Build(_skeletonAsset, out var contacts);
         _leftFootContactHandle = contacts.Left;
         _rightFootContactHandle = contacts.Right;
 

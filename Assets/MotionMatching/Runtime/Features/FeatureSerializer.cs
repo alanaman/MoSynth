@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace MotionMatching
 {
-    using static BinarySerializerExtensions;
+    using static AnimationTools.BinarySerializerExtensions;
 
     public class FeatureSerializer
     {

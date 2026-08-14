@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using AnimationTools;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Builds the single pose layout the motion-matching runtime shares: a full pose
@@ -14,7 +14,7 @@ namespace MotionMatching
 /// same instance and frames can be copied between them (<see cref="PoseBuffer.CopyFrom"/>
 /// requires equal layout hashes).
 /// </summary>
-public static class MmPoseLayoutBuilder
+    public static class PoseLayoutBuilder
 {
     public readonly struct ContactHandles
     {

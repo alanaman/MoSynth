@@ -1,8 +1,14 @@
 {
-    "name": "AnimationTools",
+    "name": "MotionField.Editor",
     "rootNamespace": "",
-    "references": ["Unity.Burst", "Unity.Mathematics", "Unity.Collections", "MackySoft.SerializeReferenceExtensions"],
-    "includePlatforms": [],
+    "references": [
+        "MotionField",
+        "AnimationTools",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

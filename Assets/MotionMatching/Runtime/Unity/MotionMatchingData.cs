@@ -67,6 +67,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     public List<AnnotatedAnimationClip> AnimationClips => animationClips;
     public float3 HipsForwardLocalVector => hipsForwardLocalVector;
     public float ContactVelocityThreshold => contactVelocityThreshold;
+    public IReadOnlyList<JointToMecanim> AnimationChannelToMecanim => animationChannelToMecanim;
 
     /// <summary>
     /// Frames of lookahead the longest trajectory feature needs. Poses closer than this to the end
@@ -273,19 +274,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         }
 #endif
         return path;
-    }
-
-    [Serializable]
-    public struct JointToMecanim
-    {
-        [FormerlySerializedAs("Name")] public string name;
-        [FormerlySerializedAs("MecanimBone")] public HumanBodyBones mecanimBone;
-
-        public JointToMecanim(string name, HumanBodyBones mecanimBone)
-        {
-            this.name = name;
-            this.mecanimBone = mecanimBone;
-        }
     }
 
     [Serializable]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AnimationTools;
 using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
@@ -85,16 +86,16 @@ namespace MotionMatching
             // Get the feature indices
             TrajectoryPosFeatureIndex = -1;
             TrajectoryRotFeatureIndex = -1;
-            for (var i = 0; i < motionSynthesizer.MmData.trajectoryFeatures.Count; ++i)
+            for (var i = 0; i < motionSynthesizer.GetMmData().trajectoryFeatures.Count; ++i)
             {
-                if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
-                if (motionSynthesizer.MmData.trajectoryFeatures[i].name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
+                if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryPositionFeatureName) TrajectoryPosFeatureIndex = i;
+                if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryDirectionFeatureName) TrajectoryRotFeatureIndex = i;
             }
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = motionSynthesizer.MmData.trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
-            TrajectoryRotPredictionFrames = motionSynthesizer.MmData.trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
+            TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
             // TODO: generalize this... allow different number of prediction frames for different features
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
             for (var i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)

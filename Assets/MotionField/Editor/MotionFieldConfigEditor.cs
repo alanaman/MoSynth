@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AnimationTools;
-using MotionMatching;
 using Python.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -20,7 +19,7 @@ namespace MotionField.Editor
 [CustomEditor(typeof(MotionFieldConfig))]
 public class MotionFieldConfigEditor : UnityEditor.Editor
 {
-    private MotionMatchingData _importSource;
+    private UnityEngine.Object _importSource;
     private bool _showImport;
     private bool _showBoneWeights = true;
 
@@ -97,33 +96,36 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
     private void DrawImportSection(MotionFieldConfig config)
     {
-        _showImport = EditorGUILayout.Foldout(_showImport, "Import Settings From MotionMatchingData", true);
+        _showImport = EditorGUILayout.Foldout(_showImport, "Import Settings From an IPoseSetSource asset", true);
         if (!_showImport) return;
 
         EditorGUILayout.HelpBox(
-            "One-time copy of the clips, hips forward vector, contact threshold and Mecanim map. " +
-            "It does not create a link -- later edits to the source asset will not follow.",
+            "One-time copy of the hips forward vector, contact threshold and Mecanim map from any " +
+            "other pose-set source asset (e.g. a MotionMatchingData). It does not create a link -- " +
+            "later edits to the source asset will not follow.",
             MessageType.Info);
 
-        _importSource = (MotionMatchingData)EditorGUILayout.ObjectField(
-            "Source", _importSource, typeof(MotionMatchingData), false);
+        _importSource = EditorGUILayout.ObjectField(
+            "Source", _importSource, typeof(UnityEngine.Object), false);
 
-        using (new EditorGUI.DisabledScope(_importSource == null))
+        var source = _importSource as IPoseSetSource;
+        if (_importSource != null && source == null)
+        {
+            EditorGUILayout.HelpBox(
+                $"'{_importSource.name}' does not implement IPoseSetSource.", MessageType.Warning);
+        }
+
+        using (new EditorGUI.DisabledScope(source == null))
         {
             if (GUILayout.Button("Copy Settings"))
             {
                 Undo.RecordObject(config, "Import MotionField settings");
-                config.animationClips = new List<AnnotatedAnimationClip>(
-                    _importSource.animationClips);
-                config.hipsForwardLocalVector = _importSource.hipsForwardLocalVector;
-                config.contactVelocityThreshold = _importSource.contactVelocityThreshold;
-                config.animationChannelToMecanim =
-                    new List<MotionMatchingData.JointToMecanim>(
-                        _importSource.animationChannelToMecanim);
+                config.hipsForwardLocalVector = source.HipsForwardLocalVector;
+                config.contactVelocityThreshold = source.ContactVelocityThreshold;
+                config.animationChannelToMecanim = new List<JointToMecanim>(source.AnimationChannelToMecanim);
                 MarkStale(config, database: true); // rewrites the clips extraction reads
-                Debug.Log($"[MotionField] Copied {config.animationClips.Count} clip(s) and " +
-                          $"{config.animationChannelToMecanim.Count} bone mapping(s) from " +
-                          $"'{_importSource.name}'.");
+                Debug.Log($"[MotionField] Copied {config.animationChannelToMecanim.Count} bone mapping(s) from " +
+                          $"'{source.name}'.");
             }
         }
     }

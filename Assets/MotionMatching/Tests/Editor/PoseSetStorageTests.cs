@@ -241,8 +241,8 @@ public class PoseSetStorageTests
     {
         var skeleton = MmTestData.BuildSkeletonAsset();
 
-        var first = MmPoseLayoutBuilder.Build(skeleton, out _);
-        var second = MmPoseLayoutBuilder.Build(skeleton, out _);
+        var first = PoseLayoutBuilder.Build(skeleton, out _);
+        var second = PoseLayoutBuilder.Build(skeleton, out _);
         Assert.AreSame(first, second);
 
         var poseSet = new PoseSet();

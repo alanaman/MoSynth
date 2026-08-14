@@ -70,7 +70,7 @@ public class ContactVisualizerStage : MoSynthStage
         _effectiveSkeleton = effectiveSkeleton;
         _map = map;
 
-        var channels = MmPoseLayoutBuilder.BuildFullPoseChannels(effectiveSkeleton);
+        var channels = PoseLayoutBuilder.BuildFullPoseChannels(effectiveSkeleton);
         channels.AddRange(extraChannels);
         var layout = PoseLayout.Build(effectiveSkeleton, channels);
         _buffer = PoseBuffer.Allocate(layout, Allocator.Persistent);

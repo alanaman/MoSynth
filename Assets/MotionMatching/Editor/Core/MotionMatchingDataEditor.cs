@@ -4,6 +4,7 @@ using UnityEditor.SceneManagement;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using System;
+using AnimationTools;
 
 namespace MotionMatching
 {
@@ -141,7 +142,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                     bone = HumanBodyBones.LastBone;
                 }
 
-                data.animationChannelToMecanim.Add(new MotionMatchingData.JointToMecanim(jointName, bone));
+                data.animationChannelToMecanim.Add(new JointToMecanim(jointName, bone));
             }
         }
 
@@ -153,7 +154,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
             EditorGUI.indentLevel++;
             for (int i = 0; i < data.animationChannelToMecanim.Count; i++)
             {
-                MotionMatchingData.JointToMecanim jtm = data.animationChannelToMecanim[i];
+                JointToMecanim jtm = data.animationChannelToMecanim[i];
                 EditorGUILayout.BeginHorizontal();
                 GUI.contentColor = jtm.mecanimBone == HumanBodyBones.LastBone
                     ? new Color(1.0f, 0.6f, 0.6f)

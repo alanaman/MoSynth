@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AnimationTools;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -29,7 +30,7 @@ namespace MotionMatching
 
         private void LateUpdate()
         {
-            DatabaseDeltaTime = motionSynthesizer.MmData.GetOrImportPoseSet().FrameTime;
+            DatabaseDeltaTime = motionSynthesizer.GetMmData().GetOrImportPoseSet().FrameTime;
             // Update the character
             OnUpdate();
             // Update other components depending on the character controller

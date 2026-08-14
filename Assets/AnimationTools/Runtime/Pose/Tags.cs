@@ -7,7 +7,7 @@ using System.Text;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
     /// <summary>
     /// Class used to store the operational graph of a tag query (union, intersection and difference)
@@ -52,7 +52,7 @@ namespace MotionMatching
             return EndRanges;
         }
 
-        public void ComputeRanges(PoseSet poseSet, List<MotionMatching.AnnotatedAnimationClip.Tag> tags=null, bool force=false)
+        public void ComputeRanges(PoseSet poseSet, List<AnnotatedAnimationClip.Tag> tags=null, bool force=false)
         {
             if (!Dirty && !force) return;
 

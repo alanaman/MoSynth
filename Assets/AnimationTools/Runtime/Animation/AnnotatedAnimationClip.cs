@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Contracts;
-using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -10,7 +9,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Stores annotation using tags and other information for a raw animation clip.

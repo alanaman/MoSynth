@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using AnimationTools;
-using MotionMatching;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -32,7 +31,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     public float contactVelocityThreshold = 0.15f;
 
     [Tooltip("Maps animation channel names onto Mecanim bones. Pose extraction needs the toes.")]
-    public List<MotionMatchingData.JointToMecanim> animationChannelToMecanim = new();
+    public List<JointToMecanim> animationChannelToMecanim = new();
 
     [Header("Python Runtime")]
     [Tooltip("Full path to the CPython shared library, e.g. .../python313.dll. Leave empty to use " +
@@ -216,6 +215,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     public List<AnnotatedAnimationClip> AnimationClips => animationClips;
     public float3 HipsForwardLocalVector => hipsForwardLocalVector;
     public float ContactVelocityThreshold => contactVelocityThreshold;
+    public IReadOnlyList<JointToMecanim> AnimationChannelToMecanim => animationChannelToMecanim;
 
     /// <summary>No trajectory features, so every pose is usable.</summary>
     public int MaximumFramesPrediction => 0;

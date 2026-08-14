@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using AnimationTools;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
 {
@@ -54,23 +53,6 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
     [Tooltip("Whether to animate the root position by Motion Matching or not.")]
     // maybe change this to 'root motion'?
     public bool rootPositionsMask = true;
-
-    /// <summary>
-    /// The <see cref="MotionMatchingData"/> of the first <see cref="MotionMatchingStage"/> in
-    /// <see cref="stages"/>, or null when no such stage exists (e.g. a motion-field-only stack).
-    /// </summary>
-    public MotionMatchingData MmData
-    {
-        get
-        {
-            foreach (var stage in stages)
-            {
-                if (stage is MotionMatchingStage mm) return mm.mmData;
-            }
-
-            return null;
-        }
-    }
 
     public float3 RootVelocity { get; protected set; }
     public float3 RootAngularVelocity { get; protected set; }
@@ -215,7 +197,7 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
 
     void InitCurrentPose()
     {
-        PoseLayout = MmPoseLayoutBuilder.Build(_skeleton, out var contacts);
+        PoseLayout = PoseLayoutBuilder.Build(_skeleton, out var contacts);
         LeftFootContactHandle = contacts.Left;
         RightFootContactHandle = contacts.Right;
 

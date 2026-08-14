@@ -1,3 +1,4 @@
+using AnimationTools;
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.SceneManagement;

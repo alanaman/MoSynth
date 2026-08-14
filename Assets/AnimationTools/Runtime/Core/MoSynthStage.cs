@@ -1,9 +1,8 @@
 using System;
-using AnimationTools;
 using UnityEngine;
 using UnityEngine.Serialization;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 [Serializable]
 public abstract class MoSynthStage

@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using AnimationTools;
 using Unity.Collections;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// An imported BVH animation, stored as per-frame float data in the AnimationTools pose format.

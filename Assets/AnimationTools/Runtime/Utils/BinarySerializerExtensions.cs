@@ -5,7 +5,7 @@ using Unity.Collections;
 using Unity.Mathematics;
 using System.IO;
 
-namespace MotionMatching
+namespace AnimationTools
 {
     public class BinarySerializerExtensions
     {

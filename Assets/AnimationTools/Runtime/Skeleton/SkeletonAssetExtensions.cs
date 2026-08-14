@@ -1,8 +1,7 @@
 using System;
-using AnimationTools;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Bone-lookup helpers over <see cref="SkeletonAsset"/> preserving the semantics of the

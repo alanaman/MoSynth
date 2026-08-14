@@ -4,7 +4,7 @@ using Unity.Mathematics;
 using System;
 using AnimationTools;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// Extracts full pose for Motion Matching from BVHAnimation

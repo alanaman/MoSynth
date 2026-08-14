@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using AnimationTools;
-using MotionMatching;
 using NetMQ;
 using NetMQ.Sockets;
 using Newtonsoft.Json;

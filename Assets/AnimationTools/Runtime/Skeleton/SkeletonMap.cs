@@ -1,7 +1,6 @@
-using AnimationTools;
 using UnityEngine;
 
-namespace MotionMatching
+namespace AnimationTools
 {
 /// <summary>
 /// A per-bone index correspondence between two <see cref="SkeletonAsset"/>s (the "Mm" side
