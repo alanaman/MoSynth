@@ -1,15 +1,39 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using AnimationTools;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AnimationTools.Tests
 {
 public class PoseLayoutTests
 {
+    private sealed class TestWideChannel : ChannelDescriptor
+    {
+        private readonly int _id;
+
+        public TestWideChannel(int id)
+        {
+            _id = id;
+        }
+
+        public override int FloatCount => 5;
+        public override int SectionKey => ChannelSections.Bool + 1;
+
+        public override bool Equals(ChannelDescriptor other)
+        {
+            return other is TestWideChannel wide && wide._id == _id;
+        }
+
+        public override int GetHashCode() => _id;
+
+        public override int GetContentHash() => _id;
+    }
+
     private SkeletonAsset skeleton;
 
     [SetUp]
@@ -32,17 +56,17 @@ public class PoseLayoutTests
     {
         return new List<ChannelDescriptor>
         {
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Position },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Position },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Rotation, representation = rotationRepresentation },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Rotation, representation = rotationRepresentation },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Rotation, representation = rotationRepresentation },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Scale },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Velocity },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Velocity },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.AngularVelocity, representation = RotationRepresentation.RotationVector },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Bool, usage = ChannelUsage.Default },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Bool, usage = ChannelUsage.Contact }
+            new PositionChannel(TestSkeletons.RootId),
+            new PositionChannel(TestSkeletons.HeadId),
+            new RotationChannel(TestSkeletons.RootId, rotationRepresentation),
+            new RotationChannel(TestSkeletons.SpineId, rotationRepresentation),
+            new RotationChannel(TestSkeletons.HeadId, rotationRepresentation),
+            new ScaleChannel(TestSkeletons.SpineId),
+            new VelocityChannel(TestSkeletons.RootId),
+            new VelocityChannel(TestSkeletons.HeadId),
+            new AngularVelocityChannel(TestSkeletons.SpineId),
+            new BoolChannel(TestSkeletons.SpineId, ChannelUsage.Default),
+            new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Contact)
         };
     }
 
@@ -88,7 +112,7 @@ public class PoseLayoutTests
     [Test]
     public void Build_UnknownBoneId_Throws()
     {
-        var channels = new List<ChannelDescriptor> { new() { boneId = 999, type = ChannelType.Position } };
+        var channels = new List<ChannelDescriptor> { new PositionChannel(999) };
         Assert.Throws<ArgumentException>(() => PoseLayout.Build(skeleton, channels));
     }
 
@@ -97,8 +121,8 @@ public class PoseLayoutTests
     {
         var channels = new List<ChannelDescriptor>
         {
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Position, usage = ChannelUsage.Default },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Position, usage = ChannelUsage.Default }
+            new PositionChannel(TestSkeletons.RootId, usage: ChannelUsage.Default),
+            new PositionChannel(TestSkeletons.RootId, usage: ChannelUsage.Default)
         };
         Assert.Throws<ArgumentException>(() => PoseLayout.Build(skeleton, channels));
     }
@@ -108,18 +132,8 @@ public class PoseLayoutTests
     {
         var channels = new List<ChannelDescriptor>
         {
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Rotation, representation = RotationRepresentation.Quaternion },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Rotation, representation = RotationRepresentation.RotationVector }
-        };
-        Assert.Throws<ArgumentException>(() => PoseLayout.Build(skeleton, channels));
-    }
-
-    [Test]
-    public void Build_AngularVelocityWithNonRotationVectorRepresentation_Throws()
-    {
-        var channels = new List<ChannelDescriptor>
-        {
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.AngularVelocity, representation = RotationRepresentation.Quaternion }
+            new RotationChannel(TestSkeletons.RootId, RotationRepresentation.Quaternion),
+            new RotationChannel(TestSkeletons.SpineId, RotationRepresentation.RotationVector)
         };
         Assert.Throws<ArgumentException>(() => PoseLayout.Build(skeleton, channels));
     }
@@ -148,8 +162,8 @@ public class PoseLayoutTests
             Assert.AreEqual(headValue, buffer.GetPosition(headHandle));
 
             // Declaration order (root, then head) fixes which section element each bone owns.
-            Assert.AreEqual(TestSkeletons.RootId, layout.GetChannel(ChannelType.Position, 0).boneId);
-            Assert.AreEqual(TestSkeletons.HeadId, layout.GetChannel(ChannelType.Position, 1).boneId);
+            Assert.AreEqual(TestSkeletons.RootId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Position, 0)).BoneId);
+            Assert.AreEqual(TestSkeletons.HeadId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Position, 1)).BoneId);
         }
         finally
         {
@@ -160,7 +174,7 @@ public class PoseLayoutTests
     [Test]
     public void TryBind_UndeclaredChannel_ReturnsFalseWithInvalidHandle()
     {
-        var channels = new List<ChannelDescriptor> { new() { boneId = TestSkeletons.RootId, type = ChannelType.Position } };
+        var channels = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId) };
         var layout = PoseLayout.Build(skeleton, channels);
 
         var found = layout.TryBindScale(new BoneReference(TestSkeletons.RootId, "root"), out var handle);
@@ -172,7 +186,7 @@ public class PoseLayoutTests
     [Test]
     public void Bind_UndeclaredChannel_Throws()
     {
-        var channels = new List<ChannelDescriptor> { new() { boneId = TestSkeletons.RootId, type = ChannelType.Position } };
+        var channels = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId) };
         var layout = PoseLayout.Build(skeleton, channels);
 
         Assert.Throws<ArgumentException>(() => layout.BindScale(new BoneReference(TestSkeletons.RootId, "root")));
@@ -183,8 +197,8 @@ public class PoseLayoutTests
     {
         var channels = new List<ChannelDescriptor>
         {
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Bool, usage = ChannelUsage.Default },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Bool, usage = ChannelUsage.Contact }
+            new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Default),
+            new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Contact)
         };
         var layout = PoseLayout.Build(skeleton, channels);
         var headBone = new BoneReference(TestSkeletons.HeadId, "head");
@@ -226,8 +240,8 @@ public class PoseLayoutTests
         for (var i = 0; i < skeleton.BoneCount; i++)
         {
             var expectedBoneId = skeleton.GetBone(i).id;
-            Assert.AreEqual(expectedBoneId, layout.GetChannel(ChannelType.Position, i).boneId);
-            Assert.AreEqual(expectedBoneId, layout.GetChannel(ChannelType.Rotation, i).boneId);
+            Assert.AreEqual(expectedBoneId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Position, i)).BoneId);
+            Assert.AreEqual(expectedBoneId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Rotation, i)).BoneId);
         }
     }
 
@@ -239,7 +253,7 @@ public class PoseLayoutTests
         Assert.AreEqual(skeleton.BoneCount, layout.Data.VelocityCount);
         Assert.AreEqual(0, layout.Data.AngularVelocityCount);
         for (var i = 0; i < skeleton.BoneCount; i++)
-            Assert.AreEqual(skeleton.GetBone(i).id, layout.GetChannel(ChannelType.Velocity, i).boneId);
+            Assert.AreEqual(skeleton.GetBone(i).id, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Velocity, i)).BoneId);
     }
 
     [Test]
@@ -250,7 +264,7 @@ public class PoseLayoutTests
         Assert.AreEqual(0, layout.Data.VelocityCount);
         Assert.AreEqual(skeleton.BoneCount, layout.Data.AngularVelocityCount);
         for (var i = 0; i < skeleton.BoneCount; i++)
-            Assert.AreEqual(skeleton.GetBone(i).id, layout.GetChannel(ChannelType.AngularVelocity, i).boneId);
+            Assert.AreEqual(skeleton.GetBone(i).id, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.AngularVelocity, i)).BoneId);
     }
 
     [Test]
@@ -270,6 +284,71 @@ public class PoseLayoutTests
         var layoutC = PoseLayout.CreateFullPose(skeleton, false, false);
 
         Assert.AreNotEqual(layoutA.LayoutHash, layoutC.LayoutHash);
+    }
+
+    [Test]
+    public void Build_NonBuiltInChannel_PlacesAfterBoolSectionAndRoundTripsThroughChannelHandle()
+    {
+        var channels = new List<ChannelDescriptor>
+        {
+            new BoolChannel(TestSkeletons.RootId, ChannelUsage.Default),
+            new TestWideChannel(1)
+        };
+        var layout = PoseLayout.Build(skeleton, channels);
+
+        Assert.IsTrue(layout.TryGetSectionRange(ChannelSections.Bool, out var boolStart, out var boolCount));
+        Assert.AreEqual(boolStart + boolCount, layout.Data.ExtraStart);
+        Assert.AreEqual(5, layout.Data.ExtraCount);
+
+        var handle = layout.BindChannel(new TestWideChannel(1));
+        Assert.AreEqual(5, handle.FloatCount);
+
+        var buffer = PoseBuffer.Allocate(layout, Allocator.Temp);
+        try
+        {
+            buffer.SetFloat(handle, 3, 7.5f);
+            Assert.AreEqual(7.5f, buffer.GetFloat(handle, 3));
+        }
+        finally
+        {
+            buffer.Dispose();
+        }
+    }
+
+    [Test]
+    public void LayoutHash_ChannelsDifferingOnlyInSpace_ProduceDifferentHash()
+    {
+        var channelsA = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId, ChannelSpace.ParentLocal) };
+        var channelsB = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId, ChannelSpace.World) };
+
+        var layoutA = PoseLayout.Build(skeleton, channelsA);
+        var layoutB = PoseLayout.Build(skeleton, channelsB);
+
+        Assert.AreNotEqual(layoutA.LayoutHash, layoutB.LayoutHash);
+    }
+
+    [Test]
+    public void Handle_UsedOnBufferFromDifferentLayout_TripsLayoutAssert()
+    {
+        var layoutA = PoseLayout.Build(skeleton, new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId) });
+        var layoutB = PoseLayout.Build(skeleton, new List<ChannelDescriptor>
+        {
+            new PositionChannel(TestSkeletons.RootId),
+            new PositionChannel(TestSkeletons.HeadId)
+        });
+        Assert.AreNotEqual(layoutA.LayoutHash, layoutB.LayoutHash);
+
+        var handle = layoutA.BindPosition(new BoneReference(TestSkeletons.RootId, "root"));
+        var buffer = PoseBuffer.Allocate(layoutB, Allocator.Temp);
+        try
+        {
+            LogAssert.Expect(LogType.Assert, new Regex("PositionHandle was bound against a different layout"));
+            buffer.GetPosition(handle);
+        }
+        finally
+        {
+            buffer.Dispose();
+        }
     }
 }
 }

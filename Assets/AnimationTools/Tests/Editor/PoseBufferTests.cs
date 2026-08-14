@@ -27,12 +27,12 @@ public class PoseBufferTests
 
         var channels = new List<ChannelDescriptor>
         {
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Position },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Rotation, representation = RotationRepresentation.Quaternion },
-            new() { boneId = TestSkeletons.SpineId, type = ChannelType.Scale },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.Velocity },
-            new() { boneId = TestSkeletons.RootId, type = ChannelType.AngularVelocity, representation = RotationRepresentation.RotationVector },
-            new() { boneId = TestSkeletons.HeadId, type = ChannelType.Bool, usage = ChannelUsage.Default }
+            new PositionChannel(TestSkeletons.RootId),
+            new RotationChannel(TestSkeletons.RootId, RotationRepresentation.Quaternion),
+            new ScaleChannel(TestSkeletons.SpineId),
+            new VelocityChannel(TestSkeletons.RootId),
+            new AngularVelocityChannel(TestSkeletons.RootId),
+            new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Default)
         };
         layout = PoseLayout.Build(skeleton, channels);
         buffer = PoseBuffer.Allocate(layout, Allocator.Temp);

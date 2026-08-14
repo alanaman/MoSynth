@@ -30,7 +30,6 @@ public class LinearMotionMatchingSearch : MotionMatchingSearch
             QueryFeature = queryFeature,
             FeatureWeights = FeatureWeights,
             FeatureSize = FeatureSet.FeatureSize,
-            FeatureStaticSize = FeatureSet.FeatureStaticSize,
             CurrentDistance = currentDistance,
             
             BestIndex = SearchResult

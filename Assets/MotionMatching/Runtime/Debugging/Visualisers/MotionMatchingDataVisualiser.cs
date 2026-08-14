@@ -18,7 +18,6 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
     public bool lockFPS = true;
     public bool debugTrajectory = true;
     public bool debugPose = true;
-    public bool debugEnvironment = true;
     public bool debugContacts = true;
 
     private PoseSet _poseSet;
@@ -156,13 +155,13 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         if (_featureSet == null) return;
 
         DrawFeatureGizmos(_featureSet, motionMatchingData, spheresRadius, currentFrame, characterOrigin, characterForward,
-            _skeletonTransforms, _poseSet.SkeletonAsset, Color.blue, debugPose: debugPose, debugTrajectory: debugTrajectory, debugEnvironment: debugEnvironment);
+            _skeletonTransforms, _poseSet.SkeletonAsset, Color.blue, debugPose: debugPose, debugTrajectory: debugTrajectory);
     }
 
     private static List<float3> _positionFeatures = new();
     public static void DrawFeatureGizmos(FeatureSet set, MotionMatchingData mmData, float spheresRadius, int currentFrame,
         float3 characterOrigin, float3 characterForward, Transform[] joints, SkeletonAsset skeleton,
-        Color trajectoryColor, bool debugPose = true, bool debugTrajectory = true, bool debugEnvironment = true)
+        Color trajectoryColor, bool debugPose = true, bool debugTrajectory = true)
     {
         if (!set.IsValidFeature(currentFrame)) return;
 
@@ -181,7 +180,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                 Debug.Assert(trajectoryFeature.featureType == TrajectoryFeature.Type.Position, "The main position feature should be of type Position");
                 for (int p = 0; p < trajectoryFeature.framesPrediction.Length; p++)
                 {
-                    float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p, isEnvironment: false);
+                    float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p);
                     value = characterOrigin + math.mul(characterRot, value);
                     _positionFeatures.Add(value);
                 }
@@ -196,7 +195,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                 for (int p = 0; p < trajectoryFeature.framesPrediction.Length; p++)
                 {
                     DrawTrajectoryPoint(trajectoryFeature, set, currentFrame, t, p, trajectoryColor, characterOrigin, characterForward,
-                        characterRot, spheresRadius, joints, skeleton, isEnvironment: false);
+                        characterRot, spheresRadius, joints, skeleton);
                 }
             }
         }
@@ -226,25 +225,11 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                 }
             }
         }
-
-        // Environment Features ---------------------------------------------------------------------------
-        if (debugEnvironment)
-        {
-            for (int t = 0; t < mmData.environmentFeatures.Count; t++)
-            {
-                var environmentFeature = mmData.environmentFeatures[t];
-                for (int p = 0; p < environmentFeature.framesPrediction.Length; p++)
-                {
-                    DrawTrajectoryPoint(environmentFeature, set, currentFrame, t, p, trajectoryColor, characterOrigin, characterForward,
-                        characterRot, spheresRadius, joints, skeleton, isEnvironment: true);
-                }
-            }
-        }
     }
 
     private static void DrawTrajectoryPoint(TrajectoryFeature trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex,
         int predictionIndex, Color trajectoryColor, float3 characterOrigin, float3 characterForward,
-        quaternion characterRot, float spheresRadius, Transform[] joints, SkeletonAsset skeleton, bool isEnvironment)
+        quaternion characterRot, float spheresRadius, Transform[] joints, SkeletonAsset skeleton)
     {
         int t = trajectoryFeatureIndex;
         int p = predictionIndex;
@@ -253,7 +238,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         if (trajectoryFeature.featureType == TrajectoryFeature.Type.Position ||
             trajectoryFeature.featureType == TrajectoryFeature.Type.Direction)
         {
-            float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p, isEnvironment);
+            float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p);
             switch (trajectoryFeature.featureType)
             {
                 case TrajectoryFeature.Type.Position:
@@ -276,30 +261,6 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                     GizmosExtensions.DrawArrow(jointPos, jointPos + value * 0.4f, 0.15f, thickness: 4);
                     break;
             }
-        }
-        else if (trajectoryFeature.featureType == TrajectoryFeature.Type.Custom1D)
-        {
-            Feature1DExtractor featureExtractor = trajectoryFeature.featureExtractor as Feature1DExtractor;
-            float value = isEnvironment ? set.Get1DEnvironmentFeature(currentFrame, t, p) : set.Get1DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
-        }
-        else if (trajectoryFeature.featureType == TrajectoryFeature.Type.Custom2D)
-        {
-            Feature2DExtractor featureExtractor = trajectoryFeature.featureExtractor as Feature2DExtractor;
-            float2 value = isEnvironment ? set.Get2DEnvironmentFeature(currentFrame, t, p) : set.Get2DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
-        }
-        else if (trajectoryFeature.featureType == TrajectoryFeature.Type.Custom3D)
-        {
-            Feature3DExtractor featureExtractor = trajectoryFeature.featureExtractor as Feature3DExtractor;
-            float3 value = isEnvironment ? set.Get3DEnvironmentFeature(currentFrame, t, p) : set.Get3DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
-        }
-        else if (trajectoryFeature.featureType == TrajectoryFeature.Type.Custom4D)
-        {
-            Feature4DExtractor featureExtractor = trajectoryFeature.featureExtractor as Feature4DExtractor;
-            float4 value = isEnvironment ? set.Get4DEnvironmentFeature(currentFrame, t, p) : set.Get4DTrajectoryFeature(currentFrame, t, p, true);
-            featureExtractor.DrawGizmos(value, spheresRadius, characterOrigin, characterForward, joints, skeleton, _positionFeatures.Count > 0 ? _positionFeatures[p] : float3.zero);
         }
     }
 #endif

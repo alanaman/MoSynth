@@ -17,14 +17,13 @@ namespace MotionMatching
     {
         [ReadOnly] public NativeArray<float> Features;
         [ReadOnly] public int FeatureSize;
-        [ReadOnly] public int FeatureStaticSize;
         [ReadOnly] public int NumberBoundingBoxLarge;
         [ReadOnly] public int NumberBoundingBoxSmall;
 
-        public NativeArray<float> LargeBoundingBoxMin; // Size = NumberBoundingBoxLarge x FeatureStaticSize
-        public NativeArray<float> LargeBoundingBoxMax; // Size = NumberBoundingBoxLarge x FeatureStaticSize
-        public NativeArray<float> SmallBoundingBoxMin; // Size = NumberBoundingBoxSmall x FeatureStaticSize
-        public NativeArray<float> SmallBoundingBoxMax; // Size = NumberBoundingBoxSmall x FeatureStaticSize
+        public NativeArray<float> LargeBoundingBoxMin; // Size = NumberBoundingBoxLarge x FeatureSize
+        public NativeArray<float> LargeBoundingBoxMax; // Size = NumberBoundingBoxLarge x FeatureSize
+        public NativeArray<float> SmallBoundingBoxMin; // Size = NumberBoundingBoxSmall x FeatureSize
+        public NativeArray<float> SmallBoundingBoxMax; // Size = NumberBoundingBoxSmall x FeatureSize
 
         public void Execute()
         {
@@ -42,11 +41,11 @@ namespace MotionMatching
             for (int i = 0; i < numberFrames; ++i)
             {
                 int iSmall = i / SmallBoxSize;
-                int iSmallIndex = iSmall * FeatureStaticSize;
+                int iSmallIndex = iSmall * FeatureSize;
                 int iLarge = i / LargeBoxSize;
-                int iLargeIndex = iLarge * FeatureStaticSize;
+                int iLargeIndex = iLarge * FeatureSize;
 
-                for (int j = 0; j < FeatureStaticSize; ++j)
+                for (int j = 0; j < FeatureSize; ++j)
                 {
                     float feature = Features[i * FeatureSize + j];
                     LargeBoundingBoxMin[iLargeIndex + j] = math.min(LargeBoundingBoxMin[iLargeIndex + j], feature);
@@ -68,7 +67,6 @@ namespace MotionMatching
         [ReadOnly] public NativeArray<float> QueryFeature;
         [ReadOnly] public NativeArray<float> FeatureWeights; // Size = FeatureSize
         [ReadOnly] public int FeatureSize;
-        [ReadOnly] public int FeatureStaticSize;
         [ReadOnly] public float CurrentDistance;
         // BVH
         [ReadOnly] public NativeArray<float> LargeBoundingBoxMin; // Size = NumberBoundingBoxLarge x FeatureSize
@@ -92,12 +90,12 @@ namespace MotionMatching
             {
                 // Current and next large box
                 int iLarge = i / LargeBoxSize;
-                int iLargeIndex = iLarge * FeatureStaticSize;
+                int iLargeIndex = iLarge * FeatureSize;
                 int iLargeNext = (iLarge + 1) * LargeBoxSize;
 
                 // Find distance to box
                 float currentCost = 0.0f;
-                for (int j = 0; j < FeatureStaticSize; ++j)
+                for (int j = 0; j < FeatureSize; ++j)
                 {
                     float query = QueryFeature[j];
                     float cost = query - math.clamp(query, LargeBoundingBoxMin[iLargeIndex + j], LargeBoundingBoxMax[iLargeIndex + j]);
@@ -120,12 +118,12 @@ namespace MotionMatching
                 {
                     // Current and next small box
                     int iSmall = i / SmallBoxSize;
-                    int iSmallIndex = iSmall * FeatureStaticSize;
+                    int iSmallIndex = iSmall * FeatureSize;
                     int iSmallNext = (iSmall + 1) * SmallBoxSize;
 
                     // Find distance to box
                     currentCost = 0.0f;
-                    for (int j = 0; j < FeatureStaticSize; ++j)
+                    for (int j = 0; j < FeatureSize; ++j)
                     {
                         float query = QueryFeature[j];
                         float cost = query - math.clamp(query, SmallBoundingBoxMin[iSmallIndex + j], SmallBoundingBoxMax[iSmallIndex + j]);
@@ -155,7 +153,7 @@ namespace MotionMatching
 
                         // Test all frames
                         currentCost = 0.0f;
-                        for (int j = 0; j < FeatureStaticSize; ++j)
+                        for (int j = 0; j < FeatureSize; ++j)
                         {
                             float query = QueryFeature[j];
                             float cost = query - Features[i * FeatureSize + j];

@@ -506,26 +506,6 @@ namespace MotionMatching
             return (ObstaclesCirclesArray, ObstaclesCirclesArrayCount, ObstaclesEllipsesArray, ObstaclesEllipsesArrayCount);
         }
 
-        // TODO: maybe get dynamic feature could return something more generic that allows to send custom data like the obstacle arrays
-        public override void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
-        {
-            if (feature.name == "FutureEllipse")
-            {
-                span[0] = 0.0f;
-                span[1] = 0.0f;
-                span[2] = 0.0f;
-            }
-            else if (feature.name == "FutureHeight")
-            {
-                span[0] = 0.0f;
-                span[1] = 0.0f;
-            }
-            else
-            {
-                Debug.Assert(false, "Unknown feature name: " + feature.name);
-            }
-        }
-
         private float2 GetWorldSpaceDirectionPrediction(int index)
         {
             var dir = math.mul(PredictedRotations[index], new float3(0, 0, 1));

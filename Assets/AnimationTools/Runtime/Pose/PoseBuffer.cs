@@ -1,6 +1,7 @@
+using System.Diagnostics;
 using Unity.Collections;
 using Unity.Mathematics;
-using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace AnimationTools
 {
@@ -45,98 +46,135 @@ public struct PoseBuffer
 
     public float3 GetPosition(PositionHandle h)
     {
-        Debug.Assert(h.IsValid, "PositionHandle is invalid.");
-        var i = Layout.PositionStart + h.Index * 3;
-        return new float3(Data[i], Data[i + 1], Data[i + 2]);
+        AssertHandle(h.Index, h.LayoutHash, 3, "PositionHandle");
+        return new float3(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2]);
     }
 
     public void SetPosition(PositionHandle h, float3 value)
     {
-        Debug.Assert(h.IsValid, "PositionHandle is invalid.");
-        var i = Layout.PositionStart + h.Index * 3;
-        Data[i] = value.x;
-        Data[i + 1] = value.y;
-        Data[i + 2] = value.z;
+        AssertHandle(h.Index, h.LayoutHash, 3, "PositionHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+        Data[h.Index + 2] = value.z;
     }
 
     public quaternion GetRotation(RotationHandle h)
     {
-        Debug.Assert(h.IsValid, "RotationHandle is invalid.");
+        AssertHandle(h.Index, h.LayoutHash, 4, "RotationHandle");
         Debug.Assert(Layout.RotationStride == 4, "GetRotation requires a Quaternion (stride 4) representation.");
-        var i = Layout.RotationStart + h.Index * 4;
-        return new quaternion(Data[i], Data[i + 1], Data[i + 2], Data[i + 3]);
+        return new quaternion(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2], Data[h.Index + 3]);
     }
 
     public void SetRotation(RotationHandle h, quaternion value)
     {
-        Debug.Assert(h.IsValid, "RotationHandle is invalid.");
+        AssertHandle(h.Index, h.LayoutHash, 4, "RotationHandle");
         Debug.Assert(Layout.RotationStride == 4, "SetRotation requires a Quaternion (stride 4) representation.");
-        var i = Layout.RotationStart + h.Index * 4;
         var v = value.value;
-        Data[i] = v.x;
-        Data[i + 1] = v.y;
-        Data[i + 2] = v.z;
-        Data[i + 3] = v.w;
+        Data[h.Index] = v.x;
+        Data[h.Index + 1] = v.y;
+        Data[h.Index + 2] = v.z;
+        Data[h.Index + 3] = v.w;
     }
 
     public float3 GetScale(ScaleHandle h)
     {
-        Debug.Assert(h.IsValid, "ScaleHandle is invalid.");
-        var i = Layout.ScaleStart + h.Index * 3;
-        return new float3(Data[i], Data[i + 1], Data[i + 2]);
+        AssertHandle(h.Index, h.LayoutHash, 3, "ScaleHandle");
+        return new float3(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2]);
     }
 
     public void SetScale(ScaleHandle h, float3 value)
     {
-        Debug.Assert(h.IsValid, "ScaleHandle is invalid.");
-        var i = Layout.ScaleStart + h.Index * 3;
-        Data[i] = value.x;
-        Data[i + 1] = value.y;
-        Data[i + 2] = value.z;
+        AssertHandle(h.Index, h.LayoutHash, 3, "ScaleHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+        Data[h.Index + 2] = value.z;
     }
 
     public float3 GetVelocity(VelocityHandle h)
     {
-        Debug.Assert(h.IsValid, "VelocityHandle is invalid.");
-        var i = Layout.VelocityStart + h.Index * 3;
-        return new float3(Data[i], Data[i + 1], Data[i + 2]);
+        AssertHandle(h.Index, h.LayoutHash, 3, "VelocityHandle");
+        return new float3(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2]);
     }
 
     public void SetVelocity(VelocityHandle h, float3 value)
     {
-        Debug.Assert(h.IsValid, "VelocityHandle is invalid.");
-        var i = Layout.VelocityStart + h.Index * 3;
-        Data[i] = value.x;
-        Data[i + 1] = value.y;
-        Data[i + 2] = value.z;
+        AssertHandle(h.Index, h.LayoutHash, 3, "VelocityHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+        Data[h.Index + 2] = value.z;
     }
 
     public float3 GetAngularVelocity(AngularVelocityHandle h)
     {
-        Debug.Assert(h.IsValid, "AngularVelocityHandle is invalid.");
-        var i = Layout.AngularVelocityStart + h.Index * 3;
-        return new float3(Data[i], Data[i + 1], Data[i + 2]);
+        AssertHandle(h.Index, h.LayoutHash, 3, "AngularVelocityHandle");
+        return new float3(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2]);
     }
 
     public void SetAngularVelocity(AngularVelocityHandle h, float3 value)
     {
-        Debug.Assert(h.IsValid, "AngularVelocityHandle is invalid.");
-        var i = Layout.AngularVelocityStart + h.Index * 3;
-        Data[i] = value.x;
-        Data[i + 1] = value.y;
-        Data[i + 2] = value.z;
+        AssertHandle(h.Index, h.LayoutHash, 3, "AngularVelocityHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+        Data[h.Index + 2] = value.z;
     }
 
     public bool GetBool(BoolHandle h)
     {
-        Debug.Assert(h.IsValid, "BoolHandle is invalid.");
-        return Data[Layout.BoolStart + h.Index] > 0.5f;
+        AssertHandle(h.Index, h.LayoutHash, 1, "BoolHandle");
+        return Data[h.Index] > 0.5f;
     }
 
     public void SetBool(BoolHandle h, bool value)
     {
-        Debug.Assert(h.IsValid, "BoolHandle is invalid.");
-        Data[Layout.BoolStart + h.Index] = value ? 1f : 0f;
+        AssertHandle(h.Index, h.LayoutHash, 1, "BoolHandle");
+        Data[h.Index] = value ? 1f : 0f;
+    }
+
+    public float GetFloat(ChannelHandle h, int offset = 0)
+    {
+        AssertHandle(h.Index, h.LayoutHash, h.Count, "ChannelHandle");
+        Debug.Assert(offset >= 0 && offset < h.Count, "Offset is outside the channel.");
+        return Data[h.Index + offset];
+    }
+
+    public void SetFloat(ChannelHandle h, int offset, float value)
+    {
+        AssertHandle(h.Index, h.LayoutHash, h.Count, "ChannelHandle");
+        Debug.Assert(offset >= 0 && offset < h.Count, "Offset is outside the channel.");
+        Data[h.Index + offset] = value;
+    }
+
+    public float2 GetFloat2(ChannelHandle h)
+    {
+        AssertHandle(h.Index, h.LayoutHash, 2, "ChannelHandle");
+        return new float2(Data[h.Index], Data[h.Index + 1]);
+    }
+
+    public void SetFloat2(ChannelHandle h, float2 value)
+    {
+        AssertHandle(h.Index, h.LayoutHash, 2, "ChannelHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+    }
+
+    public float3 GetFloat3(ChannelHandle h)
+    {
+        AssertHandle(h.Index, h.LayoutHash, 3, "ChannelHandle");
+        return new float3(Data[h.Index], Data[h.Index + 1], Data[h.Index + 2]);
+    }
+
+    public void SetFloat3(ChannelHandle h, float3 value)
+    {
+        AssertHandle(h.Index, h.LayoutHash, 3, "ChannelHandle");
+        Data[h.Index] = value.x;
+        Data[h.Index + 1] = value.y;
+        Data[h.Index + 2] = value.z;
+    }
+
+    public NativeSlice<float> GetSlice(ChannelHandle h)
+    {
+        AssertHandle(h.Index, h.LayoutHash, h.Count, "ChannelHandle");
+        return new NativeSlice<float>(Data, h.Index, h.Count);
     }
 
     public void CopyFrom(in PoseBuffer other)
@@ -205,6 +243,13 @@ public struct PoseBuffer
             var idx = layout.BoolStart + e;
             destination.Data[idx] = t < 0.5f ? a.Data[idx] : b.Data[idx];
         }
+
+        // Sections past the built-in six have no per-kind blend rule, so they interpolate linearly.
+        for (var i = 0; i < layout.ExtraCount; i++)
+        {
+            var idx = layout.ExtraStart + i;
+            destination.Data[idx] = math.lerp(a.Data[idx], b.Data[idx], t);
+        }
     }
 
     public static PoseBuffer Allocate(PoseLayout layout, Allocator allocator)
@@ -219,6 +264,14 @@ public struct PoseBuffer
     public void Dispose()
     {
         if (Data.IsCreated) Data.Dispose();
+    }
+
+    [Conditional("UNITY_ASSERTIONS")]
+    private void AssertHandle(int index, int layoutHash, int width, string handleName)
+    {
+        Debug.Assert(index >= 0, $"{handleName} is invalid.");
+        Debug.Assert(layoutHash == Layout.LayoutHash, $"{handleName} was bound against a different layout.");
+        Debug.Assert(index + width <= Data.Length, $"{handleName} is out of range for this buffer.");
     }
 }
 }

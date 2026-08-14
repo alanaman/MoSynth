@@ -60,11 +60,7 @@ public class ContactVisualizerStage : MoSynthStage
         foreach (var boneRef in contactBones)
         {
             if (!boneRef.IsSet) continue;
-            extraChannels.Add(new ChannelDescriptor
-            {
-                boneId = boneRef.BoneId, type = ChannelType.Bool, space = ChannelSpace.Character,
-                representation = RotationRepresentation.Quaternion, usage = ChannelUsage.Contact
-            });
+            extraChannels.Add(new BoolChannel(boneRef.BoneId, ChannelUsage.Contact));
         }
 
         _effectiveSkeleton = effectiveSkeleton;

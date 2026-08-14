@@ -7,6 +7,12 @@ namespace AnimationTools
 /// Unmanaged, Burst-embeddable section offsets/counts for a <see cref="PoseLayout"/>.
 /// Starts are in floats, counts are in elements (e.g. one Position element is 3 floats).
 /// </summary>
+/// <remarks>
+/// The named sections describe only the six built-in channel kinds. A layout may hold further
+/// sections after them (see <see cref="ChannelSections"/>); <see cref="ExtraStart"/> and
+/// <see cref="ExtraCount"/> cover that tail in floats, so nothing here assumes the named sections
+/// span the whole buffer.
+/// </remarks>
 public struct PoseLayoutData
 {
     public int PositionStart, PositionCount;
@@ -18,30 +24,25 @@ public struct PoseLayoutData
     public int AngularVelocityStart, AngularVelocityCount;
     /// <summary>Bools are stored as one float each (0f/1f).</summary>
     public int BoolStart, BoolCount;
+    /// <summary>Floats belonging to sections beyond the six built-in kinds.</summary>
+    public int ExtraStart, ExtraCount;
     public int FloatCount;
     public int LayoutHash;
 }
 
 /// <summary>
-/// An immutable, self-describing map from named/typed pose channels to positions within a
-/// flat float buffer (see <see cref="PoseBuffer"/>). This layout IS the pose file's
-/// self-description: a serialized pose asset is expected to store enough of it to
-/// reconstruct a <see cref="PoseLayout"/> without external context.
+/// An immutable, self-describing map from typed pose channels to positions within a flat float
+/// buffer (see <see cref="PoseBuffer"/>). This layout IS the pose file's self-description: a
+/// serialized pose asset is expected to store enough of it to reconstruct a
+/// <see cref="PoseLayout"/> without external context.
 /// </summary>
 /// <remarks>
-/// Planned file format for later serialization work (not implemented by this layer):
-/// <c>magic 'MSPS' | int version (PoseFormatVersion) | skeleton table {id, name,
-/// parentIndex, restLocalPosition, restLocalRotation, humanBone} | channel table |
-/// LayoutHash | frame count | raw float frames</c>. Unity-serialized assets may instead skip
-/// that binary format entirely and store only raw frame floats plus a <see cref="SkeletonAsset"/>
-/// reference, rebuilding the layout on load via <see cref="CreateFullPose"/> (see
-/// <c>PoseSequence</c>'s asset-backed usage).
+/// Sections are laid out in ascending <see cref="ChannelDescriptor.SectionKey"/> order, and within
+/// a section channels keep the declaration order they were passed to <see cref="Build"/> in. Each
+/// channel occupies its own <see cref="ChannelDescriptor.FloatCount"/>, so a section is only
+/// uniform-stride when its channels are.
 /// <para/>
-/// Section order within the buffer is fixed: positions, rotations, scales, velocities,
-/// angular velocities, bools. Strides: Position/Scale/Velocity/AngularVelocity are 3
-/// floats; Rotation is 4 floats (Quaternion) or 3 (RotationVector/EulerDegrees); Bool is
-/// 1 float. Within a section, elements keep the declaration order of their channel
-/// descriptors as passed to <see cref="Build"/>.
+/// <c>Bind*</c> allocates a probe descriptor per call and is meant for setup, not per-frame use.
 /// </remarks>
 public sealed class PoseLayout
 {
@@ -49,12 +50,33 @@ public sealed class PoseLayout
 
     private static readonly Dictionary<int, PoseLayout> Cache = new();
 
-    private readonly ChannelDescriptor[] positionChannels;
-    private readonly ChannelDescriptor[] rotationChannels;
-    private readonly ChannelDescriptor[] scaleChannels;
-    private readonly ChannelDescriptor[] velocityChannels;
-    private readonly ChannelDescriptor[] angularVelocityChannels;
-    private readonly ChannelDescriptor[] boolChannels;
+    private readonly struct ChannelSlot
+    {
+        public readonly int Offset;
+        public readonly int FloatCount;
+
+        public ChannelSlot(int offset, int floatCount)
+        {
+            Offset = offset;
+            FloatCount = floatCount;
+        }
+    }
+
+    private readonly struct SectionRange
+    {
+        public readonly int Start;
+        public readonly int FloatCount;
+
+        public SectionRange(int start, int floatCount)
+        {
+            Start = start;
+            FloatCount = floatCount;
+        }
+    }
+
+    private readonly Dictionary<ChannelDescriptor, ChannelSlot> _offsets;
+    private readonly Dictionary<int, ChannelDescriptor[]> _sections;
+    private readonly Dictionary<int, SectionRange> _sectionRanges;
 
     public SkeletonAsset Skeleton { get; }
     public IReadOnlyList<ChannelDescriptor> Channels { get; }
@@ -66,58 +88,54 @@ public sealed class PoseLayout
     public RotationRepresentation RotationFormat { get; }
 
     private PoseLayout(SkeletonAsset skeleton, ChannelDescriptor[] channels, PoseLayoutData data,
-        RotationRepresentation rotationFormat, ChannelDescriptor[] positionChannels,
-        ChannelDescriptor[] rotationChannels, ChannelDescriptor[] scaleChannels,
-        ChannelDescriptor[] velocityChannels, ChannelDescriptor[] angularVelocityChannels,
-        ChannelDescriptor[] boolChannels)
+        RotationRepresentation rotationFormat, Dictionary<ChannelDescriptor, ChannelSlot> offsets,
+        Dictionary<int, ChannelDescriptor[]> sections, Dictionary<int, SectionRange> sectionRanges)
     {
         Skeleton = skeleton;
         Channels = channels;
         Data = data;
         RotationFormat = rotationFormat;
-        this.positionChannels = positionChannels;
-        this.rotationChannels = rotationChannels;
-        this.scaleChannels = scaleChannels;
-        this.velocityChannels = velocityChannels;
-        this.angularVelocityChannels = angularVelocityChannels;
-        this.boolChannels = boolChannels;
+        _offsets = offsets;
+        _sections = sections;
+        _sectionRanges = sectionRanges;
     }
 
     /// <summary>
     /// Builds (or returns the cached) layout for a channel set. Throws
     /// <see cref="ArgumentException"/> if any boneId is not present in
-    /// <paramref name="skeleton"/>, if a (boneId, type, usage) triple repeats, if Rotation
-    /// channels don't share one representation, or if an AngularVelocity channel isn't
-    /// RotationVector.
+    /// <paramref name="skeleton"/>, if a channel identity repeats, if Rotation channels don't
+    /// share one representation, or if a non-built-in channel claims a built-in section key.
     /// </summary>
     public static PoseLayout Build(SkeletonAsset skeleton, IReadOnlyList<ChannelDescriptor> channels)
     {
         if (skeleton == null) throw new ArgumentException("skeleton must not be null.", nameof(skeleton));
         if (channels == null) throw new ArgumentException("channels must not be null.", nameof(channels));
 
-        var seenTriples = new HashSet<(int boneId, ChannelType type, ChannelUsage usage)>();
+        var seen = new HashSet<ChannelDescriptor>();
         RotationRepresentation? rotationFormat = null;
 
         for (var i = 0; i < channels.Count; i++)
         {
             var channel = channels[i];
+            if (channel == null) throw new ArgumentException($"Channel {i} is null.", nameof(channels));
 
-            if (skeleton.IndexOfId(channel.boneId) < 0)
-                throw new ArgumentException($"Channel {i} references bone id {channel.boneId}, which is not present in skeleton \"{skeleton.name}\".", nameof(channels));
+            if (channel is BoneChannelDescriptor boneChannel && skeleton.IndexOfId(boneChannel.BoneId) < 0)
+                throw new ArgumentException($"Channel {i} references bone id {boneChannel.BoneId}, which is not present in skeleton \"{skeleton.name}\".", nameof(channels));
 
-            var triple = (channel.boneId, channel.type, channel.usage);
-            if (!seenTriples.Add(triple))
-                throw new ArgumentException($"Duplicate channel for bone id {channel.boneId}, type {channel.type}, usage {channel.usage}.", nameof(channels));
+            if (!seen.Add(channel))
+                throw new ArgumentException($"Duplicate channel {Describe(channel)}.", nameof(channels));
 
-            if (channel.type == ChannelType.Rotation)
+            if (channel.SectionKey < 0)
+                throw new ArgumentException($"Channel {Describe(channel)} has negative section key {channel.SectionKey}.", nameof(channels));
+
+            if (channel.SectionKey <= ChannelSections.Bool && !IsBuiltIn(channel))
+                throw new ArgumentException($"Channel {Describe(channel)} claims built-in section key {channel.SectionKey}; keys up to {ChannelSections.Bool} are reserved.", nameof(channels));
+
+            if (channel is RotationChannel rotation)
             {
-                if (rotationFormat == null) rotationFormat = channel.representation;
-                else if (rotationFormat != channel.representation)
-                    throw new ArgumentException($"Mixed rotation representations in one layout: {rotationFormat} and {channel.representation}. All Rotation channels must share one representation.", nameof(channels));
-            }
-            else if (channel.type == ChannelType.AngularVelocity && channel.representation != RotationRepresentation.RotationVector)
-            {
-                throw new ArgumentException($"AngularVelocity channel for bone id {channel.boneId} has representation {channel.representation}; only RotationVector is valid.", nameof(channels));
+                if (rotationFormat == null) rotationFormat = rotation.Representation;
+                else if (rotationFormat != rotation.Representation)
+                    throw new ArgumentException($"Mixed rotation representations in one layout: {rotationFormat} and {rotation.Representation}. All Rotation channels must share one representation.", nameof(channels));
             }
         }
 
@@ -125,48 +143,73 @@ public sealed class PoseLayout
         var cacheKey = CombineKey(skeleton.GetEntityId().GetHashCode(), hash);
         if (Cache.TryGetValue(cacheKey, out var cached)) return cached;
 
-        var positions = new List<ChannelDescriptor>();
-        var rotations = new List<ChannelDescriptor>();
-        var scales = new List<ChannelDescriptor>();
-        var velocities = new List<ChannelDescriptor>();
-        var angularVelocities = new List<ChannelDescriptor>();
-        var bools = new List<ChannelDescriptor>();
+        var grouped = new SortedDictionary<int, List<ChannelDescriptor>>();
         var channelsCopy = new ChannelDescriptor[channels.Count];
 
         for (var i = 0; i < channels.Count; i++)
         {
             var channel = channels[i];
             channelsCopy[i] = channel;
-            switch (channel.type)
+            if (!grouped.TryGetValue(channel.SectionKey, out var section))
             {
-                case ChannelType.Position: positions.Add(channel); break;
-                case ChannelType.Rotation: rotations.Add(channel); break;
-                case ChannelType.Scale: scales.Add(channel); break;
-                case ChannelType.Velocity: velocities.Add(channel); break;
-                case ChannelType.AngularVelocity: angularVelocities.Add(channel); break;
-                case ChannelType.Bool: bools.Add(channel); break;
-                default: throw new ArgumentOutOfRangeException(nameof(channels), channel.type, "Unknown channel type.");
+                section = new List<ChannelDescriptor>();
+                grouped[channel.SectionKey] = section;
             }
+
+            section.Add(channel);
+        }
+
+        var offsets = new Dictionary<ChannelDescriptor, ChannelSlot>(channels.Count);
+        var sections = new Dictionary<int, ChannelDescriptor[]>(grouped.Count);
+        var sectionRanges = new Dictionary<int, SectionRange>(grouped.Count);
+        var cursor = 0;
+
+        foreach (var group in grouped)
+        {
+            var start = cursor;
+            foreach (var channel in group.Value)
+            {
+                offsets[channel] = new ChannelSlot(cursor, channel.FloatCount);
+                cursor += channel.FloatCount;
+            }
+
+            sections[group.Key] = group.Value.ToArray();
+            sectionRanges[group.Key] = new SectionRange(start, cursor - start);
         }
 
         var resolvedRotationFormat = rotationFormat ?? RotationRepresentation.Quaternion;
-        var rotationStride = (byte)(resolvedRotationFormat == RotationRepresentation.Quaternion ? 4 : 3);
 
-        var cursor = 0;
-        var data = new PoseLayoutData();
+        var data = new PoseLayoutData
+        {
+            PositionStart = SectionStart(sectionRanges, ChannelSections.Position),
+            PositionCount = SectionElementCount(sections, ChannelSections.Position),
+            RotationStart = SectionStart(sectionRanges, ChannelSections.Rotation),
+            RotationCount = SectionElementCount(sections, ChannelSections.Rotation),
+            RotationStride = (byte)(resolvedRotationFormat == RotationRepresentation.Quaternion ? 4 : 3),
+            ScaleStart = SectionStart(sectionRanges, ChannelSections.Scale),
+            ScaleCount = SectionElementCount(sections, ChannelSections.Scale),
+            VelocityStart = SectionStart(sectionRanges, ChannelSections.Velocity),
+            VelocityCount = SectionElementCount(sections, ChannelSections.Velocity),
+            AngularVelocityStart = SectionStart(sectionRanges, ChannelSections.AngularVelocity),
+            AngularVelocityCount = SectionElementCount(sections, ChannelSections.AngularVelocity),
+            BoolStart = SectionStart(sectionRanges, ChannelSections.Bool),
+            BoolCount = SectionElementCount(sections, ChannelSections.Bool),
+            FloatCount = cursor,
+            LayoutHash = hash
+        };
 
-        data.PositionStart = cursor; data.PositionCount = positions.Count; cursor += data.PositionCount * 3;
-        data.RotationStart = cursor; data.RotationCount = rotations.Count; data.RotationStride = rotationStride; cursor += data.RotationCount * rotationStride;
-        data.ScaleStart = cursor; data.ScaleCount = scales.Count; cursor += data.ScaleCount * 3;
-        data.VelocityStart = cursor; data.VelocityCount = velocities.Count; cursor += data.VelocityCount * 3;
-        data.AngularVelocityStart = cursor; data.AngularVelocityCount = angularVelocities.Count; cursor += data.AngularVelocityCount * 3;
-        data.BoolStart = cursor; data.BoolCount = bools.Count; cursor += data.BoolCount;
-        data.FloatCount = cursor;
-        data.LayoutHash = hash;
+        // Built-in section keys are the lowest, so anything else forms a contiguous tail.
+        var extraStart = cursor;
+        foreach (var range in sectionRanges)
+        {
+            if (range.Key > ChannelSections.Bool && range.Value.Start < extraStart) extraStart = range.Value.Start;
+        }
 
-        var layout = new PoseLayout(skeleton, channelsCopy, data, resolvedRotationFormat,
-            positions.ToArray(), rotations.ToArray(), scales.ToArray(), velocities.ToArray(),
-            angularVelocities.ToArray(), bools.ToArray());
+        data.ExtraStart = extraStart;
+        data.ExtraCount = cursor - extraStart;
+
+        var layout = new PoseLayout(skeleton, channelsCopy, data, resolvedRotationFormat, offsets, sections,
+            sectionRanges);
 
         Cache[cacheKey] = layout;
         return layout;
@@ -175,8 +218,8 @@ public sealed class PoseLayout
     /// <summary>
     /// One ParentLocal Position + one ParentLocal Quaternion Rotation channel per bone, in
     /// skeleton DFS order, so element index equals bone index. Optionally adds per-bone
-    /// ParentLocal RotationVector Velocity/AngularVelocity channels, likewise bone-index
-    /// aligned. All channels use <see cref="ChannelUsage.Default"/>.
+    /// ParentLocal Velocity/AngularVelocity channels, likewise bone-index aligned. All channels
+    /// use <see cref="ChannelUsage.Default"/>.
     /// </summary>
     public static PoseLayout CreateFullPose(SkeletonAsset skeleton, bool includeVelocities, bool includeAngularVelocities)
     {
@@ -188,27 +231,15 @@ public sealed class PoseLayout
         for (var i = 0; i < boneCount; i++)
         {
             var boneId = skeleton.GetBone(i).id;
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.Position, space = ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.Quaternion, usage = ChannelUsage.Default
-            });
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.Rotation, space = ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.Quaternion, usage = ChannelUsage.Default
-            });
+            channels.Add(new PositionChannel(boneId));
+            channels.Add(new RotationChannel(boneId));
         }
 
         if (includeVelocities)
         {
             for (var i = 0; i < boneCount; i++)
             {
-                channels.Add(new ChannelDescriptor
-                {
-                    boneId = skeleton.GetBone(i).id, type = ChannelType.Velocity, space = ChannelSpace.ParentLocal,
-                    representation = RotationRepresentation.RotationVector, usage = ChannelUsage.Default
-                });
+                channels.Add(new VelocityChannel(skeleton.GetBone(i).id));
             }
         }
 
@@ -216,11 +247,7 @@ public sealed class PoseLayout
         {
             for (var i = 0; i < boneCount; i++)
             {
-                channels.Add(new ChannelDescriptor
-                {
-                    boneId = skeleton.GetBone(i).id, type = ChannelType.AngularVelocity, space = ChannelSpace.ParentLocal,
-                    representation = RotationRepresentation.RotationVector, usage = ChannelUsage.Default
-                });
+                channels.Add(new AngularVelocityChannel(skeleton.GetBone(i).id));
             }
         }
 
@@ -229,9 +256,14 @@ public sealed class PoseLayout
 
     public bool TryBindPosition(BoneReference bone, out PositionHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(positionChannels, bone, usage);
-        handle = index >= 0 ? new PositionHandle(index) : PositionHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new PositionChannel(bone.BoneId, usage: usage), out var slot))
+        {
+            handle = new PositionHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = PositionHandle.Invalid;
+        return false;
     }
 
     public PositionHandle BindPosition(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -243,9 +275,14 @@ public sealed class PoseLayout
 
     public bool TryBindRotation(BoneReference bone, out RotationHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(rotationChannels, bone, usage);
-        handle = index >= 0 ? new RotationHandle(index) : RotationHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new RotationChannel(bone.BoneId, usage: usage), out var slot))
+        {
+            handle = new RotationHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = RotationHandle.Invalid;
+        return false;
     }
 
     public RotationHandle BindRotation(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -257,9 +294,14 @@ public sealed class PoseLayout
 
     public bool TryBindScale(BoneReference bone, out ScaleHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(scaleChannels, bone, usage);
-        handle = index >= 0 ? new ScaleHandle(index) : ScaleHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new ScaleChannel(bone.BoneId, usage: usage), out var slot))
+        {
+            handle = new ScaleHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = ScaleHandle.Invalid;
+        return false;
     }
 
     public ScaleHandle BindScale(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -271,9 +313,14 @@ public sealed class PoseLayout
 
     public bool TryBindBool(BoneReference bone, out BoolHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(boolChannels, bone, usage);
-        handle = index >= 0 ? new BoolHandle(index) : BoolHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new BoolChannel(bone.BoneId, usage), out var slot))
+        {
+            handle = new BoolHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = BoolHandle.Invalid;
+        return false;
     }
 
     public BoolHandle BindBool(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -285,9 +332,14 @@ public sealed class PoseLayout
 
     public bool TryBindVelocity(BoneReference bone, out VelocityHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(velocityChannels, bone, usage);
-        handle = index >= 0 ? new VelocityHandle(index) : VelocityHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new VelocityChannel(bone.BoneId, usage: usage), out var slot))
+        {
+            handle = new VelocityHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = VelocityHandle.Invalid;
+        return false;
     }
 
     public VelocityHandle BindVelocity(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -299,9 +351,14 @@ public sealed class PoseLayout
 
     public bool TryBindAngularVelocity(BoneReference bone, out AngularVelocityHandle handle, ChannelUsage usage = ChannelUsage.Default)
     {
-        var index = FindElementIndex(angularVelocityChannels, bone, usage);
-        handle = index >= 0 ? new AngularVelocityHandle(index) : AngularVelocityHandle.Invalid;
-        return index >= 0;
+        if (bone.IsSet && _offsets.TryGetValue(new AngularVelocityChannel(bone.BoneId, usage: usage), out var slot))
+        {
+            handle = new AngularVelocityHandle(slot.Offset, Data.LayoutHash);
+            return true;
+        }
+
+        handle = AngularVelocityHandle.Invalid;
+        return false;
     }
 
     public AngularVelocityHandle BindAngularVelocity(BoneReference bone, ChannelUsage usage = ChannelUsage.Default)
@@ -311,36 +368,81 @@ public sealed class PoseLayout
         return handle;
     }
 
-    /// <summary>Reverse lookup for tooling/debugging: the descriptor behind a raw section element index.</summary>
-    public ChannelDescriptor GetChannel(ChannelType type, int elementIndex)
+    /// <summary>
+    /// Binds any channel by identity, including kinds without a named section. The width comes
+    /// from the stored channel, so a probe that differs in descriptive metadata still binds
+    /// correctly.
+    /// </summary>
+    public bool TryBindChannel(ChannelDescriptor probe, out ChannelHandle handle)
     {
-        return GetSection(type)[elementIndex];
-    }
-
-    private ChannelDescriptor[] GetSection(ChannelType type)
-    {
-        switch (type)
+        if (probe != null && _offsets.TryGetValue(probe, out var slot))
         {
-            case ChannelType.Position: return positionChannels;
-            case ChannelType.Rotation: return rotationChannels;
-            case ChannelType.Scale: return scaleChannels;
-            case ChannelType.Velocity: return velocityChannels;
-            case ChannelType.AngularVelocity: return angularVelocityChannels;
-            case ChannelType.Bool: return boolChannels;
-            default: throw new ArgumentOutOfRangeException(nameof(type), type, "Unknown channel type.");
-        }
-    }
-
-    private static int FindElementIndex(ChannelDescriptor[] descriptors, BoneReference bone, ChannelUsage usage)
-    {
-        if (!bone.IsSet) return -1;
-
-        for (var i = 0; i < descriptors.Length; i++)
-        {
-            if (descriptors[i].boneId == bone.BoneId && descriptors[i].usage == usage) return i;
+            handle = new ChannelHandle(slot.Offset, slot.FloatCount, Data.LayoutHash);
+            return true;
         }
 
-        return -1;
+        handle = ChannelHandle.Invalid;
+        return false;
+    }
+
+    public ChannelHandle BindChannel(ChannelDescriptor probe)
+    {
+        if (!TryBindChannel(probe, out var handle))
+            throw new ArgumentException($"No channel {Describe(probe)} in this layout.");
+        return handle;
+    }
+
+    /// <summary>The float range a whole section occupies. False when the section is absent.</summary>
+    public bool TryGetSectionRange(int sectionKey, out int startFloat, out int floatCount)
+    {
+        if (_sectionRanges.TryGetValue(sectionKey, out var range))
+        {
+            startFloat = range.Start;
+            floatCount = range.FloatCount;
+            return true;
+        }
+
+        startFloat = 0;
+        floatCount = 0;
+        return false;
+    }
+
+    /// <summary>Reverse lookup for tooling/debugging: the descriptor behind a section element index.</summary>
+    public ChannelDescriptor GetChannel(int sectionKey, int elementIndex)
+    {
+        if (!_sections.TryGetValue(sectionKey, out var section))
+            throw new ArgumentOutOfRangeException(nameof(sectionKey), sectionKey, "No such section in this layout.");
+        return section[elementIndex];
+    }
+
+    /// <summary>Number of channels in a section, or 0 when the section is absent.</summary>
+    public int GetSectionElementCount(int sectionKey)
+    {
+        return _sections.TryGetValue(sectionKey, out var section) ? section.Length : 0;
+    }
+
+    private static bool IsBuiltIn(ChannelDescriptor channel)
+    {
+        return channel is PositionChannel or RotationChannel or ScaleChannel or VelocityChannel
+            or AngularVelocityChannel or BoolChannel;
+    }
+
+    private static string Describe(ChannelDescriptor channel)
+    {
+        if (channel == null) return "<null>";
+        return channel is BoneChannelDescriptor bone
+            ? $"{channel.GetType().Name}(bone {bone.BoneId}, usage {bone.Usage})"
+            : channel.GetType().Name;
+    }
+
+    private static int SectionStart(Dictionary<int, SectionRange> ranges, int sectionKey)
+    {
+        return ranges.TryGetValue(sectionKey, out var range) ? range.Start : 0;
+    }
+
+    private static int SectionElementCount(Dictionary<int, ChannelDescriptor[]> sections, int sectionKey)
+    {
+        return sections.TryGetValue(sectionKey, out var section) ? section.Length : 0;
     }
 
     private static int ComputeHash(SkeletonAsset skeleton, IReadOnlyList<ChannelDescriptor> channels)
@@ -357,7 +459,7 @@ public sealed class PoseLayout
 
             for (var i = 0; i < channels.Count; i++)
             {
-                hash = hash * 31 + channels[i].GetHashCode();
+                hash = hash * 31 + channels[i].GetContentHash();
             }
 
             return hash;

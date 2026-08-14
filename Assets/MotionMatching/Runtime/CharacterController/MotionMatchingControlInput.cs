@@ -83,11 +83,5 @@ namespace MotionMatching
             throw new NotImplementedException();
             return null;
         }
-
-        /// <summary>
-        /// Get the prediction in character space of a environment feature.
-        /// Similarly to GetTrajectoryFeature, the output should be filled with the predicted values of the feature.
-        /// </summary>
-        public virtual void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> output) { }
     }
 }

@@ -40,42 +40,26 @@ namespace AnimationTools
         for (var i = 0; i < boneCount; i++)
         {
             var boneId = asset.GetBone(i).id;
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.Position, space = ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.Quaternion, usage = ChannelUsage.Default
-            });
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.Rotation, space = ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.Quaternion, usage = ChannelUsage.Default
-            });
+            channels.Add(new PositionChannel(boneId));
+            channels.Add(new RotationChannel(boneId));
         }
 
         for (var i = 0; i < boneCount; i++)
         {
             var boneId = asset.GetBone(i).id;
             var isRoot = i == 0;
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.Velocity,
-                space = isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.RotationVector,
-                usage = isRoot ? ChannelUsage.RootMotion : ChannelUsage.Default
-            });
+            channels.Add(new VelocityChannel(boneId,
+                isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
+                isRoot ? ChannelUsage.RootMotion : ChannelUsage.Default));
         }
 
         for (var i = 0; i < boneCount; i++)
         {
             var boneId = asset.GetBone(i).id;
             var isRoot = i == 0;
-            channels.Add(new ChannelDescriptor
-            {
-                boneId = boneId, type = ChannelType.AngularVelocity,
-                space = isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
-                representation = RotationRepresentation.RotationVector,
-                usage = isRoot ? ChannelUsage.RootMotion : ChannelUsage.Default
-            });
+            channels.Add(new AngularVelocityChannel(boneId,
+                isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
+                isRoot ? ChannelUsage.RootMotion : ChannelUsage.Default));
         }
 
         return channels;
@@ -92,21 +76,15 @@ namespace AnimationTools
         var leftContactBone = PickContactBoneIndex(asset, HumanBodyBones.LeftToes, HumanBodyBones.LeftFoot, 0);
         var rightContactBone = PickContactBoneIndex(asset, HumanBodyBones.RightToes, HumanBodyBones.RightFoot,
             asset.BoneCount - 1);
-        // The layout rejects duplicate (bone, type, usage) triples, so a skeleton missing one
-        // side must still end up with two distinct host bones.
+        // The layout rejects duplicate channel identities, so a skeleton missing one side must
+        // still end up with two distinct host bones.
         if (rightContactBone == leftContactBone)
         {
             rightContactBone = leftContactBone == 0 ? asset.BoneCount - 1 : 0;
         }
 
-        channels.Add(new ChannelDescriptor
-        {
-            boneId = asset.GetBone(leftContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact
-        });
-        channels.Add(new ChannelDescriptor
-        {
-            boneId = asset.GetBone(rightContactBone).id, type = ChannelType.Bool, usage = ChannelUsage.Contact
-        });
+        channels.Add(new BoolChannel(asset.GetBone(leftContactBone).id, ChannelUsage.Contact));
+        channels.Add(new BoolChannel(asset.GetBone(rightContactBone).id, ChannelUsage.Contact));
 
         var layout = PoseLayout.Build(asset, channels);
         contacts = new ContactHandles(

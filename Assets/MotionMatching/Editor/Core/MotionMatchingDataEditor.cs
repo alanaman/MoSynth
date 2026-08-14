@@ -14,7 +14,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     private bool SkeletonToMecanimFoldout;
     private bool TrajectoryFeaturesSelectorFoldout;
     private bool PoseFeaturesSelectorFoldout;
-    private bool EnvironmentFeaturesSelectorFoldout;
 
     private SerializedProperty _animationClipsProperty;
     private SerializedProperty _tPoseAnimationClipProperty;
@@ -267,48 +266,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
 
         EditorGUILayout.EndFoldoutHeaderGroup();
 
-        // Environment Features ------------------------------------------------------------------------------------
-        EnvironmentFeaturesSelectorFoldout =
-            EditorGUILayout.BeginFoldoutHeaderGroup(EnvironmentFeaturesSelectorFoldout, "Environment Features");
-        if (EnvironmentFeaturesSelectorFoldout)
-        {
-            EditorGUI.indentLevel++;
-            for (int i = 0; i < data.environmentFeatures.Count; i++)
-            {
-                MotionMatchingData.TrajectoryFeature environmentFeature = data.environmentFeatures[i];
-                // Header
-                EditorGUILayout.BeginVertical(GUI.skin.box);
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField((i + 1).ToString());
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("x"))
-                {
-                    data.environmentFeatures.RemoveAt(i--);
-                }
-
-                EditorGUILayout.EndHorizontal();
-                // Name
-                environmentFeature.name = EditorGUILayout.TextField("Name", environmentFeature.name);
-                // Feature Type
-                environmentFeature.featureType =
-                    (MotionMatchingData.TrajectoryFeature.Type)EditorGUILayout.EnumPopup("Type",
-                        environmentFeature.featureType);
-                environmentFeature.isMainPositionFeature = false;
-                generateButtonError = generateButtonError || TrajectoryFramesLayout(environmentFeature);
-                generateButtonError = generateButtonError || TrajectoryTypeOptionsLayout(environmentFeature);
-                EditorGUILayout.EndVertical();
-            }
-
-            if (GUILayout.Button("Add Environment Feature"))
-            {
-                data.environmentFeatures.Add(new MotionMatchingData.TrajectoryFeature());
-            }
-
-            EditorGUI.indentLevel--;
-        }
-
-        EditorGUILayout.EndFoldoutHeaderGroup();
-
         // Generate Databases
         EditorGUILayout.Separator();
         if (generateButtonError)
@@ -395,65 +352,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 trajectoryFeature.zeroX = false;
                 trajectoryFeature.zeroY = true; // project simulation bone to the ground
                 trajectoryFeature.zeroZ = false;
-            }
-        }
-        else
-        {
-            if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Custom1D)
-            {
-                trajectoryFeature.featureExtractor = EditorGUILayout.ObjectField(
-                    new GUIContent("Feature1DExtractor",
-                        "ScriptableObject inheriting from the 'Feature1DExtractor' class"),
-                    trajectoryFeature.featureExtractor, typeof(Feature1DExtractor), false) as ScriptableObject;
-                if (trajectoryFeature.featureExtractor == null)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Please enter an instance of a ScriptableObject inheriting from the 'Feature1DExtractor' class",
-                        MessageType.Error);
-                    generateButtonError = true;
-                }
-            }
-            else if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Custom2D)
-            {
-                trajectoryFeature.featureExtractor = EditorGUILayout.ObjectField(
-                    new GUIContent("Feature2DExtractor",
-                        "ScriptableObject inheriting from the 'Feature2DExtractor' class"),
-                    trajectoryFeature.featureExtractor, typeof(Feature2DExtractor), false) as ScriptableObject;
-                if (trajectoryFeature.featureExtractor == null)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Please enter an instance of a ScriptableObject inheriting from the 'Feature2DExtractor' class",
-                        MessageType.Error);
-                    generateButtonError = true;
-                }
-            }
-            else if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Custom3D)
-            {
-                trajectoryFeature.featureExtractor = EditorGUILayout.ObjectField(
-                    new GUIContent("Feature3DExtractor",
-                        "ScriptableObject inheriting from the 'Feature3DExtractor' class"),
-                    trajectoryFeature.featureExtractor, typeof(Feature3DExtractor), false) as ScriptableObject;
-                if (trajectoryFeature.featureExtractor == null)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Please enter an instance of a ScriptableObject inheriting from the 'Feature3DExtractor' class",
-                        MessageType.Error);
-                    generateButtonError = true;
-                }
-            }
-            else if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Custom4D)
-            {
-                trajectoryFeature.featureExtractor = EditorGUILayout.ObjectField(
-                    new GUIContent("Feature4DExtractor",
-                        "ScriptableObject inheriting from the 'Feature4DExtractor' class"),
-                    trajectoryFeature.featureExtractor, typeof(Feature4DExtractor), false) as ScriptableObject;
-                if (trajectoryFeature.featureExtractor == null)
-                {
-                    EditorGUILayout.HelpBox(
-                        "Please enter an instance of a ScriptableObject inheriting from the 'Feature4DExtractor' class",
-                        MessageType.Error);
-                    generateButtonError = true;
-                }
             }
         }
 

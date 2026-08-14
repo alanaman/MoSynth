@@ -16,7 +16,6 @@ namespace MotionMatching
         [ReadOnly] public NativeArray<float> QueryFeature;
         [ReadOnly] public NativeArray<float> FeatureWeights;
         [ReadOnly] public int FeatureSize;
-        [ReadOnly] public int FeatureStaticSize;
         [ReadOnly] public float CurrentDistance;
 
         [WriteOnly] public NativeArray<int> BestIndex;
@@ -33,7 +32,7 @@ namespace MotionMatching
                     float sqrDistance = 0.0f;
                     int featureIndex = i * FeatureSize;
 
-                    for (int j = 0; j < FeatureStaticSize; ++j)
+                    for (int j = 0; j < FeatureSize; ++j)
                     {
                         float diff = Features[featureIndex + j] - QueryFeature[j];
                         sqrDistance += diff * diff * FeatureWeights[j];

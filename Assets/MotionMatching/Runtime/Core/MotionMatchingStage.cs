@@ -184,121 +184,67 @@ public class MotionMatchingStage : MoSynthStage
     {
         var simulationBone = _owner.SkeletonTransforms[0];
         var queryFeatureSpan = _queryFeatureVector.AsSpan();
-        
+        var featureSet = mmData.GetOrImportFeatureSet();
+
         // Trajectory features
-        var offset = 0;
-        foreach (var featureDef in mmData.trajectoryFeatures)
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            var featureSize = featureDef.GetSize();
-            for (var p = 0; p < featureDef.framesPrediction.Length; ++p)
+            var featureDef = mmData.trajectoryFeatures[i];
+            var featureSize = featureSet.GetTrajectoryFeatureFloatCount(i);
+            for (var p = 0; p < featureSet.GetPredictionCount(i); ++p)
             {
-                var feature = queryFeatureSpan.Slice(offset, featureSize);
+                var feature = queryFeatureSpan.Slice(featureSet.GetTrajectoryFeatureOffset(i, p), featureSize);
                 controlInput.GetTrajectoryFeature(featureDef, p, simulationBone, feature);
-                offset += featureSize;
             }
         }
-        
-        var featureSet = mmData.GetOrImportFeatureSet();
+
         featureSet.NormalizeTrajectory(queryFeatureSpan);
 
         // TODO:
-        // The currentPose of the character could be quite different from the 
-        // one poses stored in mmData due to retargeting. 
+        // The currentPose of the character could be quite different from the
+        // one poses stored in mmData due to retargeting.
         // We can use the currentPose if we implement a backpropagation
         // that can inverse the retargeting.
-        
-        // // Pose features
-        // for (int i = 0; i < featureSet.NumberPoseFeatures; i++)
-        // {
-        //     var poseFeatureDef = mmData.PoseFeatures[i];
-        //     var featureOffset = featureSet.PoseOffset + i * FeatureSet.NumberFloatsPose;
-        //     var currPose = _owner.CurrentPose;
-        //     var skeleton = _poseSet.Skeleton;
-        //     var joint = skeleton.Find(poseFeatureDef.Bone);
-        //     if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Position)
-        //     {
-        //         var feature = currPose.GetRootSpacePosition(skeleton, joint);
-        //         
-        //         queryFeatureSpan[featureOffset + 0] = feature.x;
-        //         queryFeatureSpan[featureOffset + 1] = feature.y;
-        //         queryFeatureSpan[featureOffset + 2] = feature.z;
-        //     }
-        //     else if (poseFeatureDef.FeatureType == MotionMatchingData.PoseFeature.Type.Velocity)
-        //     {
-        //         var feature = currPose.GetRootSpaceVelocity(skeleton, joint);
-        //         queryFeatureSpan[featureOffset + 0] = feature.x;
-        //         queryFeatureSpan[featureOffset + 1] = feature.y;
-        //         queryFeatureSpan[featureOffset + 2] = feature.z;
-        //     }
-        //     else
-        //     {
-        //         throw new Exception("Unknown PoseFeature.Type: " + poseFeatureDef.FeatureType);
-        //     }
-        // }
-        
-        featureSet.GetPoseFeatures(queryFeatureSpan.Slice(offset, featureSet.PoseFloatCount), CurrentFrame);
-        
-        // Environment features
-        if (featureSet.EnvironmentOffset.Length > 0)
-        {
-            offset = featureSet.EnvironmentOffset[0];
-            foreach (var featureDef in mmData.environmentFeatures)
-            {
-                for (var p = 0; p < featureDef.framesPrediction.Length; p++)
-                {
-                    var featureSize = featureDef.GetSize();
-                    var feature = queryFeatureSpan.Slice(offset, featureSize);
-                    controlInput.GetEnvironmentFeature(featureDef, p, simulationBone, feature);
-                    offset += featureSize;
-                }
-            }
-        }
-        
-        // featureSet.NormalizeFeatureVector(_queryFeatureVector);
+
+        featureSet.GetPoseFeatures(queryFeatureSpan.Slice(featureSet.PoseOffset, featureSet.PoseFloatCount),
+            CurrentFrame);
     }
 
     // TODO call from editor
     public void UpdateFeatureWeights()
     {
-        var offset = 0;
+        var featureSet = mmData.GetOrImportFeatureSet();
+        var definitionCount = mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count;
+
+        // One weight per feature definition is read from the head of the same array this then
+        // fills in per float, so the source values have to be taken before the first write.
+        var definitionWeights = new float[definitionCount];
+        for (var i = 0; i < definitionCount && i < _featureWeights.Length; i++)
+        {
+            definitionWeights[i] = _featureWeights[i];
+        }
+
         for (var i = 0; i < mmData.trajectoryFeatures.Count; i++)
         {
-            var feature = mmData.trajectoryFeatures[i];
-            var featureSize = feature.GetSize();
-            var weight = _featureWeights[i] * responsiveness;
-            for (var p = 0; p < feature.framesPrediction.Length; ++p)
+            var featureSize = featureSet.GetTrajectoryFeatureFloatCount(i);
+            var weight = definitionWeights[i] * responsiveness;
+            for (var p = 0; p < featureSet.GetPredictionCount(i); ++p)
             {
+                var offset = featureSet.GetTrajectoryFeatureOffset(i, p);
                 for (var f = 0; f < featureSize; f++)
                 {
                     _featureWeights[offset + f] = weight;
                 }
-
-                offset += featureSize;
             }
         }
 
         for (var i = 0; i < mmData.poseFeatures.Count; i++)
         {
-            var weight = _featureWeights[i + mmData.trajectoryFeatures.Count] * quality;
-            _featureWeights[offset + 0] = weight;
-            _featureWeights[offset + 1] = weight;
-            _featureWeights[offset + 2] = weight;
-            offset += 3;
-        }
-
-        for (var i = 0; i < mmData.environmentFeatures.Count; i++)
-        {
-            var feature = mmData.environmentFeatures[i];
-            var featureSize = feature.GetSize();
-            var baseWeight = _featureWeights[i + mmData.trajectoryFeatures.Count + mmData.poseFeatures.Count];
-            for (var p = 0; p < feature.framesPrediction.Length; ++p)
+            var weight = definitionWeights[mmData.trajectoryFeatures.Count + i] * quality;
+            var offset = featureSet.PoseOffset + i * FeatureSet.FloatsPerPoseFeature;
+            for (var f = 0; f < FeatureSet.FloatsPerPoseFeature; f++)
             {
-                for (var f = 0; f < featureSize; f++)
-                {
-                    _featureWeights[offset + f] = baseWeight;
-                }
-
-                offset += featureSize;
+                _featureWeights[offset + f] = weight;
             }
         }
     }

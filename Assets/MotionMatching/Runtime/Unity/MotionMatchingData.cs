@@ -42,10 +42,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
 
     public List<PoseFeature> poseFeatures = new();
 
-    public List<TrajectoryFeature>
-        environmentFeatures =
-            new(); // Features used for dynamic computations and not used during the standard distance check in the Motion Matching search
-
     private PoseSet _poseSet;
 
     public FeatureSet FeatureSet
@@ -282,11 +278,7 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         public enum Type
         {
             Position,
-            Direction,
-            Custom1D,
-            Custom2D,
-            Custom3D,
-            Custom4D
+            Direction
         }
 
         [FormerlySerializedAs("Name")] public string name;
@@ -306,9 +298,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         [FormerlySerializedAs("ZeroY")] public bool zeroY; // Zero the X, Y and/or Z component of the trajectory feature
         [FormerlySerializedAs("ZeroZ")] public bool zeroZ; // Zero the X, Y and/or Z component of the trajectory feature
 
-        [FormerlySerializedAs("FeatureExtractor")]
-        public ScriptableObject featureExtractor; // Custom feature extractor for user-defined types
-
         [FormerlySerializedAs("IsMainPositionFeature")]
         public bool
             isMainPositionFeature; // Only for position feature type. Used for visualizing gizmos of other trajectory features colocated with this position feature.
@@ -318,22 +307,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
             if (featureType == Type.Position || featureType == Type.Direction)
             {
                 return 3 - (zeroX ? 1 : 0) - (zeroY ? 1 : 0) - (zeroZ ? 1 : 0);
-            }
-            else if (featureType == Type.Custom1D)
-            {
-                return 1;
-            }
-            else if (featureType == Type.Custom2D)
-            {
-                return 2;
-            }
-            else if (featureType == Type.Custom3D)
-            {
-                return 3;
-            }
-            else if (featureType == Type.Custom4D)
-            {
-                return 4;
             }
 
             Debug.Assert(false, "Size not defined for FeatureType: " + featureType.ToString());

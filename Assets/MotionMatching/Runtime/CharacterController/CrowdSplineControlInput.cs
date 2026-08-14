@@ -348,25 +348,6 @@ namespace MotionMatching
             return (ObstaclesCirclesArray, ObstaclesCirclesArrayCount, ObstaclesEllipsesArray, ObstaclesEllipsesArrayCount);
         }
 
-        public override void GetEnvironmentFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
-        {
-            if (feature.name == "FutureEllipse")
-            {
-                span[0] = 0.0f;
-                span[1] = 0.0f;
-                span[2] = 0.0f;
-            }
-            else if (feature.name == "FutureHeight")
-            {
-                span[0] = 0.0f;
-                span[1] = 0.0f;
-            }
-            else
-            {
-                Debug.Assert(false, "Unknown feature name: " + feature.name);
-            }
-        }
-
         private float2 GetWorldPredictedPos(int index)
         {
             return PredictedPositions[index];
