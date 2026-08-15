@@ -5,8 +5,6 @@ using Unity.Mathematics;
 
 namespace MotionMatching
 {
-    using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
-
     // Adjustment between Character Controller and Motion Matching Character Entity
     /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
@@ -81,8 +79,8 @@ namespace MotionMatching
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
-            TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].predictionFrames;
+            TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].predictionFrames;
             // TODO: generalize this... allow different number of prediction frames for different features
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
             for (var i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
@@ -304,18 +302,18 @@ namespace MotionMatching
             return transform.rotation;
         }
 
-        public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
+        public override void GetTrajectoryFeature(TrajectoryFeatureChannel feature, int index, Transform character, Span<float> span)
         {
             if (!feature.simulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
             switch (feature.featureType)
             {
-                case TrajectoryFeature.Type.Position:
+                case TrajectoryFeatureChannel.Type.Position:
                     var world = PredictedPosition[index];
                     float3 local = character.InverseTransformPoint(new float3(world.x, 0.0f, world.y));
                     span[0] = local.x;
                     span[1] = local.z;
                     break;
-                case TrajectoryFeature.Type.Direction:
+                case TrajectoryFeatureChannel.Type.Direction:
                     var dirProjected = GetWorldSpaceDirectionPrediction(index);
                     float3 localDir = character.InverseTransformDirection(new Vector3(dirProjected.x, 0.0f, dirProjected.y));
                     span[0] = localDir.x;

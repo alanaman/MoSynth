@@ -95,7 +95,7 @@ public class PoseLayoutTests
         Assert.AreEqual(30, data.BoolStart);
         Assert.AreEqual(2, data.BoolCount);
 
-        Assert.AreEqual(32, data.FloatCount);
+        Assert.AreEqual(32, layout.FloatCount);
     }
 
     [Test]
@@ -106,7 +106,7 @@ public class PoseLayoutTests
 
         Assert.AreEqual(3, data.RotationStride);
         // Same channel counts as the Quaternion layout, but 3 fewer floats per rotation * 3 rotations.
-        Assert.AreEqual(29, data.FloatCount);
+        Assert.AreEqual(29, layout.FloatCount);
     }
 
     [Test]
@@ -142,11 +142,9 @@ public class PoseLayoutTests
     public void TryBind_ReturnsDistinctSlotsThatRoundTripIndependently()
     {
         var layout = PoseLayout.Build(skeleton, BuildMixedChannels());
-        var rootBone = new BoneReference(TestSkeletons.RootId, "root");
-        var headBone = new BoneReference(TestSkeletons.HeadId, "head");
 
-        Assert.IsTrue(layout.TryBindPosition(rootBone, out var rootHandle));
-        Assert.IsTrue(layout.TryBindPosition(headBone, out var headHandle));
+        Assert.IsTrue(layout.TryBindChannel(new PositionChannel(TestSkeletons.RootId), out var rootHandle));
+        Assert.IsTrue(layout.TryBindChannel(new PositionChannel(TestSkeletons.HeadId), out var headHandle));
 
         var buffer = PoseBuffer.Allocate(layout, Allocator.Temp);
         try
@@ -154,12 +152,12 @@ public class PoseLayoutTests
             var rootValue = new float3(1f, 2f, 3f);
             var headValue = new float3(4f, 5f, 6f);
 
-            buffer.SetPosition(rootHandle, rootValue);
-            buffer.SetPosition(headHandle, headValue);
+            buffer.SetFloat3(rootHandle, rootValue);
+            buffer.SetFloat3(headHandle, headValue);
 
             // If both handles resolved to the same element, the second write would clobber the first.
-            Assert.AreEqual(rootValue, buffer.GetPosition(rootHandle));
-            Assert.AreEqual(headValue, buffer.GetPosition(headHandle));
+            Assert.AreEqual(rootValue, buffer.GetFloat3(rootHandle));
+            Assert.AreEqual(headValue, buffer.GetFloat3(headHandle));
 
             // Declaration order (root, then head) fixes which section element each bone owns.
             Assert.AreEqual(TestSkeletons.RootId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Position, 0)).BoneId);
@@ -177,7 +175,7 @@ public class PoseLayoutTests
         var channels = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId) };
         var layout = PoseLayout.Build(skeleton, channels);
 
-        var found = layout.TryBindScale(new BoneReference(TestSkeletons.RootId, "root"), out var handle);
+        var found = layout.TryBindChannel(new ScaleChannel(TestSkeletons.RootId), out var handle);
 
         Assert.IsFalse(found);
         Assert.IsFalse(handle.IsValid);
@@ -189,7 +187,7 @@ public class PoseLayoutTests
         var channels = new List<ChannelDescriptor> { new PositionChannel(TestSkeletons.RootId) };
         var layout = PoseLayout.Build(skeleton, channels);
 
-        Assert.Throws<ArgumentException>(() => layout.BindScale(new BoneReference(TestSkeletons.RootId, "root")));
+        Assert.Throws<ArgumentException>(() => layout.BindChannel(new ScaleChannel(TestSkeletons.RootId)));
     }
 
     [Test]
@@ -201,10 +199,9 @@ public class PoseLayoutTests
             new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Contact)
         };
         var layout = PoseLayout.Build(skeleton, channels);
-        var headBone = new BoneReference(TestSkeletons.HeadId, "head");
 
-        Assert.IsTrue(layout.TryBindBool(headBone, out var defaultHandle, ChannelUsage.Default));
-        Assert.IsTrue(layout.TryBindBool(headBone, out var contactHandle, ChannelUsage.Contact));
+        Assert.IsTrue(layout.TryBindChannel(new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Default), out var defaultHandle));
+        Assert.IsTrue(layout.TryBindChannel(new BoolChannel(TestSkeletons.HeadId, ChannelUsage.Contact), out var contactHandle));
 
         var buffer = PoseBuffer.Allocate(layout, Allocator.Temp);
         try
@@ -338,12 +335,12 @@ public class PoseLayoutTests
         });
         Assert.AreNotEqual(layoutA.LayoutHash, layoutB.LayoutHash);
 
-        var handle = layoutA.BindPosition(new BoneReference(TestSkeletons.RootId, "root"));
+        var handle = layoutA.BindChannel(new PositionChannel(TestSkeletons.RootId));
         var buffer = PoseBuffer.Allocate(layoutB, Allocator.Temp);
         try
         {
-            LogAssert.Expect(LogType.Assert, new Regex("PositionHandle was bound against a different layout"));
-            buffer.GetPosition(handle);
+            LogAssert.Expect(LogType.Assert, new Regex("ChannelHandle was bound against a different layout"));
+            buffer.GetFloat3(handle);
         }
         finally
         {

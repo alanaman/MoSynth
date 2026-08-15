@@ -43,8 +43,8 @@ namespace MotionMatching
                     {
                         var trajectoryFeature = mmData.trajectoryFeatures[t];
                         writer.Write(trajectoryFeature.name);
-                        writer.Write(trajectoryFeature.GetSize());
-                        writer.Write((uint)trajectoryFeature.framesPrediction.Length);
+                        writer.Write(trajectoryFeature.FloatsPerPrediction);
+                        writer.Write((uint)trajectoryFeature.PredictionCount);
                     }
                     for (int p = 0; p < mmData.poseFeatures.Count; ++p)
                     {
@@ -62,8 +62,8 @@ namespace MotionMatching
                         for (int t = 0; t < mmData.trajectoryFeatures.Count; ++t)
                         {
                             var trajectoryFeature = mmData.trajectoryFeatures[t];
-                            int featureSize = trajectoryFeature.GetSize();
-                            for (int p = 0; p < trajectoryFeature.framesPrediction.Length; ++p)
+                            int featureSize = trajectoryFeature.FloatsPerPrediction;
+                            for (int p = 0; p < trajectoryFeature.PredictionCount; ++p)
                             {
                                 if (featureSize == 3)
                                 {
@@ -140,8 +140,8 @@ namespace MotionMatching
                             uint nFloatsType = reader.ReadUInt32();
                             uint nElements = reader.ReadUInt32();
                             Debug.Assert(name == trajectoryFeature.name, "Name of trajectory feature does not match");
-                            Debug.Assert(nFloatsType == (uint)trajectoryFeature.GetSize(), "Projection type of trajectory feature does not match");
-                            Debug.Assert(nElements == (uint)trajectoryFeature.framesPrediction.Length, "Number of frames prediction of trajectory feature does not match");
+                            Debug.Assert(nFloatsType == (uint)trajectoryFeature.FloatsPerPrediction, "Projection type of trajectory feature does not match");
+                            Debug.Assert(nElements == (uint)trajectoryFeature.PredictionCount, "Number of frames prediction of trajectory feature does not match");
                         }
                         for (int p = 0; p < mmData.poseFeatures.Count; ++p)
                         {

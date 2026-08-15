@@ -9,8 +9,6 @@ using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
-    using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
-
     /// <summary>
     /// Converts general input to MotionMatching specific input 
     /// </summary>
@@ -75,10 +73,10 @@ namespace MotionMatching
         ///       then, since the projected position is 2D (2 floats), thus, output[0] and output[1] should be filled with the X and Z coordinates.
         ///       e.g., when index==1, it should return the position of the character at frame 40.
         /// </summary>
-        public abstract void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span);
+        public abstract void GetTrajectoryFeature(TrajectoryFeatureChannel feature, int index, Transform character, Span<float> span);
 
 
-        public virtual float[] GetTrajectoryFeature(TrajectoryFeature feature)
+        public virtual float[] GetTrajectoryFeature(TrajectoryFeatureChannel feature)
         {
             throw new NotImplementedException();
             return null;

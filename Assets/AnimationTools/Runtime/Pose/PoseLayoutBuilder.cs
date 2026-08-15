@@ -18,10 +18,10 @@ namespace AnimationTools
 {
     public readonly struct ContactHandles
     {
-        public readonly BoolHandle Left;
-        public readonly BoolHandle Right;
+        public readonly ChannelHandle Left;
+        public readonly ChannelHandle Right;
 
-        internal ContactHandles(BoolHandle left, BoolHandle right)
+        internal ContactHandles(ChannelHandle left, ChannelHandle right)
         {
             Left = left;
             Right = right;
@@ -88,15 +88,9 @@ namespace AnimationTools
 
         var layout = PoseLayout.Build(asset, channels);
         contacts = new ContactHandles(
-            layout.BindBool(BoneRef(asset, leftContactBone), ChannelUsage.Contact),
-            layout.BindBool(BoneRef(asset, rightContactBone), ChannelUsage.Contact));
+            layout.BindChannel(new BoolChannel(asset.GetBone(leftContactBone).id, ChannelUsage.Contact)),
+            layout.BindChannel(new BoolChannel(asset.GetBone(rightContactBone).id, ChannelUsage.Contact)));
         return layout;
-    }
-
-    private static BoneReference BoneRef(SkeletonAsset asset, int boneIndex)
-    {
-        var bone = asset.GetBone(boneIndex);
-        return new BoneReference(bone.id, bone.name);
     }
 
     private static int PickContactBoneIndex(SkeletonAsset asset, HumanBodyBones toes, HumanBodyBones foot,

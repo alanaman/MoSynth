@@ -28,9 +28,8 @@ public class PoseFkTests
         for (var i = 0; i < skeleton.BoneCount; i++)
         {
             var bone = skeleton.GetBone(i);
-            var boneRef = new BoneReference(bone.id, bone.name);
-            buffer.SetPosition(layout.BindPosition(boneRef), bone.restLocalPosition);
-            buffer.SetRotation(layout.BindRotation(boneRef), quaternion.identity);
+            buffer.SetFloat3(layout.BindChannel(new PositionChannel(bone.id)), bone.restLocalPosition);
+            buffer.SetQuaternion(layout.BindChannel(new RotationChannel(bone.id)), quaternion.identity);
         }
     }
 
@@ -42,11 +41,7 @@ public class PoseFkTests
         skeleton = null;
     }
 
-    private BoneReference BoneRef(int index)
-    {
-        var bone = skeleton.GetBone(index);
-        return new BoneReference(bone.id, bone.name);
-    }
+    private int BoneId(int index) => skeleton.GetBone(index).id;
 
     private static void AssertApprox(float3 expected, float3 actual)
     {
@@ -96,7 +91,7 @@ public class PoseFkTests
     public void LocalToCharacter_RootRotated90AboutZ_MatchesCharacterPositionAndRotationPerBone()
     {
         var rootRotation = quaternion.RotateZ(math.radians(90f));
-        buffer.SetRotation(layout.BindRotation(BoneRef(0)), rootRotation);
+        buffer.SetQuaternion(layout.BindChannel(new RotationChannel(BoneId(0))), rootRotation);
 
         var outPositions = new NativeArray<float3>(skeleton.BoneCount, Allocator.Temp);
         var outRotations = new NativeArray<quaternion>(skeleton.BoneCount, Allocator.Temp);
@@ -126,7 +121,7 @@ public class PoseFkTests
     public void CharacterPosition_MidBoneRotated90AboutX_LeafPositionMatchesHandComputed()
     {
         var spineRotation = quaternion.RotateX(math.radians(90f));
-        buffer.SetRotation(layout.BindRotation(BoneRef(1)), spineRotation);
+        buffer.SetQuaternion(layout.BindChannel(new RotationChannel(BoneId(1))), spineRotation);
 
         // Rotating the head's (0,1,0) offset by the spine's 90-degree X rotation gives (0,0,1).
         var expectedHeadPosition = new float3(0f, 1f, 1f);
@@ -136,8 +131,8 @@ public class PoseFkTests
     [Test]
     public void CharacterVelocity_OnlyRootLinearVelocity_PropagatesUnchangedToEveryBone()
     {
-        var rootVelocityHandle = layout.BindVelocity(BoneRef(0));
-        buffer.SetVelocity(rootVelocityHandle, new float3(1f, 0f, 0f));
+        var rootVelocityHandle = layout.BindChannel(new VelocityChannel(BoneId(0)));
+        buffer.SetFloat3(rootVelocityHandle, new float3(1f, 0f, 0f));
 
         for (var i = 0; i < skeleton.BoneCount; i++)
             AssertApprox(new float3(1f, 0f, 0f), PoseFK.CharacterVelocity(buffer, skeletonData, i));
@@ -146,8 +141,8 @@ public class PoseFkTests
     [Test]
     public void CharacterVelocity_OnlyRootAngularVelocity_MatchesCrossProductWithLeverArm()
     {
-        var rootAngularHandle = layout.BindAngularVelocity(BoneRef(0));
-        buffer.SetAngularVelocity(rootAngularHandle, new float3(0f, 0f, 1f));
+        var rootAngularHandle = layout.BindChannel(new AngularVelocityChannel(BoneId(0)));
+        buffer.SetFloat3(rootAngularHandle, new float3(0f, 0f, 1f));
 
         // Head sits at character-space (0,2,0) with all-identity rotations (see the straight-chain
         // position test); velocity of a point rigidly spun about the root is cross(w, r).
@@ -159,10 +154,10 @@ public class PoseFkTests
     public void CharacterVelocity_LeafLocalVelocity_RotatesThroughAncestorRotation()
     {
         var spineRotation = quaternion.RotateZ(math.radians(90f));
-        buffer.SetRotation(layout.BindRotation(BoneRef(1)), spineRotation);
+        buffer.SetQuaternion(layout.BindChannel(new RotationChannel(BoneId(1))), spineRotation);
 
-        var headVelocityHandle = layout.BindVelocity(BoneRef(2));
-        buffer.SetVelocity(headVelocityHandle, new float3(1f, 0f, 0f));
+        var headVelocityHandle = layout.BindChannel(new VelocityChannel(BoneId(2)));
+        buffer.SetFloat3(headVelocityHandle, new float3(1f, 0f, 0f));
 
         // The head's local (1,0,0) velocity is carried into character space by the spine's
         // 90-degree Z rotation, which maps (1,0,0) -> (0,1,0).

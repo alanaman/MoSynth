@@ -101,9 +101,8 @@ public class PoseSequenceTests
             for (var i = 0; i < skeleton.BoneCount; i++)
             {
                 var bone = skeleton.GetBone(i);
-                var boneRef = new BoneReference(bone.id, bone.name);
-                frame0.SetPosition(layout.BindPosition(boneRef), bone.restLocalPosition);
-                frame0.SetRotation(layout.BindRotation(boneRef), quaternion.identity);
+                frame0.SetFloat3(layout.BindChannel(new PositionChannel(bone.id)), bone.restLocalPosition);
+                frame0.SetQuaternion(layout.BindChannel(new RotationChannel(bone.id)), quaternion.identity);
             }
 
             var skeletonData = skeleton.GetSkeletonData();
@@ -176,7 +175,8 @@ public class PoseSequenceTests
         try
         {
             var frame0 = sequence.GetFrame(0);
-            for (var i = 0; i < frame0.Data.Length; i++) frame0.Data[i] = 7f;
+            var frame0Data = frame0.Data;
+            for (var i = 0; i < frame0Data.Length; i++) frame0Data[i] = 7f;
 
             var frame1 = sequence.GetFrame(1);
             for (var i = 0; i < frame1.Data.Length; i++)

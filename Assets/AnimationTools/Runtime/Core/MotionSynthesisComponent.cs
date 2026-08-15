@@ -15,8 +15,8 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
     public PoseLayout PoseLayout { get; private set; }
 
     /// <summary>Foot-contact Bool channels of the pipeline pose.</summary>
-    public BoolHandle LeftFootContactHandle { get; private set; }
-    public BoolHandle RightFootContactHandle { get; private set; }
+    public ChannelHandle LeftFootContactHandle { get; private set; }
+    public ChannelHandle RightFootContactHandle { get; private set; }
 
     // Reused every LateUpdate as the mutable pose the stage chain runs on.
     private PoseBuffer _scratchPose;

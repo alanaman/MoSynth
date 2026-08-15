@@ -13,17 +13,17 @@ public class PoseBufferTests
     private PoseLayout layout;
     private PoseBuffer buffer;
 
-    private BoneReference rootBone;
-    private BoneReference spineBone;
-    private BoneReference headBone;
+    private int rootBoneId;
+    private int spineBoneId;
+    private int headBoneId;
 
     [SetUp]
     public void SetUp()
     {
         skeleton = TestSkeletons.CreateChain3();
-        rootBone = new BoneReference(TestSkeletons.RootId, "root");
-        spineBone = new BoneReference(TestSkeletons.SpineId, "spine");
-        headBone = new BoneReference(TestSkeletons.HeadId, "head");
+        rootBoneId = TestSkeletons.RootId;
+        spineBoneId = TestSkeletons.SpineId;
+        headBoneId = TestSkeletons.HeadId;
 
         var channels = new List<ChannelDescriptor>
         {
@@ -57,19 +57,19 @@ public class PoseBufferTests
     [Test]
     public void SetGet_Position_RoundTrips()
     {
-        var handle = layout.BindPosition(rootBone);
+        var handle = layout.BindChannel(new PositionChannel(rootBoneId));
         var value = new float3(1f, 2f, 3f);
-        buffer.SetPosition(handle, value);
-        Assert.AreEqual(value, buffer.GetPosition(handle));
+        buffer.SetFloat3(handle, value);
+        Assert.AreEqual(value, buffer.GetFloat3(handle));
     }
 
     [Test]
     public void SetGet_QuaternionRotation_RoundTrips()
     {
-        var handle = layout.BindRotation(rootBone);
+        var handle = layout.BindChannel(new RotationChannel(rootBoneId, RotationRepresentation.Quaternion));
         var value = quaternion.AxisAngle(math.normalize(new float3(0f, 1f, 0f)), 0.7f);
-        buffer.SetRotation(handle, value);
-        var result = buffer.GetRotation(handle);
+        buffer.SetQuaternion(handle, value);
+        var result = buffer.GetQuaternion(handle);
         Assert.AreEqual(value.value.x, result.value.x, 1e-6f);
         Assert.AreEqual(value.value.y, result.value.y, 1e-6f);
         Assert.AreEqual(value.value.z, result.value.z, 1e-6f);
@@ -79,34 +79,34 @@ public class PoseBufferTests
     [Test]
     public void SetGet_Scale_RoundTrips()
     {
-        var handle = layout.BindScale(spineBone);
+        var handle = layout.BindChannel(new ScaleChannel(spineBoneId));
         var value = new float3(2f, 3f, 4f);
-        buffer.SetScale(handle, value);
-        Assert.AreEqual(value, buffer.GetScale(handle));
+        buffer.SetFloat3(handle, value);
+        Assert.AreEqual(value, buffer.GetFloat3(handle));
     }
 
     [Test]
     public void SetGet_Velocity_RoundTrips()
     {
-        var handle = layout.BindVelocity(rootBone);
+        var handle = layout.BindChannel(new VelocityChannel(rootBoneId));
         var value = new float3(-1f, 0.5f, 2f);
-        buffer.SetVelocity(handle, value);
-        Assert.AreEqual(value, buffer.GetVelocity(handle));
+        buffer.SetFloat3(handle, value);
+        Assert.AreEqual(value, buffer.GetFloat3(handle));
     }
 
     [Test]
     public void SetGet_AngularVelocity_RoundTrips()
     {
-        var handle = layout.BindAngularVelocity(rootBone);
+        var handle = layout.BindChannel(new AngularVelocityChannel(rootBoneId));
         var value = new float3(0f, 0f, 1.5f);
-        buffer.SetAngularVelocity(handle, value);
-        Assert.AreEqual(value, buffer.GetAngularVelocity(handle));
+        buffer.SetFloat3(handle, value);
+        Assert.AreEqual(value, buffer.GetFloat3(handle));
     }
 
     [Test]
     public void SetGet_Bool_RoundTripsTrueAndFalse()
     {
-        var handle = layout.BindBool(headBone);
+        var handle = layout.BindChannel(new BoolChannel(headBoneId, ChannelUsage.Default));
 
         buffer.SetBool(handle, true);
         Assert.IsTrue(buffer.GetBool(handle));
@@ -125,24 +125,24 @@ public class PoseBufferTests
     [Test]
     public void PositionSlice_AliasesSetPosition()
     {
-        var handle = layout.BindPosition(rootBone);
+        var handle = layout.BindChannel(new PositionChannel(rootBoneId));
         var value = new float3(5f, 6f, 7f);
 
-        buffer.SetPosition(handle, value);
+        buffer.SetFloat3(handle, value);
         Assert.AreEqual(value, buffer.Positions[0]);
 
         var viaSlice = new float3(8f, 9f, 10f);
         var positions = buffer.Positions;
         positions[0] = viaSlice;
-        Assert.AreEqual(viaSlice, buffer.GetPosition(handle));
+        Assert.AreEqual(viaSlice, buffer.GetFloat3(handle));
     }
 
     [Test]
     public void CopyFrom_CopiesAllData()
     {
-        var positionHandle = layout.BindPosition(rootBone);
-        var boolHandle = layout.BindBool(headBone);
-        buffer.SetPosition(positionHandle, new float3(1f, 2f, 3f));
+        var positionHandle = layout.BindChannel(new PositionChannel(rootBoneId));
+        var boolHandle = layout.BindChannel(new BoolChannel(headBoneId, ChannelUsage.Default));
+        buffer.SetFloat3(positionHandle, new float3(1f, 2f, 3f));
         buffer.SetBool(boolHandle, true);
 
         var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
@@ -162,18 +162,18 @@ public class PoseBufferTests
     [Test]
     public void Lerp_Positions_ComputesMidpoint()
     {
-        var handle = layout.BindPosition(rootBone);
+        var handle = layout.BindChannel(new PositionChannel(rootBoneId));
         var a = PoseBuffer.Allocate(layout, Allocator.Temp);
         var b = PoseBuffer.Allocate(layout, Allocator.Temp);
         var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
         try
         {
-            a.SetPosition(handle, new float3(0f, 0f, 0f));
-            b.SetPosition(handle, new float3(10f, 20f, 30f));
+            a.SetFloat3(handle, new float3(0f, 0f, 0f));
+            b.SetFloat3(handle, new float3(10f, 20f, 30f));
 
             PoseBuffer.Lerp(a, b, 0.5f, destination);
 
-            Assert.AreEqual(new float3(5f, 10f, 15f), destination.GetPosition(handle));
+            Assert.AreEqual(new float3(5f, 10f, 15f), destination.GetFloat3(handle));
         }
         finally
         {
@@ -186,20 +186,20 @@ public class PoseBufferTests
     [Test]
     public void Lerp_Rotation_FixesHemisphereAndStaysNearIdentityAtHalfway()
     {
-        var handle = layout.BindRotation(rootBone);
+        var handle = layout.BindChannel(new RotationChannel(rootBoneId, RotationRepresentation.Quaternion));
         var a = PoseBuffer.Allocate(layout, Allocator.Temp);
         var b = PoseBuffer.Allocate(layout, Allocator.Temp);
         var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
         try
         {
-            a.SetRotation(handle, quaternion.identity);
+            a.SetQuaternion(handle, quaternion.identity);
             // Same rotation, opposite sign: naive lerp without the hemisphere fix would cancel out.
             var negated = quaternion.identity;
             negated.value = -negated.value;
-            b.SetRotation(handle, negated);
+            b.SetQuaternion(handle, negated);
 
             PoseBuffer.Lerp(a, b, 0.5f, destination);
-            var result = destination.GetRotation(handle);
+            var result = destination.GetQuaternion(handle);
 
             Assert.AreEqual(1f, math.abs(result.value.w), 1e-4f);
             Assert.AreEqual(1f, math.length(result.value), 1e-4f);
@@ -215,7 +215,7 @@ public class PoseBufferTests
     [Test]
     public void Lerp_Bool_StepsAtHalfway()
     {
-        var handle = layout.BindBool(headBone);
+        var handle = layout.BindChannel(new BoolChannel(headBoneId, ChannelUsage.Default));
         var a = PoseBuffer.Allocate(layout, Allocator.Temp);
         var b = PoseBuffer.Allocate(layout, Allocator.Temp);
         var destination = PoseBuffer.Allocate(layout, Allocator.Temp);
@@ -241,7 +241,7 @@ public class PoseBufferTests
     [Test]
     public void PoseBuffer_IsAViewStruct_CopyAliasesSameData()
     {
-        var handle = layout.BindBool(headBone);
+        var handle = layout.BindChannel(new BoolChannel(headBoneId, ChannelUsage.Default));
         var copy = buffer;
 
         // Regression pin: PoseBuffer copies must alias, not clone, so a by-value contact-write

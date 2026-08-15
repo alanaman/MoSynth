@@ -3,16 +3,17 @@ using System;
 namespace AnimationTools
 {
 /// <summary>
-/// Describes one channel of a <see cref="PoseLayout"/>: how wide it is and which section it
-/// belongs to. Subclass this to put a new kind of data in a <see cref="PoseBuffer"/>.
+/// Describes one channel of a <see cref="StateBufferLayout"/>: how wide it is and which section it
+/// belongs to. Subclass this to put a new kind of data in a <see cref="StateBuffer"/>.
 /// </summary>
 /// <remarks>
 /// Two hashes, deliberately. <see cref="GetHashCode"/> answers "which channel is this?" and keys
 /// the layout's offset lookup, so it covers only identity. <see cref="GetContentHash"/> also folds
 /// in descriptive metadata such as space and rotation representation, and feeds
-/// <see cref="PoseLayout.LayoutHash"/>. Two layouts differing only in a channel's space therefore
-/// address identically but are still not interchangeable.
+/// <see cref="StateBufferLayout.LayoutHash"/>. Two layouts differing only in a channel's space
+/// therefore address identically but are still not interchangeable.
 /// </remarks>
+[Serializable]
 public abstract class ChannelDescriptor : IEquatable<ChannelDescriptor>
 {
     /// <summary>Width of one occurrence of this channel, in floats.</summary>

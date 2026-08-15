@@ -4,7 +4,6 @@ using AnimationTools;
 using UnityEngine;
 using Unity.Mathematics;
 using System.IO;
-using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
@@ -37,10 +36,9 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
 
     public List<JointToMecanim> animationChannelToMecanim = new();
 
-    // TODO: these should prolly be inside FeatureSet
-    public List<TrajectoryFeature> trajectoryFeatures = new();
+    public List<TrajectoryFeatureChannel> trajectoryFeatures = new();
 
-    public List<PoseFeature> poseFeatures = new();
+    public List<PoseFeatureChannel> poseFeatures = new();
 
     private PoseSet _poseSet;
 
@@ -76,9 +74,9 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
             int maximum = 0;
             foreach (var t in trajectoryFeatures)
             {
-                if (t.framesPrediction.Length > 0 && t.framesPrediction[^1] > maximum)
+                if (t.predictionFrames.Length > 0 && t.predictionFrames[^1] > maximum)
                 {
-                    maximum = t.framesPrediction[^1];
+                    maximum = t.predictionFrames[^1];
                 }
             }
 
@@ -270,62 +268,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         }
 #endif
         return path;
-    }
-
-    [Serializable]
-    public class TrajectoryFeature
-    {
-        public enum Type
-        {
-            Position,
-            Direction
-        }
-
-        [FormerlySerializedAs("Name")] public string name;
-        [FormerlySerializedAs("FeatureType")] public Type featureType;
-
-        [FormerlySerializedAs("FramesPrediction")]
-        public int[] framesPrediction = new int[0]; // Number of frames in the future for each point of the trajectory
-
-        [FormerlySerializedAs("SimulationBone")]
-        public bool
-            simulationBone; // Use the simulation bone (articial root added during pose extraction) instead of a bone
-
-        [FormerlySerializedAs("Bone")]
-        public HumanBodyBones bone; // Bone used to compute the trajectory in the feature set
-
-        [FormerlySerializedAs("ZeroX")] public bool zeroX; // Zero the X, Y and/or Z component of the trajectory feature
-        [FormerlySerializedAs("ZeroY")] public bool zeroY; // Zero the X, Y and/or Z component of the trajectory feature
-        [FormerlySerializedAs("ZeroZ")] public bool zeroZ; // Zero the X, Y and/or Z component of the trajectory feature
-
-        [FormerlySerializedAs("IsMainPositionFeature")]
-        public bool
-            isMainPositionFeature; // Only for position feature type. Used for visualizing gizmos of other trajectory features colocated with this position feature.
-
-        public int GetSize()
-        {
-            if (featureType == Type.Position || featureType == Type.Direction)
-            {
-                return 3 - (zeroX ? 1 : 0) - (zeroY ? 1 : 0) - (zeroZ ? 1 : 0);
-            }
-
-            Debug.Assert(false, "Size not defined for FeatureType: " + featureType.ToString());
-            return -1;
-        }
-    }
-
-    [Serializable]
-    public class PoseFeature
-    {
-        public enum Type
-        {
-            Position,
-            Velocity
-        }
-
-        [FormerlySerializedAs("Name")] public string name;
-        [FormerlySerializedAs("FeatureType")] public Type featureType;
-        [FormerlySerializedAs("Bone")] public HumanBodyBones bone;
     }
 }
 }

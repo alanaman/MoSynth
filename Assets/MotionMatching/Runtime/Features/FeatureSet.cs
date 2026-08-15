@@ -7,9 +7,6 @@ using Unity.Jobs;
 
 namespace MotionMatching
 {
-using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
-using PoseFeature = MotionMatchingData.PoseFeature;
-
 /// <summary>
 /// Stores all features vectors of all poses for Motion Matching
 /// </summary>
@@ -38,7 +35,7 @@ public class FeatureSet
     public int PoseOffset => _featureLayout.PoseStart;
 
     private NativeArray<bool> _valid; // TODO: Refactor to avoid needing this
-    private PoseSequence _features; // One frame per pose: trajectory features then pose features
+    private StateSequence _features; // One frame per pose: trajectory features then pose features
     private float[] _mean; // Size: FeatureSize
     private float[] _standardDeviation; // Size: FeatureSize
 
@@ -58,19 +55,20 @@ public class FeatureSet
     /// <summary>Float offset of one prediction of one trajectory feature within a feature vector.</summary>
     public int GetTrajectoryFeatureOffset(int trajectoryFeatureIndex, int predictionIndex)
     {
-        return _featureLayout.TrajectoryHandles[trajectoryFeatureIndex][predictionIndex].FloatOffset;
+        var channel = _featureLayout.TrajectoryChannels[trajectoryFeatureIndex];
+        return _featureLayout.TrajectoryHandles[trajectoryFeatureIndex].FloatOffset +
+               predictionIndex * channel.FloatsPerPrediction;
     }
 
     /// <summary>Floats occupied by one prediction of a trajectory feature.</summary>
     public int GetTrajectoryFeatureFloatCount(int trajectoryFeatureIndex)
     {
-        var handles = _featureLayout.TrajectoryHandles[trajectoryFeatureIndex];
-        return handles.Length > 0 ? handles[0].FloatCount : 0;
+        return _featureLayout.TrajectoryChannels[trajectoryFeatureIndex].FloatsPerPrediction;
     }
 
     public int GetPredictionCount(int trajectoryFeatureIndex)
     {
-        return _featureLayout.TrajectoryHandles[trajectoryFeatureIndex].Length;
+        return _featureLayout.TrajectoryChannels[trajectoryFeatureIndex].PredictionCount;
     }
 
     public bool IsValidFeature(int featureIndex)
@@ -152,6 +150,20 @@ public class FeatureSet
         }
 
         return new float3(x, y, z);
+    }
+
+    /// <summary>One float of one prediction of a trajectory feature.</summary>
+    public float GetTrajectoryFloat(int featureIndex, int trajectoryFeatureIndex, int predictionIndex,
+        int componentOffset, bool denormalize = false)
+    {
+        var featureOffset = GetTrajectoryFeatureOffset(trajectoryFeatureIndex, predictionIndex) + componentOffset;
+        var value = _features.Data[featureIndex * FeatureSize + featureOffset];
+        if (denormalize)
+        {
+            value = value * _standardDeviation[featureOffset] + _mean[featureOffset];
+        }
+
+        return value;
     }
 
     public float3 GetPoseFeature(int featureIndex, int poseFeatureIndex, bool denormalize = false)
@@ -252,7 +264,7 @@ public class FeatureSet
     {
         Debug.Assert(features.Length == NumberFeatureVectors * FeatureSize, "Feature vector has wrong size");
         _features?.Dispose();
-        _features = new PoseSequence(_featureLayout.Layout, features);
+        _features = new StateSequence(_featureLayout, features);
     }
 
     public void SetMean(float[] mean)
@@ -443,7 +455,7 @@ public class FeatureSet
     {
         var nPoses = poseSet.NumberPoses;
         _valid = new NativeArray<bool>(nPoses, Allocator.Domain);
-        _features = new PoseSequence(_featureLayout.Layout,
+        _features = new StateSequence(_featureLayout,
             new NativeArray<float>(nPoses * FeatureSize, Allocator.Domain));
 
         for (var poseIndex = 0; poseIndex < nPoses; ++poseIndex)
@@ -466,137 +478,15 @@ public class FeatureSet
         }
 
         var frame = _features.GetFrame(poseIndex);
-        var currentPose = poseSet.GetPoseBuffer(poseIndex);
-        var poseNext = poseSet.GetPoseBuffer(nextPose);
-        var skeletonData = poseSet.SkeletonAsset.GetSkeletonData();
         // Compute local features based on the Simulation Bone
         // so hips and feet are local to a stable position with respect to the character
-        GetWorldOriginCharacter(currentPose, out var characterOrigin, out var characterForward);
+        var context = new FeatureExtractionContext(poseSet, mmData, poseIndex, nextPose);
 
-        // Trajectory Features -------------------------------------------------------------
-        for (var i = 0; i < NumberTrajectoryFeatures; i++)
+        var features = _featureLayout.Features;
+        for (var i = 0; i < features.Length; i++)
         {
-            var trajectoryFeature = mmData.trajectoryFeatures[i];
-            var channels = _featureLayout.TrajectoryChannels[i];
-            var handles = _featureLayout.TrajectoryHandles[i];
-
-            for (var p = 0; p < channels.Length; ++p)
-            {
-                var futurePose = poseSet.GetPoseBuffer(poseIndex + trajectoryFeature.framesPrediction[p]);
-                ExtractTrajectoryFeature(channels[p], handles[p], frame, futurePose, skeletonData, mmData,
-                    characterOrigin, characterForward);
-            }
+            features[i].Extract(context, _featureLayout.BoneIndices[i], _featureLayout.Handles[i], frame);
         }
-
-        // Pose Features -------------------------------------------------------------
-        for (var i = 0; i < PoseFeatureCount; i++)
-        {
-            var channel = _featureLayout.PoseChannels[i];
-            var feature = float3.zero;
-            switch (channel.FeatureType)
-            {
-                case PoseFeature.Type.Position:
-                    feature = GetJointPosition(currentPose, skeletonData, channel.BoneIndex, characterOrigin,
-                        characterForward);
-                    break;
-                case PoseFeature.Type.Velocity:
-                    feature = GetJointVelocity(currentPose, poseNext, skeletonData, channel.BoneIndex, characterOrigin,
-                        characterForward, poseSet.FrameTime);
-                    break;
-                default:
-                    Debug.Assert(false, "Unknown PoseFeature.Type: " + channel.FeatureType);
-                    break;
-            }
-
-            frame.SetFloat3(_featureLayout.PoseHandles[i], feature);
-        }
-    }
-
-    private static void ExtractTrajectoryFeature(TrajectoryFeatureChannel channel, ChannelHandle handle,
-        PoseBuffer frame, PoseBuffer futurePose, in SkeletonData skeletonData, MotionMatchingData mmData,
-        float3 characterOrigin, float3 characterForward)
-    {
-        var value = float3.zero;
-        switch (channel.FeatureType)
-        {
-            case TrajectoryFeature.Type.Position:
-            {
-                value = GetTrajectoryPosition(futurePose, skeletonData, channel.BoneIndex,
-                    characterOrigin, characterForward);
-            }
-                break;
-            case TrajectoryFeature.Type.Direction:
-            {
-                GetTrajectoryDirection(futurePose, skeletonData, channel.SimulationBone, channel.BoneIndex,
-                    characterForward, mmData, out value);
-                if (channel.ZeroX) value.x = 0;
-                if (channel.ZeroY) value.y = 0;
-                if (channel.ZeroZ) value.z = 0;
-                value = math.normalize(value);
-            }
-                break;
-            default:
-                Debug.Assert(false, "Unsupported Feature Type: " + channel.FeatureType);
-                break;
-        }
-
-        var valueIndex = 0;
-        for (var f = 0; f < handle.FloatCount; ++f)
-        {
-            if (valueIndex == 0 && channel.ZeroX) valueIndex += 1;
-            if (valueIndex == 1 && channel.ZeroY) valueIndex += 1;
-            frame.SetFloat(handle, f, value[valueIndex]);
-            valueIndex += 1;
-        }
-    }
-
-    private static float3 GetTrajectoryPosition(PoseBuffer futurePose, in SkeletonData skeleton,
-        int jointIndex, float3 characterOrigin, float3 characterForward)
-    {
-        var worldPosition = PoseBufferFK.WorldPosition(skeleton, futurePose, jointIndex);
-
-        return GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
-    }
-
-    private static void GetTrajectoryDirection(PoseBuffer pose, in SkeletonData skeleton, bool simulationBone,
-        int jointIndex, float3 characterForward, MotionMatchingData mmData,
-        out float3 futureLocalDirection)
-    {
-        quaternion worldRotation;
-        float3 localForward;
-        if (simulationBone)
-        {
-            worldRotation = pose.Rotations[0];
-            localForward = math.forward();
-        }
-        else
-        {
-            worldRotation = PoseBufferFK.WorldRotation(skeleton, pose, jointIndex);
-            localForward = mmData.GetLocalForward(jointIndex);
-        }
-
-        var worldDirection = math.mul(worldRotation, localForward);
-        futureLocalDirection = GetLocalDirectionFromCharacter(worldDirection, characterForward);
-    }
-
-    private static float3 GetJointPosition(PoseBuffer pose, in SkeletonData skeleton, int jointIndex,
-        float3 characterOrigin, float3 characterForward)
-    {
-        var worldPosition = PoseBufferFK.WorldPosition(skeleton, pose, jointIndex);
-        var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
-        return localPosition;
-    }
-
-    private static float3 GetJointVelocity(PoseBuffer pose, PoseBuffer poseNext, in SkeletonData skeleton,
-        int jointIndex, float3 characterOrigin, float3 characterForward, float frameTime)
-    {
-        var worldPosition = PoseBufferFK.WorldPosition(skeleton, pose, jointIndex);
-        var worldPositionNext = PoseBufferFK.WorldPosition(skeleton, poseNext, jointIndex);
-        var localPosition = GetLocalPositionFromCharacter(worldPosition, characterOrigin, characterForward);
-        var localVelocity =
-            (GetLocalPositionFromCharacter(worldPositionNext, characterOrigin, characterForward) - localPosition) /
-            frameTime;
-        return localVelocity;
     }
 
     /// <summary>
@@ -637,56 +527,6 @@ public class FeatureSet
         if (_largeBoundingBoxMax.IsCreated) _largeBoundingBoxMax.Dispose();
         if (_smallBoundingBoxMin.IsCreated) _smallBoundingBoxMin.Dispose();
         if (_smallBoundingBoxMax.IsCreated) _smallBoundingBoxMax.Dispose();
-    }
-
-    public float3 Get3DValuePositionOrDirectionFeature(TrajectoryFeature trajectoryFeature, int currentFrame,
-        int trajectoryFeatureIndex, int predictionIndex)
-    {
-        var t = trajectoryFeatureIndex;
-        var p = predictionIndex;
-
-        float3 value;
-        if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroY && !trajectoryFeature.zeroZ)
-        {
-            value = Get3DTrajectoryFeature(currentFrame, t, p, true);
-        }
-        else if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroY)
-        {
-            var value2D = Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value2D.x, value2D.y, 0);
-        }
-        else if (!trajectoryFeature.zeroX && !trajectoryFeature.zeroZ)
-        {
-            var value2D = Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value2D.x, 0.0f, value2D.y);
-        }
-        else if (!trajectoryFeature.zeroY && !trajectoryFeature.zeroZ)
-        {
-            var value2D = Get2DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, value2D.x, value2D.y);
-        }
-        else if (!trajectoryFeature.zeroX)
-        {
-            var value1D = Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(value1D, 0.0f, 0.0f);
-        }
-        else if (!trajectoryFeature.zeroY)
-        {
-            var value1D = Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, value1D, 0.0f);
-        }
-        else if (!trajectoryFeature.zeroZ)
-        {
-            var value1D = Get1DTrajectoryFeature(currentFrame, t, p, true);
-            value = new float3(0.0f, 0.0f, value1D);
-        }
-        else
-        {
-            value = float3.zero;
-            Debug.Assert(false, "Invalid trajectory feature");
-        }
-
-        return value;
     }
 }
 }

@@ -138,12 +138,12 @@ namespace MotionMatching.Editor
 
             var numberChannels = channelAxisOrders.Count;
             var framesStored = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
-            var frameData = new float[framesStored * d.FloatCount];
+            var frameData = new float[framesStored * layout.FloatCount];
 
             // One-frame template with every bone's rest position; slot 0 (root) is overwritten
             // per frame below, identity rotations elsewhere are fine since every rotation slot
             // is written per frame too.
-            var template = new float[d.FloatCount];
+            var template = new float[layout.FloatCount];
             for (var b = 0; b < bones.Count; b++)
             {
                 var restPosition = bones[b].restLocalPosition;
@@ -154,8 +154,8 @@ namespace MotionMatching.Editor
 
             for (var f = 0; f < framesStored; f++)
             {
-                var frameBase = f * d.FloatCount;
-                Array.Copy(template, 0, frameData, frameBase, d.FloatCount);
+                var frameBase = f * layout.FloatCount;
+                Array.Copy(template, 0, frameData, frameBase, layout.FloatCount);
                 for (var j = 0; j < numberChannels; ++j)
                 {
                     var v1 = float.Parse(words[w++], CultureInfo.InvariantCulture);

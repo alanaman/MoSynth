@@ -7,8 +7,6 @@ using UnityEngine.Splines;
 
 namespace MotionMatching
 {
-    using TrajectoryFeature = MotionMatchingData.TrajectoryFeature;
-
     public class CrowdSplineControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler
     {
         public string TrajectoryPositionFeatureName = "FuturePosition";
@@ -74,8 +72,8 @@ namespace MotionMatching
             Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
             Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-            TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].framesPrediction;
-            TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].framesPrediction;
+            TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].predictionFrames;
+            TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].predictionFrames;
             // TODO: generalize this, allow for different number of prediction frames
             Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length, "Trajectory Position and Trajectory Direction Prediction Frames must be the same for PathCharacterController");
             for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
@@ -230,18 +228,18 @@ namespace MotionMatching
             return rot;
         }
 
-        public override void GetTrajectoryFeature(TrajectoryFeature feature, int index, Transform character, Span<float> span)
+        public override void GetTrajectoryFeature(TrajectoryFeatureChannel feature, int index, Transform character, Span<float> span)
         {
             if (!feature.simulationBone) Debug.Assert(false, "Trajectory should be computed using the SimulationBone");
             switch (feature.featureType)
             {
-                case TrajectoryFeature.Type.Position:
+                case TrajectoryFeatureChannel.Type.Position:
                     float2 world = GetWorldPredictedPos(index);
                     float3 local = character.InverseTransformPoint(new float3(world.x, 0.0f, world.y));
                     span[0] = local.x;
                     span[1] = local.z;
                     break;
-                case TrajectoryFeature.Type.Direction:
+                case TrajectoryFeatureChannel.Type.Direction:
                     float2 worldDir = GetWorldPredictedDir(index);
                     float3 localDir = character.InverseTransformDirection(new Vector3(worldDir.x, 0.0f, worldDir.y));
                     span[0] = localDir.x;

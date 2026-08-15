@@ -3,7 +3,6 @@ using AnimationTools;
 using MotionMatching;
 using Unity.Mathematics;
 using UnityEngine;
-using static MotionMatching.MotionMatchingData;
 
 namespace MotionMatching.Editor
 {
@@ -125,7 +124,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         for (int t = 0; t < motionMatchingData.trajectoryFeatures.Count; t++)
         {
             var trajectoryFeature = motionMatchingData.trajectoryFeatures[t];
-            if (trajectoryFeature.featureType == TrajectoryFeature.Type.Direction &&
+            if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Direction &&
                 !trajectoryFeature.simulationBone)
             {
                 var jointIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(trajectoryFeature.bone);
@@ -177,10 +176,10 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             var trajectoryFeature = mmData.trajectoryFeatures[t];
             if (trajectoryFeature.isMainPositionFeature)
             {
-                Debug.Assert(trajectoryFeature.featureType == TrajectoryFeature.Type.Position, "The main position feature should be of type Position");
-                for (int p = 0; p < trajectoryFeature.framesPrediction.Length; p++)
+                Debug.Assert(trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position, "The main position feature should be of type Position");
+                for (int p = 0; p < trajectoryFeature.predictionFrames.Length; p++)
                 {
-                    float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p);
+                    float3 value = trajectoryFeature.Unpack(set, currentFrame, t, p);
                     value = characterOrigin + math.mul(characterRot, value);
                     _positionFeatures.Add(value);
                 }
@@ -192,7 +191,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             for (int t = 0; t < mmData.trajectoryFeatures.Count; t++)
             {
                 var trajectoryFeature = mmData.trajectoryFeatures[t];
-                for (int p = 0; p < trajectoryFeature.framesPrediction.Length; p++)
+                for (int p = 0; p < trajectoryFeature.predictionFrames.Length; p++)
                 {
                     DrawTrajectoryPoint(trajectoryFeature, set, currentFrame, t, p, trajectoryColor, characterOrigin, characterForward,
                         characterRot, spheresRadius, joints, skeleton);
@@ -209,11 +208,11 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                 float3 value = set.GetPoseFeature(currentFrame, p, true);
                 switch (poseFeature.featureType)
                 {
-                    case PoseFeature.Type.Position:
+                    case PoseFeatureChannel.Type.Position:
                         value = characterOrigin + math.mul(characterRot, value);
                         Gizmos.DrawSphere(value, spheresRadius);
                         break;
-                    case PoseFeature.Type.Velocity:
+                    case PoseFeatureChannel.Type.Velocity:
                         value = math.mul(characterRot, value);
                         if (math.length(value) > 0.001f)
                         {
@@ -227,25 +226,25 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         }
     }
 
-    private static void DrawTrajectoryPoint(TrajectoryFeature trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex,
+    private static void DrawTrajectoryPoint(TrajectoryFeatureChannel trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex,
         int predictionIndex, Color trajectoryColor, float3 characterOrigin, float3 characterForward,
         quaternion characterRot, float spheresRadius, Transform[] joints, SkeletonAsset skeleton)
     {
         int t = trajectoryFeatureIndex;
         int p = predictionIndex;
         //Gizmos.color = trajectoryColor * (1.25f - (float)p / trajectoryFeature.FramesPrediction.Length);
-        Gizmos.color = trajectoryColor + (new Color(1.0f, 1.0f, 1.0f) - trajectoryColor) * ((float)p / trajectoryFeature.framesPrediction.Length);
-        if (trajectoryFeature.featureType == TrajectoryFeature.Type.Position ||
-            trajectoryFeature.featureType == TrajectoryFeature.Type.Direction)
+        Gizmos.color = trajectoryColor + (new Color(1.0f, 1.0f, 1.0f) - trajectoryColor) * ((float)p / trajectoryFeature.predictionFrames.Length);
+        if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position ||
+            trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Direction)
         {
-            float3 value = set.Get3DValuePositionOrDirectionFeature(trajectoryFeature, currentFrame, t, p);
+            float3 value = trajectoryFeature.Unpack(set, currentFrame, t, p);
             switch (trajectoryFeature.featureType)
             {
-                case TrajectoryFeature.Type.Position:
+                case TrajectoryFeatureChannel.Type.Position:
                     value = characterOrigin + math.mul(characterRot, value);
                     Gizmos.DrawSphere(value, spheresRadius);
                     break;
-                case TrajectoryFeature.Type.Direction:
+                case TrajectoryFeatureChannel.Type.Direction:
                     float3 jointPos;
                     if (trajectoryFeature.simulationBone)
                     {

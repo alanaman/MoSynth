@@ -179,7 +179,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
             bool hasAMainPositionFeature = false;
             for (int i = 0; i < data.trajectoryFeatures.Count; i++)
             {
-                MotionMatchingData.TrajectoryFeature trajectoryFeature = data.trajectoryFeatures[i];
+                TrajectoryFeatureChannel trajectoryFeature = data.trajectoryFeatures[i];
                 // Header
                 EditorGUILayout.BeginVertical(GUI.skin.box);
                 EditorGUILayout.BeginHorizontal();
@@ -195,9 +195,9 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 trajectoryFeature.name = EditorGUILayout.TextField("Name", trajectoryFeature.name);
                 // Feature Type
                 trajectoryFeature.featureType =
-                    (MotionMatchingData.TrajectoryFeature.Type)EditorGUILayout.EnumPopup("Type",
+                    (TrajectoryFeatureChannel.Type)EditorGUILayout.EnumPopup("Type",
                         trajectoryFeature.featureType);
-                if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Position)
+                if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position)
                 {
                     trajectoryFeature.isMainPositionFeature = EditorGUILayout.Toggle("Main Position Feature",
                         trajectoryFeature.isMainPositionFeature);
@@ -220,7 +220,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
 
             if (GUILayout.Button("Add Trajectory Feature"))
             {
-                data.trajectoryFeatures.Add(new MotionMatchingData.TrajectoryFeature());
+                data.trajectoryFeatures.Add(new TrajectoryFeatureChannel());
             }
 
             EditorGUI.indentLevel--;
@@ -236,7 +236,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
             EditorGUI.indentLevel++;
             for (int i = 0; i < data.poseFeatures.Count; i++)
             {
-                MotionMatchingData.PoseFeature poseFeature = data.poseFeatures[i];
+                PoseFeatureChannel poseFeature = data.poseFeatures[i];
                 // Header
                 EditorGUILayout.BeginVertical(GUI.skin.box);
                 EditorGUILayout.BeginHorizontal();
@@ -251,14 +251,14 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 //  Properties
                 poseFeature.name = EditorGUILayout.TextField("Name", poseFeature.name);
                 poseFeature.featureType =
-                    (MotionMatchingData.PoseFeature.Type)EditorGUILayout.EnumPopup("Type", poseFeature.featureType);
+                    (PoseFeatureChannel.Type)EditorGUILayout.EnumPopup("Type", poseFeature.featureType);
                 poseFeature.bone = (HumanBodyBones)EditorGUILayout.EnumPopup(poseFeature.bone);
                 EditorGUILayout.EndVertical();
             }
 
             if (GUILayout.Button("Add Pose Feature"))
             {
-                data.poseFeatures.Add(new MotionMatchingData.PoseFeature());
+                data.poseFeatures.Add(new PoseFeatureChannel());
             }
 
             EditorGUI.indentLevel--;
@@ -297,41 +297,41 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         }
     }
 
-    private bool TrajectoryFramesLayout(MotionMatchingData.TrajectoryFeature trajectoryFeature)
+    private bool TrajectoryFramesLayout(TrajectoryFeatureChannel trajectoryFeature)
     {
         bool generateButtonError = false;
         EditorGUILayout.LabelField("Frames Prediction");
         EditorGUILayout.BeginHorizontal();
-        for (int j = 0; j < trajectoryFeature.framesPrediction.Length; j++)
+        for (int j = 0; j < trajectoryFeature.predictionFrames.Length; j++)
         {
-            trajectoryFeature.framesPrediction[j] = EditorGUILayout.IntField(trajectoryFeature.framesPrediction[j]);
+            trajectoryFeature.predictionFrames[j] = EditorGUILayout.IntField(trajectoryFeature.predictionFrames[j]);
         }
 
         if (GUILayout.Button("Add"))
         {
-            int[] newFrames = new int[trajectoryFeature.framesPrediction.Length + 1];
-            for (int j = 0; j < trajectoryFeature.framesPrediction.Length; j++)
-                newFrames[j] = trajectoryFeature.framesPrediction[j];
-            trajectoryFeature.framesPrediction = newFrames;
+            int[] newFrames = new int[trajectoryFeature.predictionFrames.Length + 1];
+            for (int j = 0; j < trajectoryFeature.predictionFrames.Length; j++)
+                newFrames[j] = trajectoryFeature.predictionFrames[j];
+            trajectoryFeature.predictionFrames = newFrames;
         }
 
-        if (trajectoryFeature.framesPrediction.Length > 0 && GUILayout.Button("Remove"))
+        if (trajectoryFeature.predictionFrames.Length > 0 && GUILayout.Button("Remove"))
         {
-            int[] newFrames = new int[trajectoryFeature.framesPrediction.Length - 1];
-            for (int j = 0; j < trajectoryFeature.framesPrediction.Length - 1; j++)
-                newFrames[j] = trajectoryFeature.framesPrediction[j];
-            trajectoryFeature.framesPrediction = newFrames;
+            int[] newFrames = new int[trajectoryFeature.predictionFrames.Length - 1];
+            for (int j = 0; j < trajectoryFeature.predictionFrames.Length - 1; j++)
+                newFrames[j] = trajectoryFeature.predictionFrames[j];
+            trajectoryFeature.predictionFrames = newFrames;
         }
 
         EditorGUILayout.EndHorizontal();
         return generateButtonError;
     }
 
-    private bool TrajectoryTypeOptionsLayout(MotionMatchingData.TrajectoryFeature trajectoryFeature)
+    private bool TrajectoryTypeOptionsLayout(TrajectoryFeatureChannel trajectoryFeature)
     {
         bool generateButtonError = false;
-        if (trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Position ||
-            trajectoryFeature.featureType == MotionMatchingData.TrajectoryFeature.Type.Direction)
+        if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position ||
+            trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Direction)
         {
             // Bone
             trajectoryFeature.simulationBone =

@@ -29,8 +29,8 @@ public class PoseSet
     public PoseLayout PoseLayout => _layout;
 
     /// <summary>Reads the foot-contact Bool channels of a <see cref="GetPoseBuffer"/> frame.</summary>
-    public BoolHandle LeftFootContactHandle => _leftFootContactHandle;
-    public BoolHandle RightFootContactHandle => _rightFootContactHandle;
+    public ChannelHandle LeftFootContactHandle => _leftFootContactHandle;
+    public ChannelHandle RightFootContactHandle => _rightFootContactHandle;
 
     // Private ---
     private readonly List<AnimationClip> _clips = new();
@@ -42,8 +42,8 @@ public class PoseSet
     // Capacity view over Domain-backed storage; only the first _poseCount frames hold poses.
     private PoseSequence _poseStorage;
     private int _poseCount;
-    private BoolHandle _leftFootContactHandle;
-    private BoolHandle _rightFootContactHandle;
+    private ChannelHandle _leftFootContactHandle;
+    private ChannelHandle _rightFootContactHandle;
 
     /// <summary>
     /// Set skeleton from BVH. Adds simulation bone as root joint

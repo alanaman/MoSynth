@@ -27,7 +27,7 @@ public class ContactVisualizerStage : MoSynthStage
     private SkeletonData _skeletonData;
     private bool _inert;
 
-    private BoolHandle[] _contactHandles;
+    private ChannelHandle[] _contactHandles;
     private int[] _contactAssetBoneIndices;
     private int[] _contactMmJointIndices;
 
@@ -72,7 +72,7 @@ public class ContactVisualizerStage : MoSynthStage
         _buffer = PoseBuffer.Allocate(layout, Allocator.Persistent);
         _skeletonData = effectiveSkeleton.GetSkeletonData();
 
-        var handles = new List<BoolHandle>();
+        var handles = new List<ChannelHandle>();
         var assetIndices = new List<int>();
         var mmJointIndices = new List<int>();
 
@@ -88,7 +88,7 @@ public class ContactVisualizerStage : MoSynthStage
                 continue;
             }
 
-            handles.Add(layout.BindBool(boneRef, ChannelUsage.Contact));
+            handles.Add(layout.BindChannel(new BoolChannel(boneRef.BoneId, ChannelUsage.Contact)));
             assetIndices.Add(assetIndex);
             mmJointIndices.Add(mmJointIndex);
         }

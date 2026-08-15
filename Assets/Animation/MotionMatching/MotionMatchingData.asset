@@ -72,23 +72,21 @@ MonoBehaviour:
   trajectoryFeatures:
   - name: FuturePosition
     featureType: 0
-    framesPrediction: 14000000280000003c000000
+    predictionFrames: 14000000280000003c000000
     simulationBone: 1
     bone: 0
     zeroX: 0
     zeroY: 1
     zeroZ: 0
-    featureExtractor: {fileID: 0}
     isMainPositionFeature: 1
   - name: FutureDirection
     featureType: 1
-    framesPrediction: 14000000280000003c000000
+    predictionFrames: 14000000280000003c000000
     simulationBone: 1
     bone: 0
     zeroX: 0
     zeroY: 1
     zeroZ: 0
-    featureExtractor: {fileID: 0}
     isMainPositionFeature: 0
   poseFeatures:
   - name: LeftFootPosition
@@ -106,7 +104,6 @@ MonoBehaviour:
   - name: HipsVelocity
     featureType: 1
     bone: 0
-  environmentFeatures: []
   jointsLocalForward:
   - x: 0
     y: 0

@@ -86,7 +86,7 @@ public static class PoseExtractor
         return true;
     }
 
-    private static void SmoothContacts(PoseSet.PoseFrameRange frames, BoolHandle leftHandle, BoolHandle rightHandle)
+    private static void SmoothContacts(PoseSet.PoseFrameRange frames, ChannelHandle leftHandle, ChannelHandle rightHandle)
     {
         const int windowsRadius = 6;
         // Median filter to remove small regions where contact is either active or inactive
@@ -226,7 +226,7 @@ public static class PoseExtractor
     }
 
     private static void ExtractPoseContacts(PoseBuffer pose, int[] localParentIndex, int leftToesIndex,
-        int rightToesIndex, float contactVelocityThreshold, BoolHandle leftHandle, BoolHandle rightHandle)
+        int rightToesIndex, float contactVelocityThreshold, ChannelHandle leftHandle, ChannelHandle rightHandle)
     {
         // Contact with the ground when the joint is below a velocity threshold
         // TODO: Consider distance from the ground/contact when the joint is below a velocity threshold
