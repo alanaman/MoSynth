@@ -471,21 +471,12 @@ public class FeatureSet
 
     private void ExtractFeatures(PoseSet poseSet, int poseIndex, MotionMatchingData mmData)
     {
-        var nextPose = poseIndex + 1;
-        if (nextPose >= poseSet.NumberPoses - mmData.MaximumFramesPrediction)
-        {
-            nextPose = poseIndex;
-        }
-
         var frame = _features.GetFrame(poseIndex);
-        // Compute local features based on the Simulation Bone
-        // so hips and feet are local to a stable position with respect to the character
-        var context = new FeatureExtractionContext(poseSet, mmData, poseIndex, nextPose);
-
         var features = _featureLayout.Features;
         for (var i = 0; i < features.Length; i++)
         {
-            features[i].Extract(context, _featureLayout.BoneIndices[i], _featureLayout.Handles[i], frame);
+            features[i].Extract(poseSet, mmData, poseIndex, _featureLayout.BoneIndices[i],
+                _featureLayout.Handles[i], frame);
         }
     }
 
@@ -507,6 +498,25 @@ public class FeatureSet
     {
         var localDir = math.mul(math.inverse(quaternion.LookRotation(characterForward, math.up())), worldDir);
         return localDir;
+    }
+
+    /// <summary>
+    /// Position of a joint of <paramref name="jointPose"/> in the character frame of
+    /// <paramref name="characterPose"/>.
+    /// </summary>
+    public static float3 GetLocalJointPositionFromCharacter(in SkeletonData skeleton, PoseBuffer characterPose,
+        PoseBuffer jointPose, int boneIndex)
+    {
+        GetWorldOriginCharacter(characterPose, out var origin, out var forward);
+        return GetLocalPositionFromCharacter(PoseBufferFK.WorldPosition(skeleton, jointPose, boneIndex), origin,
+            forward);
+    }
+
+    /// <summary>Takes the character frame from the simulation bone of <paramref name="characterPose"/>.</summary>
+    public static float3 GetLocalDirectionFromCharacter(PoseBuffer characterPose, float3 worldDir)
+    {
+        GetWorldOriginCharacter(characterPose, out _, out var forward);
+        return GetLocalDirectionFromCharacter(worldDir, forward);
     }
 
     public static float3 GetWorldPositionFromCharacter(float3 localPos, float3 characterOrigin, float3 characterForward)

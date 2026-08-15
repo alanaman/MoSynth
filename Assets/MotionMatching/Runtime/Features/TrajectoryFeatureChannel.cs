@@ -57,22 +57,27 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
 
     public override int SectionKey => FeatureSections.Trajectory;
 
-    public void Extract(in FeatureExtractionContext context, int boneIndex, ChannelHandle handle, StateBuffer frame)
+    public void Extract(PoseSet poseSet, MotionMatchingData mmData, int poseIndex, int boneIndex, ChannelHandle handle,
+        StateBuffer frame)
     {
+        var skeleton = poseSet.SkeletonAsset.GetSkeletonData();
+        var characterPose = poseSet.GetPoseBuffer(poseIndex);
+
         for (var p = 0; p < predictionFrames.Length; ++p)
         {
-            var futurePose = context.GetFuturePose(predictionFrames[p]);
+            var futurePose = poseSet.GetPoseBuffer(poseIndex + predictionFrames[p]);
             var value = float3.zero;
             switch (featureType)
             {
                 case Type.Position:
                 {
-                    value = context.JointPositionLocal(futurePose, boneIndex);
+                    value = FeatureSet.GetLocalJointPositionFromCharacter(skeleton, characterPose, futurePose,
+                        boneIndex);
                 }
                     break;
                 case Type.Direction:
                 {
-                    value = GetDirection(context, futurePose, boneIndex);
+                    value = GetDirection(skeleton, characterPose, futurePose, boneIndex, mmData);
                     if (zeroX) value.x = 0;
                     if (zeroY) value.y = 0;
                     if (zeroZ) value.z = 0;
@@ -105,7 +110,8 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
         return value;
     }
 
-    private float3 GetDirection(in FeatureExtractionContext context, PoseBuffer pose, int boneIndex)
+    private float3 GetDirection(in SkeletonData skeleton, PoseBuffer characterPose, PoseBuffer pose, int boneIndex,
+        MotionMatchingData mmData)
     {
         quaternion worldRotation;
         float3 localForward;
@@ -116,11 +122,12 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
         }
         else
         {
-            worldRotation = context.JointWorldRotation(pose, boneIndex);
-            localForward = context.LocalForward(boneIndex);
+            worldRotation = PoseBufferFK.WorldRotation(skeleton, pose, boneIndex);
+            // Forward vector of the joint in its own local space, taken from the T-Pose.
+            localForward = mmData.GetLocalForward(boneIndex);
         }
 
-        return context.DirectionToLocal(math.mul(worldRotation, localForward));
+        return FeatureSet.GetLocalDirectionFromCharacter(characterPose, math.mul(worldRotation, localForward));
     }
 
     private void Pack(float3 value, StateBuffer frame, ChannelHandle handle, int predictionIndex)

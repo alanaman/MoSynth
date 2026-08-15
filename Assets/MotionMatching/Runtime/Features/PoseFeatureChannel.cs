@@ -33,23 +33,45 @@ public sealed class PoseFeatureChannel : ChannelDescriptor, IMatchingFeature
 
     public override int SectionKey => FeatureSections.Pose;
 
-    public void Extract(in FeatureExtractionContext context, int boneIndex, ChannelHandle handle, StateBuffer frame)
+    public void Extract(PoseSet poseSet, MotionMatchingData mmData, int poseIndex, int boneIndex, ChannelHandle handle,
+        StateBuffer frame)
     {
+        var skeleton = poseSet.SkeletonAsset.GetSkeletonData();
+        var characterPose = poseSet.GetPoseBuffer(poseIndex);
+
         var value = float3.zero;
         switch (featureType)
         {
             case Type.Position:
-                value = context.JointPositionLocal(context.CurrentPose, boneIndex);
+                value = FeatureSet.GetLocalJointPositionFromCharacter(skeleton, characterPose, characterPose,
+                    boneIndex);
                 break;
             case Type.Velocity:
-                value = context.JointVelocityLocal(boneIndex);
+            {
+                var nextPose = poseSet.GetPoseBuffer(NextPoseIndex(poseSet, mmData, poseIndex));
+                var position =
+                    FeatureSet.GetLocalJointPositionFromCharacter(skeleton, characterPose, characterPose, boneIndex);
+                var nextPosition =
+                    FeatureSet.GetLocalJointPositionFromCharacter(skeleton, characterPose, nextPose, boneIndex);
+                value = (nextPosition - position) / poseSet.FrameTime;
                 break;
+            }
             default:
                 Debug.Assert(false, "Unknown PoseFeatureChannel.Type: " + featureType);
                 break;
         }
 
         frame.SetFloat3(handle, value);
+    }
+
+    /// <summary>
+    /// The pose one frame later. The frames past the end of the extraction window are never filled in,
+    /// so there the current pose stands in and the velocity comes out zero.
+    /// </summary>
+    private static int NextPoseIndex(PoseSet poseSet, MotionMatchingData mmData, int poseIndex)
+    {
+        var nextPoseIndex = poseIndex + 1;
+        return nextPoseIndex >= poseSet.NumberPoses - mmData.MaximumFramesPrediction ? poseIndex : nextPoseIndex;
     }
 
     public override bool Equals(ChannelDescriptor other)
