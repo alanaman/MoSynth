@@ -17,7 +17,7 @@ public class BvhAnimation : ScriptableObject
     // Per-frame layout is PoseLayout.CreateFullPose(skeletonAsset, false, false): positions then
     // rotations, bone-index aligned. positions[0] holds the root motion for the frame;
     // positions[i > 0] repeat the bone rest offsets so frames are PoseFK-ready.
-    [SerializeField] private float[] frameData;
+    [HideInInspector] [SerializeField] private float[] frameData;
 
     public float FrameTime => frameTime;
     public SkeletonAsset Skeleton => skeletonAsset;

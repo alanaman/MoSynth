@@ -44,9 +44,6 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
         "Set to 0 for uncapped.")]
     public float synthesisFrameRate = 30f;
 
-    [SerializeField] [Tooltip("The avatar that maps from mecanim template to character transforms.")]
-    private Avatar avatar;
-
     [SerializeReference] [SubclassSelector]
     public List<MoSynthStage> stages = new();
 

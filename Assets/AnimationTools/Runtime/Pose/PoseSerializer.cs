@@ -10,9 +10,9 @@ using NUnit.Framework;
 
 namespace AnimationTools
 {
-    using static AnimationTools.BinarySerializerExtensions;
+using static AnimationTools.BinarySerializerExtensions;
 
-    public class PoseSerializer
+public class PoseSerializer
 {
     /// <summary>
     /// Stores the full pose representation of all poses for Motion Matching in a binary format

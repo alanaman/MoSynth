@@ -189,6 +189,21 @@ When adding a new `MoSynthStage`:
 - Use `Application.streamingAssetsPath` for packaged read-only data (e.g., animation databases)
 - Avoid hard-coded absolute paths like `D:\iitbpg\...` and `C:\Users\...` — these break on other machines
 
+## Subagent Delegation
+
+Project subagents live in `.claude/agents/`. Design, review, and integration stay in the main agent; the routine subtask goes to the cheapest agent that can do it well.
+
+| Agent | Model | Use it for |
+|---|---|---|
+| `code-locator` | haiku | "Where is X / who calls Y / what files touch Z" — returns file:line, not analysis |
+| `compile-checker` | haiku | Verifying C# edits build; reading Unity/Rider errors. Never enters play mode |
+| `python-runner` | haiku | Running a module, test, or probe in the venv and reporting real output |
+| `docs-updater` | haiku | Mechanical doc/comment upkeep against already-established facts |
+| `csharp-implementer` | sonnet | Writing a C#/Unity change from a spec that already names files and design |
+| `python-implementer` | sonnet | Writing a Python-side change from a decided approach |
+
+Implementer agents need a spec that names the files, the intended design, and the acceptance check — they will not make architecture decisions, and vague briefs produce guesswork. Keep concurrent subagents to about 5. Run the C# implementer and `compile-checker` as a pair: the implementer cannot verify its own build.
+
 ## Known Issues & TODOs
 
 1. **Hard-coded Python paths** (`MotionFieldStage:40`, `:47`) — should be configurable via Inspector or config file

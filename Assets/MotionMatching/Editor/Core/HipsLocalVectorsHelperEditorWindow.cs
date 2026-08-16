@@ -40,8 +40,10 @@ public class HipsLocalVectorsHelperEditorWindow : EditorWindow
         EditorGUILayout.Space();
         if (GUILayout.Button("Set Hips Local Vectors"))
         {
+            Undo.RecordObject(MMData, "Set Hips Local Vectors");
             MMData.hipsForwardLocalVector = Skeleton[0].InverseTransformDirection(Vector3.forward);
             MMData.hipsUpLocalVector = Skeleton[0].InverseTransformDirection(Vector3.up);
+            EditorUtility.SetDirty(MMData);
 
             Debug.Log("Hips Local Forward Vector is set to " + MMData.hipsForwardLocalVector);
             Debug.Log("Hips Local Up Vector is set to " + MMData.hipsUpLocalVector);

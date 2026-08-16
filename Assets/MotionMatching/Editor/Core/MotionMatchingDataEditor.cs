@@ -1,7 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using UnityEditor.SceneManagement;
-using System.Collections.Generic;
 using Unity.Mathematics;
 using System;
 using AnimationTools;
@@ -15,9 +13,16 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     private bool TrajectoryFeaturesSelectorFoldout;
     private bool PoseFeaturesSelectorFoldout;
 
+    private bool _generateButtonError;
+
     private SerializedProperty _animationClipsProperty;
     private SerializedProperty _tPoseAnimationClipProperty;
-    
+    private SerializedProperty _hipsForwardLocalVectorProperty;
+    private SerializedProperty _hipsUpLocalVectorProperty;
+    private SerializedProperty _contactVelocityThresholdProperty;
+    private SerializedProperty _animationChannelToMecanimProperty;
+    private SerializedProperty _trajectoryFeaturesProperty;
+    private SerializedProperty _poseFeaturesProperty;
 
     public void GenerateDatabases(MotionMatchingData mmData)
     {
@@ -48,86 +53,121 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     {
         _animationClipsProperty = serializedObject.FindProperty("animationClips");
         _tPoseAnimationClipProperty = serializedObject.FindProperty("tPoseAnimationClip");
+        _hipsForwardLocalVectorProperty = serializedObject.FindProperty("hipsForwardLocalVector");
+        _hipsUpLocalVectorProperty = serializedObject.FindProperty("hipsUpLocalVector");
+        _contactVelocityThresholdProperty = serializedObject.FindProperty("contactVelocityThreshold");
+        _animationChannelToMecanimProperty = serializedObject.FindProperty("animationChannelToMecanim");
+        _trajectoryFeaturesProperty = serializedObject.FindProperty("trajectoryFeatures");
+        _poseFeaturesProperty = serializedObject.FindProperty("poseFeatures");
     }
 
     public override void OnInspectorGUI()
     {
-        MotionMatchingData data = (MotionMatchingData)target;
+        serializedObject.Update();
 
-        bool generateButtonError = false;
+        var data = (MotionMatchingData)target;
+        _generateButtonError = false;
 
-        // BVH
+        DrawAnimations();
+        _generateButtonError |= DrawHipsVectors(data);
+
+        // SmoothSimulationBone
+        //data.SmoothSimulationBone = EditorGUILayout.Toggle(new GUIContent("Smooth Simulation Bone", "Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter"),
+        //                                                   data.SmoothSimulationBone);
+
+        DrawContactThreshold();
+        DrawSkeletonToMecanim(data);
+        DrawTrajectoryFeatures();
+        DrawPoseFeatures();
+        DrawGenerateButton(data);
+
+        serializedObject.ApplyModifiedProperties();
+    }
+
+    // BVH
+    private void DrawAnimations()
+    {
         EditorGUILayout.LabelField("Animations", EditorStyles.boldLabel);
         EditorGUILayout.PropertyField(_animationClipsProperty);
 
         // BVH TPose
         EditorGUILayout.Separator();
         EditorGUILayout.PropertyField(_tPoseAnimationClipProperty);
-        
-        
-        // Hips Local Vectors --------
+    }
+
+    // Hips Local Vectors --------
+    private bool DrawHipsVectors(MotionMatchingData data)
+    {
+        var error = false;
+
         EditorGUILayout.Separator();
         EditorGUILayout.BeginHorizontal();
         EditorGUILayout.LabelField("Hips Local Vectors", EditorStyles.boldLabel);
         if (GUILayout.Button("Auto-Set Hips Vectors", GUILayout.Width(150)))
         {
-            HipsLocalVectorsHelperEditorWindow.ShowWindow(data);
+            // ShowWindow opens a new scene, which rebuilds the inspector and disposes its
+            // SerializedObject mid-draw; defer it until after this GUI pass has completed
+            EditorApplication.delayCall += () => HipsLocalVectorsHelperEditorWindow.ShowWindow(data);
         }
 
         EditorGUILayout.EndHorizontal();
         EditorGUI.indentLevel++;
+
         // DefaultHipsForward
-        data.hipsForwardLocalVector = EditorGUILayout.Vector3Field(
-            new GUIContent("Forward Vector", "Local vector (axis) pointing in the forward direction of the hips"),
-            data.hipsForwardLocalVector);
-        if (math.abs(math.length(data.hipsForwardLocalVector) - 1.0f) > 1E-6f)
+        EditorGUILayout.PropertyField(_hipsForwardLocalVectorProperty,
+            new GUIContent("Forward Vector", "Local vector (axis) pointing in the forward direction of the hips"));
+        var hipsForward = ReadFloat3(_hipsForwardLocalVectorProperty);
+        if (math.abs(math.length(hipsForward) - 1.0f) > 1E-6f)
         {
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.HelpBox("Hips Forward Local Vector should be normalized", MessageType.Error);
-            if (GUILayout.Button("Fix")) data.hipsForwardLocalVector = math.normalize(data.hipsForwardLocalVector);
+            if (GUILayout.Button("Fix")) WriteFloat3(_hipsForwardLocalVectorProperty, math.normalize(hipsForward));
             EditorGUILayout.EndHorizontal();
-            generateButtonError = true;
+            error = true;
         }
 
         // HipsUpLocalVector
-        data.hipsUpLocalVector = EditorGUILayout.Vector3Field(
-            new GUIContent("Up Vector", "Local vector (axis) pointing in the up direction of the hips"),
-            data.hipsUpLocalVector);
-        if (math.abs(math.length(data.hipsUpLocalVector) - 1.0f) > 1E-6f)
+        EditorGUILayout.PropertyField(_hipsUpLocalVectorProperty,
+            new GUIContent("Up Vector", "Local vector (axis) pointing in the up direction of the hips"));
+        var hipsUp = ReadFloat3(_hipsUpLocalVectorProperty);
+        if (math.abs(math.length(hipsUp) - 1.0f) > 1E-6f)
         {
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.HelpBox("Hips Up Local Vector should be normalized", MessageType.Error);
-            if (GUILayout.Button("Fix")) data.hipsUpLocalVector = math.normalize(data.hipsUpLocalVector);
+            if (GUILayout.Button("Fix")) WriteFloat3(_hipsUpLocalVectorProperty, math.normalize(hipsUp));
             EditorGUILayout.EndHorizontal();
-            generateButtonError = true;
+            error = true;
         }
 
         EditorGUI.indentLevel--;
 
-        // SmoothSimulationBone
-        //data.SmoothSimulationBone = EditorGUILayout.Toggle(new GUIContent("Smooth Simulation Bone", "Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter"),
-        //                                                   data.SmoothSimulationBone);
+        return error;
+    }
 
-        // ContactVelocityThreshold
+    // ContactVelocityThreshold
+    private void DrawContactThreshold()
+    {
         EditorGUILayout.Separator();
-        data.contactVelocityThreshold = EditorGUILayout.FloatField(
+        EditorGUILayout.PropertyField(_contactVelocityThresholdProperty,
             new GUIContent("Contact Velocity Threshold",
-                "Minimum velocity of the foot to be considered in movement and not in contact with the ground"),
-            data.contactVelocityThreshold);
+                "Minimum velocity of the foot to be considered in movement and not in contact with the ground"));
+    }
 
-        // SkeletonToMecanim
+    // SkeletonToMecanim
+    private void DrawSkeletonToMecanim(MotionMatchingData data)
+    {
         EditorGUILayout.Separator();
         if (data.tPoseAnimationClip == null)
         {
             EditorGUILayout.HelpBox("Animation with T-Pose not set", MessageType.Warning);
-            return;
         }
 
+        GUI.enabled = data.tPoseAnimationClip != null;
         if (GUILayout.Button("Read Skeleton from BVH"))
         {
             // TODO: Check if SkeletonToMecanim should be reset
-            data.animationChannelToMecanim.Clear();
             var skeleton = data.tPoseAnimationClip.Skeleton;
+            _animationChannelToMecanimProperty.arraySize = skeleton.BoneCount;
             for (var i = 0; i < skeleton.BoneCount; i++)
             {
                 var jointName = skeleton.GetBone(i).name;
@@ -141,9 +181,13 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                     bone = HumanBodyBones.LastBone;
                 }
 
-                data.animationChannelToMecanim.Add(new JointToMecanim(jointName, bone));
+                var element = _animationChannelToMecanimProperty.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("name").stringValue = jointName;
+                element.FindPropertyRelative("mecanimBone").intValue = (int)bone;
             }
         }
+
+        GUI.enabled = true;
 
         // Display SkeletonToMecanim
         SkeletonToMecanimFoldout =
@@ -151,17 +195,19 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         if (SkeletonToMecanimFoldout)
         {
             EditorGUI.indentLevel++;
-            for (int i = 0; i < data.animationChannelToMecanim.Count; i++)
+            for (var i = 0; i < _animationChannelToMecanimProperty.arraySize; i++)
             {
-                JointToMecanim jtm = data.animationChannelToMecanim[i];
+                var element = _animationChannelToMecanimProperty.GetArrayElementAtIndex(i);
+                var nameProp = element.FindPropertyRelative("name");
+                var mecanimProp = element.FindPropertyRelative("mecanimBone");
                 EditorGUILayout.BeginHorizontal();
-                GUI.contentColor = jtm.mecanimBone == HumanBodyBones.LastBone
+                GUI.contentColor = (HumanBodyBones)mecanimProp.intValue == HumanBodyBones.LastBone
                     ? new Color(1.0f, 0.6f, 0.6f)
                     : Color.white;
-                HumanBodyBones newHumanBodyBone = (HumanBodyBones)EditorGUILayout.EnumPopup(jtm.name, jtm.mecanimBone);
+                var newHumanBodyBone =
+                    (HumanBodyBones)EditorGUILayout.EnumPopup(nameProp.stringValue, (HumanBodyBones)mecanimProp.intValue);
                 GUI.contentColor = Color.white;
-                jtm.mecanimBone = newHumanBodyBone;
-                data.animationChannelToMecanim[i] = jtm;
+                mecanimProp.intValue = (int)newHumanBodyBone;
                 EditorGUILayout.EndHorizontal();
             }
 
@@ -169,17 +215,22 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         }
 
         EditorGUILayout.EndFoldoutHeaderGroup();
+    }
 
-        // Trajectory Features ------------------------------------------------------------------------------------
+    // Trajectory Features ------------------------------------------------------------------------------------
+    private void DrawTrajectoryFeatures()
+    {
         TrajectoryFeaturesSelectorFoldout =
             EditorGUILayout.BeginFoldoutHeaderGroup(TrajectoryFeaturesSelectorFoldout, "Trajectory Features");
         if (TrajectoryFeaturesSelectorFoldout)
         {
             EditorGUI.indentLevel++;
-            bool hasAMainPositionFeature = false;
-            for (int i = 0; i < data.trajectoryFeatures.Count; i++)
+            var hasAMainPositionFeature = false;
+            // Deleting mid-loop would change the control count between the layout and repaint passes
+            var removeIndex = -1;
+            for (var i = 0; i < _trajectoryFeaturesProperty.arraySize; i++)
             {
-                TrajectoryFeatureChannel trajectoryFeature = data.trajectoryFeatures[i];
+                var trajectoryFeature = _trajectoryFeaturesProperty.GetArrayElementAtIndex(i);
                 // Header
                 EditorGUILayout.BeginVertical(GUI.skin.box);
                 EditorGUILayout.BeginHorizontal();
@@ -187,56 +238,71 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 GUILayout.FlexibleSpace();
                 if (GUILayout.Button("x"))
                 {
-                    data.trajectoryFeatures.RemoveAt(i--);
+                    removeIndex = i;
                 }
 
                 EditorGUILayout.EndHorizontal();
                 // Name
-                trajectoryFeature.name = EditorGUILayout.TextField("Name", trajectoryFeature.name);
+                var nameProp = trajectoryFeature.FindPropertyRelative("name");
+                nameProp.stringValue = EditorGUILayout.TextField("Name", nameProp.stringValue);
                 // Feature Type
-                trajectoryFeature.featureType =
-                    (TrajectoryFeatureChannel.Type)EditorGUILayout.EnumPopup("Type",
-                        trajectoryFeature.featureType);
-                if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position)
+                var featureTypeProp = trajectoryFeature.FindPropertyRelative("featureType");
+                featureTypeProp.intValue = (int)(TrajectoryFeatureChannel.Type)EditorGUILayout.EnumPopup("Type",
+                    (TrajectoryFeatureChannel.Type)featureTypeProp.intValue);
+                if ((TrajectoryFeatureChannel.Type)featureTypeProp.intValue == TrajectoryFeatureChannel.Type.Position)
                 {
-                    trajectoryFeature.isMainPositionFeature = EditorGUILayout.Toggle("Main Position Feature",
-                        trajectoryFeature.isMainPositionFeature);
-                    if (trajectoryFeature.isMainPositionFeature)
+                    var isMainPositionFeatureProp = trajectoryFeature.FindPropertyRelative("isMainPositionFeature");
+                    isMainPositionFeatureProp.boolValue =
+                        EditorGUILayout.Toggle("Main Position Feature", isMainPositionFeatureProp.boolValue);
+                    if (isMainPositionFeatureProp.boolValue)
                     {
                         if (hasAMainPositionFeature)
                         {
                             EditorGUILayout.HelpBox("Only one main position feature is allowed", MessageType.Error);
-                            generateButtonError = true;
+                            _generateButtonError = true;
                         }
 
                         hasAMainPositionFeature = true;
                     }
                 }
 
-                generateButtonError = generateButtonError || TrajectoryFramesLayout(trajectoryFeature);
-                generateButtonError = generateButtonError || TrajectoryTypeOptionsLayout(trajectoryFeature);
+                _generateButtonError = _generateButtonError || TrajectoryFramesLayout(trajectoryFeature);
+                _generateButtonError = _generateButtonError || TrajectoryTypeOptionsLayout(trajectoryFeature);
+
                 EditorGUILayout.EndVertical();
+            }
+
+            if (removeIndex >= 0)
+            {
+                _trajectoryFeaturesProperty.DeleteArrayElementAtIndex(removeIndex);
             }
 
             if (GUILayout.Button("Add Trajectory Feature"))
             {
-                data.trajectoryFeatures.Add(new TrajectoryFeatureChannel());
+                var insertIndex = _trajectoryFeaturesProperty.arraySize;
+                _trajectoryFeaturesProperty.arraySize++;
+                ResetTrajectoryFeature(_trajectoryFeaturesProperty.GetArrayElementAtIndex(insertIndex));
             }
 
             EditorGUI.indentLevel--;
         }
 
         EditorGUILayout.EndFoldoutHeaderGroup();
+    }
 
-        // Pose Features ------------------------------------------------------------------------------------
+    // Pose Features ------------------------------------------------------------------------------------
+    private void DrawPoseFeatures()
+    {
         PoseFeaturesSelectorFoldout =
             EditorGUILayout.BeginFoldoutHeaderGroup(PoseFeaturesSelectorFoldout, "Pose Features");
         if (PoseFeaturesSelectorFoldout)
         {
             EditorGUI.indentLevel++;
-            for (int i = 0; i < data.poseFeatures.Count; i++)
+            // Deleting mid-loop would change the control count between the layout and repaint passes
+            var removeIndex = -1;
+            for (var i = 0; i < _poseFeaturesProperty.arraySize; i++)
             {
-                PoseFeatureChannel poseFeature = data.poseFeatures[i];
+                var poseFeature = _poseFeaturesProperty.GetArrayElementAtIndex(i);
                 // Header
                 EditorGUILayout.BeginVertical(GUI.skin.box);
                 EditorGUILayout.BeginHorizontal();
@@ -244,41 +310,58 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 GUILayout.FlexibleSpace();
                 if (GUILayout.Button("x"))
                 {
-                    data.poseFeatures.RemoveAt(i--);
+                    removeIndex = i;
                 }
 
                 EditorGUILayout.EndHorizontal();
                 //  Properties
-                poseFeature.name = EditorGUILayout.TextField("Name", poseFeature.name);
-                poseFeature.featureType =
-                    (PoseFeatureChannel.Type)EditorGUILayout.EnumPopup("Type", poseFeature.featureType);
-                poseFeature.bone = (HumanBodyBones)EditorGUILayout.EnumPopup(poseFeature.bone);
+                var nameProp = poseFeature.FindPropertyRelative("name");
+                nameProp.stringValue = EditorGUILayout.TextField("Name", nameProp.stringValue);
+                var featureTypeProp = poseFeature.FindPropertyRelative("featureType");
+                featureTypeProp.intValue = (int)(PoseFeatureChannel.Type)EditorGUILayout.EnumPopup("Type",
+                    (PoseFeatureChannel.Type)featureTypeProp.intValue);
+                var boneProp = poseFeature.FindPropertyRelative("bone");
+                boneProp.intValue = (int)(HumanBodyBones)EditorGUILayout.EnumPopup((HumanBodyBones)boneProp.intValue);
+
                 EditorGUILayout.EndVertical();
+            }
+
+            if (removeIndex >= 0)
+            {
+                _poseFeaturesProperty.DeleteArrayElementAtIndex(removeIndex);
             }
 
             if (GUILayout.Button("Add Pose Feature"))
             {
-                data.poseFeatures.Add(new PoseFeatureChannel());
+                var insertIndex = _poseFeaturesProperty.arraySize;
+                _poseFeaturesProperty.arraySize++;
+                ResetPoseFeature(_poseFeaturesProperty.GetArrayElementAtIndex(insertIndex));
             }
 
             EditorGUI.indentLevel--;
         }
 
         EditorGUILayout.EndFoldoutHeaderGroup();
+    }
 
-        // Generate Databases
+    // Generate Databases
+    private void DrawGenerateButton(MotionMatchingData data)
+    {
         EditorGUILayout.Separator();
-        if (generateButtonError)
+        if (_generateButtonError)
         {
             EditorGUILayout.HelpBox(
                 "Oops! Looks like there are errors in the feature definition. Please resolve them before generating the databases.",
                 MessageType.Error);
-            GUI.enabled = false;
         }
 
+        GUI.enabled = !_generateButtonError && data.tPoseAnimationClip != null;
         if (GUILayout.Button("Generate Databases", GUILayout.Height(30)))
         {
+            serializedObject.ApplyModifiedProperties();
             GenerateDatabases(data);
+            EditorUtility.SetDirty(data);
+            serializedObject.Update();
         }
 
         GUI.enabled = true;
@@ -288,70 +371,101 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         {
             EditorGUILayout.HelpBox("Internal error detected. Please regenerate databases.", MessageType.Error);
         }
-
-        // Save
-        if (GUI.changed)
-        {
-            EditorUtility.SetDirty(target);
-            EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene());
-        }
     }
 
-    private bool TrajectoryFramesLayout(TrajectoryFeatureChannel trajectoryFeature)
+    private static float3 ReadFloat3(SerializedProperty property) => new(
+        property.FindPropertyRelative("x").floatValue,
+        property.FindPropertyRelative("y").floatValue,
+        property.FindPropertyRelative("z").floatValue);
+
+    private static void WriteFloat3(SerializedProperty property, float3 value)
     {
-        bool generateButtonError = false;
+        property.FindPropertyRelative("x").floatValue = value.x;
+        property.FindPropertyRelative("y").floatValue = value.y;
+        property.FindPropertyRelative("z").floatValue = value.z;
+    }
+
+    private static void ResetTrajectoryFeature(SerializedProperty element)
+    {
+        element.FindPropertyRelative("name").stringValue = "";
+        element.FindPropertyRelative("featureType").intValue = 0;
+        element.FindPropertyRelative("simulationBone").boolValue = false;
+        element.FindPropertyRelative("bone").intValue = 0;
+        element.FindPropertyRelative("zeroX").boolValue = false;
+        element.FindPropertyRelative("zeroY").boolValue = false;
+        element.FindPropertyRelative("zeroZ").boolValue = false;
+        element.FindPropertyRelative("isMainPositionFeature").boolValue = false;
+        element.FindPropertyRelative("predictionFrames").arraySize = 0;
+    }
+
+    private static void ResetPoseFeature(SerializedProperty element)
+    {
+        element.FindPropertyRelative("name").stringValue = "";
+        element.FindPropertyRelative("featureType").intValue = 0;
+        element.FindPropertyRelative("bone").intValue = 0;
+    }
+
+    private bool TrajectoryFramesLayout(SerializedProperty trajectoryFeature)
+    {
+        var generateButtonError = false;
+        var predictionFrames = trajectoryFeature.FindPropertyRelative("predictionFrames");
         EditorGUILayout.LabelField("Frames Prediction");
         EditorGUILayout.BeginHorizontal();
-        for (int j = 0; j < trajectoryFeature.predictionFrames.Length; j++)
+        for (var j = 0; j < predictionFrames.arraySize; j++)
         {
-            trajectoryFeature.predictionFrames[j] = EditorGUILayout.IntField(trajectoryFeature.predictionFrames[j]);
+            var element = predictionFrames.GetArrayElementAtIndex(j);
+            element.intValue = EditorGUILayout.IntField(element.intValue);
         }
 
         if (GUILayout.Button("Add"))
         {
-            int[] newFrames = new int[trajectoryFeature.predictionFrames.Length + 1];
-            for (int j = 0; j < trajectoryFeature.predictionFrames.Length; j++)
-                newFrames[j] = trajectoryFeature.predictionFrames[j];
-            trajectoryFeature.predictionFrames = newFrames;
+            var addIndex = predictionFrames.arraySize;
+            predictionFrames.arraySize++;
+            // Growing an array copies the previous element rather than default-initialising it
+            predictionFrames.GetArrayElementAtIndex(addIndex).intValue = 0;
         }
 
-        if (trajectoryFeature.predictionFrames.Length > 0 && GUILayout.Button("Remove"))
+        if (predictionFrames.arraySize > 0 && GUILayout.Button("Remove"))
         {
-            int[] newFrames = new int[trajectoryFeature.predictionFrames.Length - 1];
-            for (int j = 0; j < trajectoryFeature.predictionFrames.Length - 1; j++)
-                newFrames[j] = trajectoryFeature.predictionFrames[j];
-            trajectoryFeature.predictionFrames = newFrames;
+            predictionFrames.arraySize--;
         }
 
         EditorGUILayout.EndHorizontal();
         return generateButtonError;
     }
 
-    private bool TrajectoryTypeOptionsLayout(TrajectoryFeatureChannel trajectoryFeature)
+    private bool TrajectoryTypeOptionsLayout(SerializedProperty trajectoryFeature)
     {
-        bool generateButtonError = false;
-        if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Position ||
-            trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Direction)
+        var generateButtonError = false;
+        var featureType = (TrajectoryFeatureChannel.Type)trajectoryFeature.FindPropertyRelative("featureType").intValue;
+        if (featureType == TrajectoryFeatureChannel.Type.Position ||
+            featureType == TrajectoryFeatureChannel.Type.Direction)
         {
             // Bone
-            trajectoryFeature.simulationBone =
-                EditorGUILayout.Toggle("Simulation Bone", trajectoryFeature.simulationBone);
-            if (!trajectoryFeature.simulationBone)
+            var simulationBoneProp = trajectoryFeature.FindPropertyRelative("simulationBone");
+            var boneProp = trajectoryFeature.FindPropertyRelative("bone");
+            var zeroXProp = trajectoryFeature.FindPropertyRelative("zeroX");
+            var zeroYProp = trajectoryFeature.FindPropertyRelative("zeroY");
+            var zeroZProp = trajectoryFeature.FindPropertyRelative("zeroZ");
+
+            simulationBoneProp.boolValue = EditorGUILayout.Toggle("Simulation Bone", simulationBoneProp.boolValue);
+            if (!simulationBoneProp.boolValue)
             {
-                trajectoryFeature.bone = (HumanBodyBones)EditorGUILayout.EnumPopup("Bone", trajectoryFeature.bone);
-                GUI.enabled = !trajectoryFeature.zeroY || !trajectoryFeature.zeroZ;
-                trajectoryFeature.zeroX = EditorGUILayout.Toggle("Zero X", trajectoryFeature.zeroX);
-                GUI.enabled = !trajectoryFeature.zeroX || !trajectoryFeature.zeroZ;
-                trajectoryFeature.zeroY = EditorGUILayout.Toggle("Zero Y", trajectoryFeature.zeroY);
-                GUI.enabled = !trajectoryFeature.zeroX || !trajectoryFeature.zeroY;
-                trajectoryFeature.zeroZ = EditorGUILayout.Toggle("Zero Z", trajectoryFeature.zeroZ);
+                boneProp.intValue =
+                    (int)(HumanBodyBones)EditorGUILayout.EnumPopup("Bone", (HumanBodyBones)boneProp.intValue);
+                GUI.enabled = !zeroYProp.boolValue || !zeroZProp.boolValue;
+                zeroXProp.boolValue = EditorGUILayout.Toggle("Zero X", zeroXProp.boolValue);
+                GUI.enabled = !zeroXProp.boolValue || !zeroZProp.boolValue;
+                zeroYProp.boolValue = EditorGUILayout.Toggle("Zero Y", zeroYProp.boolValue);
+                GUI.enabled = !zeroXProp.boolValue || !zeroYProp.boolValue;
+                zeroZProp.boolValue = EditorGUILayout.Toggle("Zero Z", zeroZProp.boolValue);
                 GUI.enabled = true;
             }
             else
             {
-                trajectoryFeature.zeroX = false;
-                trajectoryFeature.zeroY = true; // project simulation bone to the ground
-                trajectoryFeature.zeroZ = false;
+                zeroXProp.boolValue = false;
+                zeroYProp.boolValue = true; // project simulation bone to the ground
+                zeroZProp.boolValue = false;
             }
         }
 
