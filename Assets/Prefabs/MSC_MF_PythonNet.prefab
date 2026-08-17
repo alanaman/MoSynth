@@ -18,7 +18,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1474767785090834262
 Transform:
   m_ObjectHideFlags: 0
@@ -119,23 +119,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MotionMatching::MotionMatching.SpringControlInput
   motionSynthesizer: {fileID: 3010092521992473596}
-  TrajectoryPositionFeatureName: FuturePosition
-  TrajectoryDirectionFeatureName: FutureDirection
-  MaxSpeed: 1
-  ResponsivenessPositions: 0.75
-  ResponsivenessDirections: 0.75
-  MinimumVelocityClamp: 0.01
-  InputBigChangeThreshold: 0.5
-  DoAdjustment: 0
-  PositionAdjustmentHalflife: 0.1
-  RotationAdjustmentHalflife: 0.1
-  PosMaximumAdjustmentRatio: 0.1
-  RotMaximumAdjustmentRatio: 0.1
-  DoClamping: 1
-  MaxDistanceMMAndCharacterController: 0.1
-  DebugCurrent: 1
-  DebugPrediction: 1
-  DebugClamping: 1
+  trajectoryPositionFeatureName: FuturePosition
+  trajectoryDirectionFeatureName: FutureDirection
+  maxSpeed: 1
+  responsivenessPositions: 0.75
+  responsivenessDirections: 0.75
+  minimumVelocityClamp: 0.01
+  inputBigChangeThreshold: 0.5
+  doAdjustment: 0
+  positionAdjustmentHalflife: 0.1
+  rotationAdjustmentHalflife: 0.1
+  posMaximumAdjustmentRatio: 0.1
+  rotMaximumAdjustmentRatio: 0.1
+  doClamping: 1
+  maxDistanceMmAndCharacterController: 0.1
+  debugCurrent: 1
+  debugPrediction: 1
+  debugClamping: 1
 --- !u!1001 &7061716428555057813
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -222,27 +222,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2d9c7c526154d5088a5945bf9e64418, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionSynthesisComponent
-  mmData: {fileID: 11400000, guid: 74ea31e3cadcaa345b7e1171ab5116a9, type: 2}
+  poseSkeleton: {fileID: 0}
   synthesisFrameRate: 30
-  avatar: {fileID: 0}
   stages:
   - rid: 6955135232227147966
-  - rid: 5432756331016618051
+  - rid: 5432756614727467120
   - rid: 6955135243233787904
   rootPositionsMask: 1
   references:
     version: 2
     RefIds:
-    - rid: 5432756331016618051
-      type: {class: MotionFieldStage, ns: MotionField, asm: Assembly-CSharp}
+    - rid: 5432756614727467120
+      type: {class: MotionFieldStage, ns: MotionField, asm: MotionField}
       data:
         isEnabled: 1
-        config: {fileID: 11400000, guid: 82e3a54889bbc564c8df2c6306520a03, type: 2}
-        startStateIndex: 1200
+        config: {fileID: 0}
+        startStateIndex: 700
         reloadPythonModules: 1
         policy: 0
         steering: 2
-        fixedDirection: {x: 0, y: 0, z: 0}
+        fixedDirection: {x: 0, y: 0, z: 1}
         target: {fileID: 0}
         inputReference: {fileID: 0}
         collectDebugData: 1

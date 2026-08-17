@@ -45,23 +45,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: MotionMatching::MotionMatching.SpringControlInput
   motionSynthesizer: {fileID: 4187943845008689299}
-  TrajectoryPositionFeatureName: FuturePosition
-  TrajectoryDirectionFeatureName: FutureDirection
-  MaxSpeed: 1
-  ResponsivenessPositions: 0.75
-  ResponsivenessDirections: 0.75
-  MinimumVelocityClamp: 0.01
-  InputBigChangeThreshold: 0.5
-  DoAdjustment: 0
-  PositionAdjustmentHalflife: 0.1
-  RotationAdjustmentHalflife: 0.1
-  PosMaximumAdjustmentRatio: 0.1
-  RotMaximumAdjustmentRatio: 0.1
-  DoClamping: 1
-  MaxDistanceMMAndCharacterController: 0.1
-  DebugCurrent: 1
-  DebugPrediction: 1
-  DebugClamping: 1
+  trajectoryPositionFeatureName: FuturePosition
+  trajectoryDirectionFeatureName: FutureDirection
+  maxSpeed: 1
+  responsivenessPositions: 0.75
+  responsivenessDirections: 0.75
+  minimumVelocityClamp: 0.01
+  inputBigChangeThreshold: 0.5
+  doAdjustment: 0
+  positionAdjustmentHalflife: 0.1
+  rotationAdjustmentHalflife: 0.1
+  posMaximumAdjustmentRatio: 0.1
+  rotMaximumAdjustmentRatio: 0.1
+  doClamping: 1
+  maxDistanceMmAndCharacterController: 0.1
+  debugCurrent: 1
+  debugPrediction: 1
+  debugClamping: 1
 --- !u!1 &2259778427051159323
 GameObject:
   m_ObjectHideFlags: 0
@@ -188,6 +188,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Lafan_model_skeleton
       objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 5866666021909216657, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
       propertyPath: m_Controller
       value: 
@@ -217,9 +221,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2d9c7c526154d5088a5945bf9e64418, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionSynthesisComponent
-  mmData: {fileID: 11400000, guid: 74ea31e3cadcaa345b7e1171ab5116a9, type: 2}
+  poseSkeleton: {fileID: 0}
   synthesisFrameRate: 30
-  avatar: {fileID: 0}
   stages:
   - rid: 6955135232227147966
   - rid: 6955135243233787904
