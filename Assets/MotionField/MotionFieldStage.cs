@@ -4,7 +4,6 @@ using AnimationTools;
 using Python.Runtime;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace MotionField
 {
@@ -70,28 +69,6 @@ public class MotionFieldStage : MoSynthStage, IDisposable
     }
 
     [SerializeField] public Policy policy = Policy.Optimal;
-
-    public enum SteeringSource
-    {
-        /// <summary>Hold a fixed heading in world space.</summary>
-        FixedDirection,
-
-        /// <summary>Walk toward a target transform.</summary>
-        TowardsTarget,
-
-        /// <summary>WASD / left stick, interpreted relative to the camera when one is set.</summary>
-        PlayerInput
-    }
-
-    [Header("Steering")] [SerializeField] public SteeringSource steering = SteeringSource.PlayerInput;
-
-    [Tooltip("World-space heading for FixedDirection, and the fallback when input is idle.")] [SerializeField]
-    public Vector3 fixedDirection = Vector3.forward;
-
-    [SerializeField] public Transform target;
-
-    [Tooltip("Input is taken relative to this transform's facing. Falls back to the main camera.")] [SerializeField]
-    public Transform inputReference;
 
     /// <summary>Last desired heading in world space, for gizmos and debugging.</summary>
     public Vector3 DesiredWorldDirection { get; private set; } = Vector3.forward;
@@ -169,7 +146,7 @@ public class MotionFieldStage : MoSynthStage, IDisposable
                 dynamic motionFieldModule = PythonRuntime.Import("MotionField");
 
                 string dataPath = config.GetAssetPath();
-                
+
                 var animData = _actionPredictor.load_animations(dataPath, config.name);
                 _skeleton = animData[0];
                 dynamic poseX = animData[1];
@@ -313,8 +290,6 @@ public class MotionFieldStage : MoSynthStage, IDisposable
 
         try
         {
-            UpdateSteering();
-
             using (Py.GIL())
             {
                 dynamic nextPose = StepPolicy(deltaTime);
@@ -398,10 +373,13 @@ public class MotionFieldStage : MoSynthStage, IDisposable
     ///
     /// The negation matches the training convention, where reward is -|theta + delta_yaw|: the
     /// action that cancels theta is the one that turns the character onto the goal.
+    ///
+    /// Callers are expected to push a fresh direction every frame because Theta is measured
+    /// against the root's current facing; a near-zero vector keeps the previous heading and only
+    /// refreshes Theta.
     /// </summary>
-    private void UpdateSteering()
+    public void SetDesiredDirection(Vector3 desired)
     {
-        Vector3 desired = ResolveDesiredDirection();
         desired.y = 0f;
 
         if (desired.sqrMagnitude > 1e-6f)
@@ -416,61 +394,6 @@ public class MotionFieldStage : MoSynthStage, IDisposable
         if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
 
         Theta = -Vector3.SignedAngle(forward, DesiredWorldDirection, Vector3.up) * Mathf.Deg2Rad;
-    }
-
-    private Vector3 ResolveDesiredDirection()
-    {
-        switch (steering)
-        {
-            case SteeringSource.TowardsTarget:
-                return target != null && _rootTransform != null
-                    ? target.position - _rootTransform.position
-                    : fixedDirection;
-
-            case SteeringSource.PlayerInput:
-                Vector2 stick = ReadMoveInput();
-                if (stick.sqrMagnitude < 1e-4f) return DesiredWorldDirection;
-
-                Transform reference = inputReference != null
-                    ? inputReference
-                    : (Camera.main != null ? Camera.main.transform : null);
-                if (reference == null) return new Vector3(stick.x, 0f, stick.y);
-
-                Vector3 right = reference.right;
-                Vector3 ahead = reference.forward;
-                right.y = 0f;
-                ahead.y = 0f;
-                return right.normalized * stick.x + ahead.normalized * stick.y;
-
-            case SteeringSource.FixedDirection:
-                return fixedDirection;
-
-            default:
-                throw new NotImplementedException();
-        }
-    }
-
-    private static Vector2 ReadMoveInput()
-    {
-        Vector2 move = Vector2.zero;
-
-        var gamepad = Gamepad.current;
-        if (gamepad != null)
-        {
-            move = gamepad.leftStick.ReadValue();
-            if (move.sqrMagnitude > 1e-4f) return move;
-        }
-
-        var keyboard = Keyboard.current;
-        if (keyboard != null)
-        {
-            if (keyboard.aKey.isPressed) move.x -= 1f;
-            if (keyboard.dKey.isPressed) move.x += 1f;
-            if (keyboard.sKey.isPressed) move.y -= 1f;
-            if (keyboard.wKey.isPressed) move.y += 1f;
-        }
-
-        return move;
     }
 
     public void Dispose()

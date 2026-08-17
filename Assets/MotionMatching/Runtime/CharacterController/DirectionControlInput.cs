@@ -3,149 +3,143 @@ using AnimationTools;
 using UnityEngine;
 using Unity.Mathematics;
 using Unity.Collections;
+using UnityEngine.Serialization;
 
 namespace MotionMatching
 {
 // Adjustment between Character Controller and Motion Matching Character Entity
 /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharacterController
+public class SpringControlInput : MotionMatchingControlInput
 {
-    // Features ----------------------------------------------------------
-    [Header("Features")] public string TrajectoryPositionFeatureName = "FuturePosition";
+    [Header("Features")] public string trajectoryPositionFeatureName = "FuturePosition";
 
-    public string TrajectoryDirectionFeatureName = "FutureDirection";
+    public string trajectoryDirectionFeatureName = "FutureDirection";
 
-    // General ----------------------------------------------------------
-    [Header("General")] public float MaxSpeed = 1.0f;
-    [Range(0.0f, 1.0f)] public float ResponsivenessPositions = 0.75f;
-    [Range(0.0f, 1.0f)] public float ResponsivenessDirections = 0.75f;
-    public float MinimumVelocityClamp = 0.01f;
+    [Header("General")] public float maxSpeed = 1.0f;
+    [Range(0.0f, 1.0f)] public float responsivenessPositions = 0.75f;
+    [Range(0.0f, 1.0f)] public float responsivenessDirections = 0.75f;
+    public float minimumVelocityClamp = 0.01f;
 
     [Tooltip(
         "Controls when to consider that the input has suddenly changed. Used to recompute MotionMatching. -1.0f: Never. 1.0f: Always")]
     [Range(-1.0f, 1.0f)]
-    public float InputBigChangeThreshold = 0.5f;
-
-    // Adjustment & Clamping --------------------------------------------
-    [Header("Adjustment")] // Move Simulation Bone towards the Simulation Object (motion matching towards character controller)
-    public bool DoAdjustment = true;
+    public float inputBigChangeThreshold = 0.5f;
 
     [Range(0.0f, 2.0f)] public float
-        PositionAdjustmentHalflife =
+        positionAdjustmentHalflife =
             0.1f; // Time needed to move half of the distance between MotionMatching and the CharacterController
 
-    [Range(0.0f, 2.0f)] public float RotationAdjustmentHalflife = 0.1f;
+    [FormerlySerializedAs("rotationAdjustmentHalflife")] [Range(0.0f, 2.0f)]
+    public float rotationAdjustmentHalfLife = 0.1f;
 
     [Range(0.0f, 2.0f)] public float
-        PosMaximumAdjustmentRatio =
+        posMaximumAdjustmentRatio =
             0.1f; // Ratio between the adjustment and the character's velocity to clamp the adjustment
 
     [Range(0.0f, 2.0f)] public float
-        RotMaximumAdjustmentRatio =
+        rotMaximumAdjustmentRatio =
             0.1f; // Ratio between the adjustment and the character's velocity to clamp the adjustment
 
-    public bool DoClamping = true;
+    public bool doClamping = true;
 
     [Range(0.0f, 2.0f)] public float
-        MaxDistanceMMAndCharacterController = 0.1f; // Max distance between MotionMatching and the CharacterController
+        maxDistanceMmAndCharacterController = 0.1f; // Max distance between MotionMatching and the CharacterController
 
-    [Header("DEBUG")] public bool DebugCurrent = true;
-    public bool DebugPrediction = true;
-    public bool DebugClamping = true;
+    [Header("DEBUG")] public bool debugCurrent = true;
+    public bool debugPrediction = true;
+    public bool debugClamping = true;
     // --------------------------------------------------------------------------
 
     // PRIVATE ------------------------------------------------------------------
     // Input --------------------------------------------------------------------
-    private float2 InputMovement;
+    private float2 _inputMovement;
 
-    private bool OrientationFixed;
+    private bool _orientationFixed;
 
     // Rotation and Predicted Rotation ------------------------------------------
-    private quaternion DesiredRotation; // Desired Rotation/Direction
-    private quaternion[] PredictedRotations;
-    private float3 AngularVelocity;
+    private quaternion _desiredRotation; // Desired Rotation/Direction
+    private quaternion[] _predictedRotations;
+    private float3 _angularVelocity;
 
-    private float3[] PredictedAngularVelocities;
+    private float3[] _predictedAngularVelocities;
 
     // Position and Predicted Position ------------------------------------------
-    private float2[] PredictedPosition;
-    private float2 Velocity;
-    private float2[] PredictedVelocity;
-    private float2 Acceleration;
+    private float2[] _predictedPosition;
+    private float2 _velocity;
+    private float2[] _predictedVelocity;
+    private float2 _acceleration;
 
-    private float2[] PredictedAcceleration;
+    private float2[] _predictedAcceleration;
 
     // Features -----------------------------------------------------------------
-    private int TrajectoryPosFeatureIndex;
-    private int TrajectoryRotFeatureIndex;
-    private int[] TrajectoryPosPredictionFrames;
-    private int[] TrajectoryRotPredictionFrames;
+    private int _trajectoryPosFeatureIndex;
+    private int _trajectoryRotFeatureIndex;
+    private int[] _trajectoryPosPredictionFrames;
+    private int[] _trajectoryRotPredictionFrames;
 
     private int NumberPredictionPos
     {
-        get { return TrajectoryPosPredictionFrames.Length; }
+        get { return _trajectoryPosPredictionFrames.Length; }
     }
 
     private int NumberPredictionRot
     {
-        get { return TrajectoryRotPredictionFrames.Length; }
+        get { return _trajectoryRotPredictionFrames.Length; }
     }
-    // --------------------------------------------------------------------------
 
-    // FUNCTIONS ---------------------------------------------------------------
     private void Start()
     {
         // Get the feature indices
-        TrajectoryPosFeatureIndex = -1;
-        TrajectoryRotFeatureIndex = -1;
+        _trajectoryPosFeatureIndex = -1;
+        _trajectoryRotFeatureIndex = -1;
         for (var i = 0; i < motionSynthesizer.GetMmData().trajectoryFeatures.Count; ++i)
         {
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryPositionFeatureName)
-                TrajectoryPosFeatureIndex = i;
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryDirectionFeatureName)
-                TrajectoryRotFeatureIndex = i;
+            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == trajectoryPositionFeatureName)
+                _trajectoryPosFeatureIndex = i;
+            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == trajectoryDirectionFeatureName)
+                _trajectoryRotFeatureIndex = i;
         }
 
-        Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
-        Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
+        Debug.Assert(_trajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
+        Debug.Assert(_trajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-        TrajectoryPosPredictionFrames =
-            motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex].predictionFrames;
-        TrajectoryRotPredictionFrames =
-            motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex].predictionFrames;
+        _trajectoryPosPredictionFrames =
+            motionSynthesizer.GetMmData().trajectoryFeatures[_trajectoryPosFeatureIndex].predictionFrames;
+        _trajectoryRotPredictionFrames =
+            motionSynthesizer.GetMmData().trajectoryFeatures[_trajectoryRotFeatureIndex].predictionFrames;
         // TODO: generalize this... allow different number of prediction frames for different features
-        Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length,
+        Debug.Assert(_trajectoryPosPredictionFrames.Length == _trajectoryRotPredictionFrames.Length,
             "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
-        for (var i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
+        for (var i = 0; i < _trajectoryPosPredictionFrames.Length; ++i)
         {
-            Debug.Assert(TrajectoryPosPredictionFrames[i] == TrajectoryRotPredictionFrames[i],
+            Debug.Assert(_trajectoryPosPredictionFrames[i] == _trajectoryRotPredictionFrames[i],
                 "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");
         }
 
-        PredictedPosition = new float2[NumberPredictionPos];
-        PredictedVelocity = new float2[NumberPredictionPos];
-        PredictedAcceleration = new float2[NumberPredictionPos];
-        DesiredRotation = quaternion.LookRotation(transform.forward, transform.up);
-        PredictedRotations = new quaternion[NumberPredictionRot];
-        PredictedAngularVelocities = new float3[NumberPredictionRot];
+        _predictedPosition = new float2[NumberPredictionPos];
+        _predictedVelocity = new float2[NumberPredictionPos];
+        _predictedAcceleration = new float2[NumberPredictionPos];
+        _desiredRotation = quaternion.LookRotation(transform.forward, transform.up);
+        _predictedRotations = new quaternion[NumberPredictionRot];
+        _predictedAngularVelocities = new float3[NumberPredictionRot];
     }
 
     // Input a change in the movement direction
-    public void SetMovementDirection(float2 movementDirection)
+    public void SetMovementDirection(Vector2 movementDirection)
     {
-        var prevInputMovement = InputMovement;
-        InputMovement = movementDirection;
+        var prevInputMovement = _inputMovement;
+        _inputMovement = movementDirection;
         // Desired Rotation
-        if (!OrientationFixed && math.length(movementDirection) > 0.0001f)
+        if (!_orientationFixed && math.length(movementDirection) > 0.0001f)
         {
             var desiredDirection = math.normalize(movementDirection);
-            DesiredRotation =
+            _desiredRotation =
                 quaternion.LookRotation(new float3(desiredDirection.x, 0.0f, desiredDirection.y), transform.up);
         }
 
         // Input Changed Quickly
-        if (math.dot(prevInputMovement, InputMovement) < InputBigChangeThreshold)
+        if (math.dot(prevInputMovement, _inputMovement) < inputBigChangeThreshold)
         {
             NotifyInputChangedQuickly();
         }
@@ -153,7 +147,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
 
     public void SwapFixOrientation()
     {
-        OrientationFixed = !OrientationFixed;
+        _orientationFixed = !_orientationFixed;
     }
 
     protected override void OnUpdate()
@@ -165,7 +159,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         var newRot = ComputeNewRot(currentRotation);
 
         // Positions
-        var desiredSpeed = InputMovement * MaxSpeed;
+        var desiredSpeed = _inputMovement * maxSpeed;
         var currentPos = new float2(transform.position.x, transform.position.z);
         // Predict
         PredictPositions(currentPos, desiredSpeed, DatabaseDeltaTime);
@@ -173,15 +167,13 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         var newPos = ComputeNewPos(currentPos, desiredSpeed);
 
         // Update Character Controller
-        if (math.lengthsq(Velocity) > MinimumVelocityClamp * MinimumVelocityClamp)
+        if (math.lengthsq(_velocity) > minimumVelocityClamp * minimumVelocityClamp)
         {
             // Update Transform
             transform.position = new float3(newPos.x, transform.position.y, newPos.y);
             transform.rotation = newRot;
         }
 
-        // Adjust MotionMatching to pull the Character towards the Character Controller
-        if (DoAdjustment) AdjustMotionMatching();
         // if (DoClamping) ClampMotionMatching();
     }
 
@@ -190,11 +182,12 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         for (var i = 0; i < NumberPredictionRot; i++)
         {
             // Init Predicted values
-            PredictedRotations[i] = currentRotation;
-            PredictedAngularVelocities[i] = AngularVelocity;
+            _predictedRotations[i] = currentRotation;
+            _predictedAngularVelocities[i] = _angularVelocity;
             // Predict
-            Spring.SimpleSpringDamperImplicit(ref PredictedRotations[i], ref PredictedAngularVelocities[i],
-                DesiredRotation, 1.0f - ResponsivenessDirections, TrajectoryRotPredictionFrames[i] * averagedDeltaTime);
+            Spring.SimpleSpringDamperImplicit(ref _predictedRotations[i], ref _predictedAngularVelocities[i],
+                _desiredRotation, 1.0f - responsivenessDirections,
+                _trajectoryRotPredictionFrames[i] * averagedDeltaTime);
         }
     }
 
@@ -206,45 +199,39 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         {
             if (i == 0)
             {
-                PredictedPosition[i] = currentPos;
-                PredictedVelocity[i] = Velocity;
-                PredictedAcceleration[i] = Acceleration;
+                _predictedPosition[i] = currentPos;
+                _predictedVelocity[i] = _velocity;
+                _predictedAcceleration[i] = _acceleration;
             }
             else
             {
-                PredictedPosition[i] = PredictedPosition[i - 1];
-                PredictedVelocity[i] = PredictedVelocity[i - 1];
-                PredictedAcceleration[i] = PredictedAcceleration[i - 1];
+                _predictedPosition[i] = _predictedPosition[i - 1];
+                _predictedVelocity[i] = _predictedVelocity[i - 1];
+                _predictedAcceleration[i] = _predictedAcceleration[i - 1];
             }
 
-            var diffPredictionFrames = TrajectoryPosPredictionFrames[i] - lastPredictionFrames;
-            lastPredictionFrames = TrajectoryPosPredictionFrames[i];
-            Spring.CharacterPositionUpdate(ref PredictedPosition[i], ref PredictedVelocity[i],
-                ref PredictedAcceleration[i],
-                desiredSpeed, 1.0f - ResponsivenessPositions, diffPredictionFrames * averagedDeltaTime);
+            var diffPredictionFrames = _trajectoryPosPredictionFrames[i] - lastPredictionFrames;
+            lastPredictionFrames = _trajectoryPosPredictionFrames[i];
+            Spring.CharacterPositionUpdate(ref _predictedPosition[i], ref _predictedVelocity[i],
+                ref _predictedAcceleration[i],
+                desiredSpeed, 1.0f - responsivenessPositions, diffPredictionFrames * averagedDeltaTime);
         }
     }
 
     private quaternion ComputeNewRot(quaternion currentRotation)
     {
         var newRotation = currentRotation;
-        Spring.SimpleSpringDamperImplicit(ref newRotation, ref AngularVelocity, DesiredRotation,
-            1.0f - ResponsivenessDirections, Time.deltaTime);
+        Spring.SimpleSpringDamperImplicit(ref newRotation, ref _angularVelocity, _desiredRotation,
+            1.0f - responsivenessDirections, Time.deltaTime);
         return newRotation;
     }
 
     private float2 ComputeNewPos(float2 currentPos, float2 desiredSpeed)
     {
         var newPos = currentPos;
-        Spring.CharacterPositionUpdate(ref newPos, ref Velocity, ref Acceleration, desiredSpeed,
-            1.0f - ResponsivenessPositions, Time.deltaTime);
+        Spring.CharacterPositionUpdate(ref newPos, ref _velocity, ref _acceleration, desiredSpeed,
+            1.0f - responsivenessPositions, Time.deltaTime);
         return newPos;
-    }
-
-    private void AdjustMotionMatching()
-    {
-        AdjustCharacterPosition();
-        AdjustCharacterRotation();
     }
 
     private void ClampMotionMatching()
@@ -252,10 +239,10 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         // Clamp Position
         float3 characterController = transform.position;
         var mmPos = motionSynthesizer.RootPosition;
-        if (math.distance(characterController, mmPos) > MaxDistanceMMAndCharacterController)
+        if (math.distance(characterController, mmPos) > maxDistanceMmAndCharacterController)
         {
             float3 newMotionMatchingPos =
-                MaxDistanceMMAndCharacterController * math.normalize(mmPos - characterController) +
+                maxDistanceMmAndCharacterController * math.normalize(mmPos - characterController) +
                 characterController;
             motionSynthesizer.SetPosAdjustment(newMotionMatchingPos - mmPos);
         }
@@ -268,10 +255,10 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         var differencePosition = characterController - mmPos;
         // Damp the difference using the adjustment halflife and dt
         var adjustmentPosition =
-            Spring.DampAdjustmentImplicit(differencePosition, PositionAdjustmentHalflife, Time.deltaTime);
+            Spring.DampAdjustmentImplicit(differencePosition, positionAdjustmentHalflife, Time.deltaTime);
         // Clamp adjustment if the length is greater than the character velocity
         // multiplied by the ratio
-        var maxLength = PosMaximumAdjustmentRatio * math.length(motionSynthesizer.RootVelocity) * Time.deltaTime;
+        var maxLength = posMaximumAdjustmentRatio * math.length(motionSynthesizer.RootVelocity) * Time.deltaTime;
         if (math.length(adjustmentPosition) > maxLength)
         {
             adjustmentPosition = maxLength * math.normalize(adjustmentPosition);
@@ -290,10 +277,10 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         var differenceRotation = math.mul(math.inverse(mmRot), characterController);
         // Damp the difference using the adjustment halflife and dt
         var adjustmentRotation =
-            Spring.DampAdjustmentImplicit(differenceRotation, RotationAdjustmentHalflife, Time.deltaTime);
+            Spring.DampAdjustmentImplicit(differenceRotation, rotationAdjustmentHalfLife, Time.deltaTime);
         // Clamp adjustment if the length is greater than the character angular velocity
         // multiplied by the ratio
-        var maxLength = RotMaximumAdjustmentRatio * math.length(motionSynthesizer.RootAngularVelocity) * Time.deltaTime;
+        var maxLength = rotMaximumAdjustmentRatio * math.length(motionSynthesizer.RootAngularVelocity) * Time.deltaTime;
         if (math.length(MathExtensions.QuaternionToScaledAngleAxis(adjustmentRotation)) > maxLength)
         {
             adjustmentRotation = MathExtensions.QuaternionFromScaledAngleAxis(
@@ -333,7 +320,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
             switch (feature.featureType)
             {
                 case TrajectoryFeatureChannel.Type.Position:
-                    var world = PredictedPosition[index];
+                    var world = _predictedPosition[index];
                     float3 local = character.InverseTransformPoint(new float3(world.x, 0.0f, world.y));
                     output[0] = local.x;
                     output[1] = local.z;
@@ -354,7 +341,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
 
     private float2 GetWorldSpaceDirectionPrediction(int index)
     {
-        var dir = math.mul(PredictedRotations[index], new float3(0, 0, 1));
+        var dir = math.mul(_predictedRotations[index], new float3(0, 0, 1));
         return math.normalize(new float2(dir.x, dir.z));
     }
 
@@ -370,7 +357,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
 
     public override float GetTargetSpeed()
     {
-        return math.length(PredictedVelocity[^1]);
+        return math.length(_predictedVelocity[^1]);
     }
 
 #if UNITY_EDITOR
@@ -380,7 +367,7 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
         const float vectorReduction = 0.5f;
         const float verticalOffset = 0.05f;
         var transformPos = (Vector3)GetPosition() + Vector3.up * verticalOffset;
-        if (DebugCurrent)
+        if (debugCurrent)
         {
             // Draw Current Position & Velocity
             Gizmos.color = new Color(1.0f, 0.3f, 0.1f, 1.0f);
@@ -389,15 +376,15 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
                 transformPos + ((Quaternion)GetCurrentRotation() * Vector3.forward) * vectorReduction, 3);
         }
 
-        if (PredictedPosition == null || PredictedRotations == null) return;
+        if (_predictedPosition == null || _predictedRotations == null) return;
 
-        if (DebugPrediction)
+        if (debugPrediction)
         {
             // Draw Predicted Position & Velocity
             Gizmos.color = new Color(0.6f, 0.3f, 0.8f, 1.0f);
-            for (var i = 0; i < PredictedPosition.Length; ++i)
+            for (var i = 0; i < _predictedPosition.Length; ++i)
             {
-                var predictedPos = new float3(PredictedPosition[i].x, verticalOffset, PredictedPosition[i].y);
+                var predictedPos = new float3(_predictedPosition[i].x, verticalOffset, _predictedPosition[i].y);
                 var predictedDir = GetWorldSpaceDirectionPrediction(i);
                 var predictedDir3D = new float3(predictedDir.x, 0.0f, predictedDir.y);
                 Gizmos.DrawSphere(predictedPos, radius);
@@ -405,13 +392,13 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
             }
         }
 
-        if (DebugClamping)
+        if (debugClamping)
         {
             // Draw Clamp Circle
-            if (DoClamping)
+            if (doClamping)
             {
                 Gizmos.color = new Color(0.1f, 1.0f, 0.1f, 1.0f);
-                GizmosExtensions.DrawWireCircle(transformPos, MaxDistanceMMAndCharacterController, quaternion.identity);
+                GizmosExtensions.DrawWireCircle(transformPos, maxDistanceMmAndCharacterController, quaternion.identity);
             }
         }
     }
