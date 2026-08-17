@@ -4,11 +4,11 @@ namespace MotionMatching.Testing
 {
 public class MoveForwardInput : MonoBehaviour
 {
-    public SimpleMMController MMController;
+    public DirectionControlInput MMController;
     
     private void Update()
     {
-        MMController.SetVelocity(new Vector2(0, 1));
+        MMController.SetMovementDirection(new Vector2(0, 1));
     }
     
 }

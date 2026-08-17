@@ -10,7 +10,7 @@ namespace MotionMatching
 // Adjustment between Character Controller and Motion Matching Character Entity
 /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-public class SpringControlInput : MotionMatchingControlInput
+public class DirectionControlInput : MotionMatchingControlInput
 {
     [Header("Features")] public string trajectoryPositionFeatureName = "FuturePosition";
 
@@ -93,11 +93,12 @@ public class SpringControlInput : MotionMatchingControlInput
         // Get the feature indices
         _trajectoryPosFeatureIndex = -1;
         _trajectoryRotFeatureIndex = -1;
-        for (var i = 0; i < motionSynthesizer.GetMmData().trajectoryFeatures.Count; ++i)
+        var mmData = motionSynthesizer.GetMmData();
+        for (var i = 0; i < mmData.trajectoryFeatures.Count; ++i)
         {
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == trajectoryPositionFeatureName)
+            if (mmData.trajectoryFeatures[i].name == trajectoryPositionFeatureName)
                 _trajectoryPosFeatureIndex = i;
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == trajectoryDirectionFeatureName)
+            if (mmData.trajectoryFeatures[i].name == trajectoryDirectionFeatureName)
                 _trajectoryRotFeatureIndex = i;
         }
 
@@ -105,9 +106,9 @@ public class SpringControlInput : MotionMatchingControlInput
         Debug.Assert(_trajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
         _trajectoryPosPredictionFrames =
-            motionSynthesizer.GetMmData().trajectoryFeatures[_trajectoryPosFeatureIndex].predictionFrames;
+            mmData.trajectoryFeatures[_trajectoryPosFeatureIndex].predictionFrames;
         _trajectoryRotPredictionFrames =
-            motionSynthesizer.GetMmData().trajectoryFeatures[_trajectoryRotFeatureIndex].predictionFrames;
+            mmData.trajectoryFeatures[_trajectoryRotFeatureIndex].predictionFrames;
         // TODO: generalize this... allow different number of prediction frames for different features
         Debug.Assert(_trajectoryPosPredictionFrames.Length == _trajectoryRotPredictionFrames.Length,
             "Trajectory Position and Trajectory Direction Prediction Frames must be the same for SpringCharacterController");

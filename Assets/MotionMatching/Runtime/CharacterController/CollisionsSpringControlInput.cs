@@ -8,7 +8,7 @@ namespace MotionMatching
 // Adjustment between Character Controller and Motion Matching Character Entity
 /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-public class CollisionsSpringControlInput : MotionMatchingControlInput, IPlayerInputCharacterController
+public class CollisionsSpringControlInput : MotionMatchingControlInput
 {
     // Features ----------------------------------------------------------
     [Header("Features")] public string TrajectoryPositionFeatureName = "FuturePosition";
@@ -138,7 +138,7 @@ public class CollisionsSpringControlInput : MotionMatchingControlInput, IPlayerI
     }
 
     // Input a change in the movement direction
-    public void SetMovementDirection(float2 movementDirection)
+    public void SetMovementDirection(Vector2 movementDirection)
     {
         var prevInputMovement = InputMovement;
         InputMovement = movementDirection;

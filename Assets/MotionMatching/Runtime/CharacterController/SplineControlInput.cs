@@ -1,102 +1,104 @@
 using System;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.Splines;
 
 namespace MotionMatching
 {
 public class SplineControlInput : MotionMatchingControlInput
 {
-    public string TrajectoryPositionFeatureName = "FuturePosition";
-    public string TrajectoryDirectionFeatureName = "FutureDirection";
+    [FormerlySerializedAs("TrajectoryPositionFeatureName")] public string trajectoryPositionFeatureName = "FuturePosition";
+    [FormerlySerializedAs("TrajectoryDirectionFeatureName")] public string trajectoryDirectionFeatureName = "FutureDirection";
 
-    public SplineContainer SplineContainer;
-    public float Speed = 1.0f;
+    [FormerlySerializedAs("SplineContainer")] public SplineContainer splineContainer;
+    [FormerlySerializedAs("Speed")] public float speed = 1.0f;
 
-    private float T;
+    private float _;
 
-    private float2 CurrentPosition;
-    private float2 CurrentDirection;
-    private float2[] PredictedPositions;
-    private float2[] PredictedDirections;
+    private float2 _currentPosition;
+    private float2 _currentDirection;
+    private float2[] _predictedPositions;
+    private float2[] _predictedDirections;
 
     // Features -----------------------------------------------------------------
-    private int TrajectoryPosFeatureIndex;
-    private int TrajectoryRotFeatureIndex;
-    private int[] TrajectoryPosPredictionFrames;
-    private int[] TrajectoryRotPredictionFrames;
+    private int _trajectoryPosFeatureIndex;
+    private int _trajectoryRotFeatureIndex;
+    private int[] _trajectoryPosPredictionFrames;
+    private int[] _trajectoryRotPredictionFrames;
 
     private int NumberPredictionPos
     {
-        get { return TrajectoryPosPredictionFrames.Length; }
+        get { return _trajectoryPosPredictionFrames.Length; }
     }
 
     private int NumberPredictionRot
     {
-        get { return TrajectoryRotPredictionFrames.Length; }
+        get { return _trajectoryRotPredictionFrames.Length; }
     }
     // --------------------------------------------------------------------------
 
     private void Start()
     {
         // Get the feature indices
-        TrajectoryPosFeatureIndex = -1;
-        TrajectoryRotFeatureIndex = -1;
-        for (int i = 0; i < motionSynthesizer.GetMmData().trajectoryFeatures.Count; ++i)
+        _trajectoryPosFeatureIndex = -1;
+        _trajectoryRotFeatureIndex = -1;
+        var mmData = motionSynthesizer.GetMmData();
+        for (int i = 0; i < mmData.trajectoryFeatures.Count; ++i)
         {
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryPositionFeatureName)
-                TrajectoryPosFeatureIndex = i;
-            if (motionSynthesizer.GetMmData().trajectoryFeatures[i].name == TrajectoryDirectionFeatureName)
-                TrajectoryRotFeatureIndex = i;
+            if (mmData.trajectoryFeatures[i].name == trajectoryPositionFeatureName)
+                _trajectoryPosFeatureIndex = i;
+            if (mmData.trajectoryFeatures[i].name == trajectoryDirectionFeatureName)
+                _trajectoryRotFeatureIndex = i;
         }
 
-        Debug.Assert(TrajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
-        Debug.Assert(TrajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
+        Debug.Assert(_trajectoryPosFeatureIndex != -1, "Trajectory Position Feature not found");
+        Debug.Assert(_trajectoryRotFeatureIndex != -1, "Trajectory Direction Feature not found");
 
-        TrajectoryPosPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryPosFeatureIndex]
+        _trajectoryPosPredictionFrames = mmData.trajectoryFeatures[_trajectoryPosFeatureIndex]
             .predictionFrames;
-        TrajectoryRotPredictionFrames = motionSynthesizer.GetMmData().trajectoryFeatures[TrajectoryRotFeatureIndex]
+        _trajectoryRotPredictionFrames = mmData.trajectoryFeatures[_trajectoryRotFeatureIndex]
             .predictionFrames;
         // TODO: generalize this, allow for different number of prediction frames
-        Debug.Assert(TrajectoryPosPredictionFrames.Length == TrajectoryRotPredictionFrames.Length,
+        Debug.Assert(_trajectoryPosPredictionFrames.Length == _trajectoryRotPredictionFrames.Length,
             "Trajectory Position and Trajectory Direction Prediction Frames must be the same for PathCharacterController");
-        for (int i = 0; i < TrajectoryPosPredictionFrames.Length; ++i)
+        for (int i = 0; i < _trajectoryPosPredictionFrames.Length; ++i)
         {
-            Debug.Assert(TrajectoryPosPredictionFrames[i] == TrajectoryRotPredictionFrames[i],
+            Debug.Assert(_trajectoryPosPredictionFrames[i] == _trajectoryRotPredictionFrames[i],
                 "Trajectory Position and Trajectory Direction Prediction Frames must be the same for PathCharacterController");
         }
 
-        PredictedPositions = new float2[NumberPredictionPos];
-        PredictedDirections = new float2[NumberPredictionRot];
+        _predictedPositions = new float2[NumberPredictionPos];
+        _predictedDirections = new float2[NumberPredictionRot];
     }
 
     protected override void OnUpdate()
     {
-        float speed = Speed / SplineContainer.CalculateLength();
+        float speed = this.speed / splineContainer.CalculateLength();
 
         float delta = speed * DatabaseDeltaTime * 0.1f;
 
-        float3 pos = SplineContainer.EvaluatePosition(T);
-        CurrentPosition = pos.xz;
-        float3 nextPos = SplineContainer.EvaluatePosition(math.frac(T + delta));
-        CurrentDirection = math.normalize(new float2(nextPos.x - pos.x, nextPos.z - pos.z));
+        float3 pos = splineContainer.EvaluatePosition(_);
+        _currentPosition = pos.xz;
+        float3 nextPos = splineContainer.EvaluatePosition(math.frac(_ + delta));
+        _currentDirection = math.normalize(new float2(nextPos.x - pos.x, nextPos.z - pos.z));
 
         for (int i = 0; i < NumberPredictionPos; i++)
         {
-            float t = math.frac(T + TrajectoryPosPredictionFrames[i] * speed * DatabaseDeltaTime);
-            float3 predPos = SplineContainer.EvaluatePosition(t);
-            PredictedPositions[i] = predPos.xz;
-            float3 predNextPos = SplineContainer.EvaluatePosition(math.frac(t + delta));
-            PredictedDirections[i] = math.normalize(new float2(predNextPos.x - predPos.x, predNextPos.z - predPos.z));
+            float t = math.frac(_ + _trajectoryPosPredictionFrames[i] * speed * DatabaseDeltaTime);
+            float3 predPos = splineContainer.EvaluatePosition(t);
+            _predictedPositions[i] = predPos.xz;
+            float3 predNextPos = splineContainer.EvaluatePosition(math.frac(t + delta));
+            _predictedDirections[i] = math.normalize(new float2(predNextPos.x - predPos.x, predNextPos.z - predPos.z));
         }
 
-        T += speed * Time.deltaTime;
-        T = math.frac(T);
+        _ += speed * Time.deltaTime;
+        _ = math.frac(_);
     }
 
     public quaternion GetCurrentRotation()
     {
-        Quaternion rot = Quaternion.LookRotation(new Vector3(CurrentDirection.x, 0, CurrentDirection.y));
+        Quaternion rot = Quaternion.LookRotation(new Vector3(_currentDirection.x, 0, _currentDirection.y));
         return rot;
     }
 
@@ -126,17 +128,17 @@ public class SplineControlInput : MotionMatchingControlInput
 
     private float2 GetWorldPredictedPos(int index)
     {
-        return PredictedPositions[index];
+        return _predictedPositions[index];
     }
 
     private float2 GetWorldPredictedDir(int index)
     {
-        return PredictedDirections[index];
+        return _predictedDirections[index];
     }
 
     public override float3 GetPosition()
     {
-        return new Vector3(CurrentPosition.x, 0, CurrentPosition.y);
+        return new Vector3(_currentPosition.x, 0, _currentPosition.y);
     }
 
     public override float3 GetWorldInitPosition()
@@ -151,13 +153,13 @@ public class SplineControlInput : MotionMatchingControlInput
 
     public override float GetTargetSpeed()
     {
-        return Speed;
+        return speed;
     }
 
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (SplineContainer == null) return;
+        if (splineContainer == null) return;
 
         const float heightOffset = 0.01f;
 
@@ -168,8 +170,8 @@ public class SplineControlInput : MotionMatchingControlInput
         Gizmos.DrawSphere(currentPos, 0.1f);
         GizmosExtensions.DrawLine(currentPos, currentPos + (Quaternion)GetCurrentRotation() * Vector3.forward, 12);
         // Draw Prediction
-        if (PredictedPositions == null || PredictedPositions.Length != NumberPredictionPos ||
-            PredictedDirections == null || PredictedDirections.Length != NumberPredictionRot) return;
+        if (_predictedPositions == null || _predictedPositions.Length != NumberPredictionPos ||
+            _predictedDirections == null || _predictedDirections.Length != NumberPredictionRot) return;
         Gizmos.color = new Color(0.6f, 0.3f, 0.8f, 1.0f);
         for (int i = 0; i < NumberPredictionPos; i++)
         {

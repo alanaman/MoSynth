@@ -18,7 +18,6 @@ public abstract class MotionMatchingControlInput : MonoBehaviour
     //       that validates if the current MMData has the necessary trajectories requeried
     //       by the current controller (eg. simulation bone pos + dir, or HMD + L/R controllers pos + dir)
 
-    public event Action<float> OnUpdated;
     public UnityAction OnHighInputChange;
 
     [FormerlySerializedAs("motionMatching")] [SerializeReference]
@@ -33,7 +32,6 @@ public abstract class MotionMatchingControlInput : MonoBehaviour
         // Update the character
         OnUpdate();
         // Update other components depending on the character controller
-        OnUpdated?.Invoke(Time.deltaTime);
     }
 
     /// <summary>

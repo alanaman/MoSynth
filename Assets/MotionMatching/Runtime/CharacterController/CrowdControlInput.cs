@@ -7,8 +7,7 @@ using Unity.Collections;
 
 namespace MotionMatching
 {
-public class CrowdControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler,
-    IPlayerInputCharacterController
+public class CrowdControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler
 {
     [Header("Crowd")] public Obstacle IgnoreObstacle;
     public bool DoSteering = false;
@@ -178,7 +177,7 @@ public class CrowdControlInput : MotionMatchingControlInput, IObstacleAwareChara
     }
 
     // Input a change in the movement direction
-    public void SetMovementDirection(float2 movementDirection)
+    public void SetMovementDirection(Vector2 movementDirection)
     {
         var prevInputMovement = InputMovement;
         InputMovement = movementDirection;
