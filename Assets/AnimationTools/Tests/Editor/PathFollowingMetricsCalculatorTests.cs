@@ -7,8 +7,6 @@ namespace AnimationTools.Tests
 {
 public class PathFollowingMetricsCalculatorTests
 {
-    private static readonly float[] DefaultHorizons = { 0f, 0.5f, 1f };
-
     private static Spline BuildStraightSpline()
     {
         var spline = new Spline();
@@ -57,20 +55,16 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1.5f, DefaultHorizons, 0f, 0.2f);
+            1.5f, 0f, 0.2f);
 
-        foreach (var error in result.meanTrajectoryError)
-        {
-            Assert.AreEqual(0f, error, 0.02f);
-        }
-
+        Assert.AreEqual(0f, result.meanTrajectoryError, 0.02f);
         Assert.AreEqual(0f, result.meanHeadingErrorDeg, 1e-3f);
         Assert.AreEqual(0f, result.meanVelocityError, 0.02f);
         Assert.AreEqual(1.5f, result.meanActualSpeed, 0.02f);
     }
 
     [Test]
-    public void LateralOffset_H0EqualsOffset()
+    public void LateralOffset_ErrorEqualsOffset()
     {
         var spline = BuildStraightSpline();
         var (times, positions, forwards) = BuildFrames(
@@ -80,13 +74,13 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1.5f, DefaultHorizons, 0f, 0.2f);
+            1.5f, 0f, 0.2f);
 
-        Assert.AreEqual(0.5f, result.meanTrajectoryError[0], 0.02f);
+        Assert.AreEqual(0.5f, result.meanTrajectoryError, 0.02f);
     }
 
     [Test]
-    public void SlowerThanTarget_ErrorGrowsWithHorizon()
+    public void SlowerThanTarget_VelocityErrorMatches()
     {
         var spline = BuildStraightSpline();
         var (times, positions, forwards) = BuildFrames(
@@ -96,10 +90,9 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1.5f, DefaultHorizons, 0f, 0.2f);
+            1.5f, 0f, 0.2f);
 
-        Assert.AreEqual(0.25f, result.meanTrajectoryError[1], 0.03f);
-        Assert.AreEqual(0.5f, result.meanTrajectoryError[2], 0.03f);
+        Assert.AreEqual(0f, result.meanTrajectoryError, 0.02f);
         Assert.AreEqual(0.5f, result.meanVelocityError, 0.02f);
     }
 
@@ -115,13 +108,13 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1f, DefaultHorizons, 0f, 0.2f);
+            1f, 0f, 0.2f);
 
         Assert.AreEqual(45f, result.meanHeadingErrorDeg, 0.5f);
     }
 
     [Test]
-    public void NaNTargetSpeed_ReportsOnlyH0_VelocityNaN()
+    public void NaNTargetSpeed_TrajectoryStillComputed_VelocityNaN()
     {
         var spline = BuildStraightSpline();
         var (times, positions, forwards) = BuildFrames(
@@ -131,17 +124,15 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            float.NaN, DefaultHorizons, 0f, 0.2f);
+            float.NaN, 0f, 0.2f);
 
-        Assert.AreEqual(1, result.horizonsSeconds.Length);
-        Assert.AreEqual(0f, result.horizonsSeconds[0]);
-        Assert.IsFalse(float.IsNaN(result.meanTrajectoryError[0]));
+        Assert.IsFalse(float.IsNaN(result.meanTrajectoryError));
         Assert.IsNaN(result.meanVelocityError);
         Assert.IsFalse(float.IsNaN(result.meanActualSpeed));
     }
 
     [Test]
-    public void ClosedSpline_ArcAdvanceWraps()
+    public void ClosedSpline_NearestPointFollowsPerimeter()
     {
         var spline = BuildClosedSquareSpline();
         const float perimeter = 40f;
@@ -165,9 +156,9 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            targetSpeed, DefaultHorizons, 0f, 0.2f);
+            targetSpeed, 0f, 0.2f);
 
-        Assert.Less(result.meanTrajectoryError[2], 0.5f);
+        Assert.AreEqual(0f, result.meanTrajectoryError, 0.05f);
     }
 
     [Test]
@@ -181,13 +172,9 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1.5f, DefaultHorizons, 1.5f, 0.2f);
+            1.5f, 1.5f, 0.2f);
 
-        foreach (var error in result.meanTrajectoryError)
-        {
-            Assert.AreEqual(0f, error, 0.02f);
-        }
-
+        Assert.AreEqual(0f, result.meanTrajectoryError, 0.02f);
         Assert.AreEqual(0f, result.meanHeadingErrorDeg, 1e-3f);
         Assert.AreEqual(0f, result.meanVelocityError, 0.02f);
         Assert.Less(result.framesEvaluated, times.Length);
@@ -204,9 +191,10 @@ public class PathFollowingMetricsCalculatorTests
 
         var result = PathFollowingMetricsCalculator.Evaluate(
             spline, float4x4.identity, positions, forwards, times,
-            1.5f, DefaultHorizons, 3f, 0.2f);
+            1.5f, 3f, 0.2f);
 
         Assert.AreEqual(0, result.framesEvaluated);
+        Assert.IsNaN(result.meanTrajectoryError);
         Assert.IsNaN(result.meanHeadingErrorDeg);
     }
 }

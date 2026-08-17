@@ -7,8 +7,7 @@ namespace AnimationTools
 {
 /// <summary>
 /// Output of <see cref="PathFollowingMetricsCalculator.Evaluate"/>: how closely a recorded run of
-/// root positions/forwards tracked a spline, either as a shape (no target speed) or as a
-/// shape-plus-pace (with a target speed used to project trajectory and velocity error).
+/// root positions/forwards tracked a spline in shape, heading and pace.
 /// </summary>
 [Serializable]
 public class PathFollowingMetricsResult
@@ -19,13 +18,13 @@ public class PathFollowingMetricsResult
     /// <summary>Target pace, m/s. <see cref="float.NaN"/> when the run has no speed model.</summary>
     public float targetSpeed;
 
-    /// <summary>Horizons actually evaluated; trimmed to just {0} when <see cref="targetSpeed"/> is NaN.</summary>
-    public float[] horizonsSeconds;
+    /// <summary>Mean XZ distance in meters from the root to the nearest point on the spline.</summary>
+    public float meanTrajectoryError;
 
-    /// <summary>Mean trajectory error in meters, aligned index-for-index with <see cref="horizonsSeconds"/>.</summary>
-    public float[] meanTrajectoryError;
-
+    /// <summary>Mean absolute angle in degrees between the root's forward and the spline tangent at the nearest point.</summary>
     public float meanHeadingErrorDeg;
+
+    /// <summary>Largest single-frame heading error in degrees; spikes here usually mean an overshot corner.</summary>
     public float maxHeadingErrorDeg;
 
     /// <summary>Mean actual speed in the XZ plane, m/s.</summary>
@@ -45,14 +44,9 @@ public static class PathFollowingMetricsCalculator
     /// <summary>
     /// Evaluates path-following quality for one run against one spline.
     ///
-    /// Three families of metric are computed, all XZ-flattened:
-    /// - <b>Trajectory error</b>: for each horizon h and each analysis frame t, the point the
-    ///   follower is expected to reach at time t+h is "walk h seconds' worth of target speed along
-    ///   the spline from the point nearest the root at t"; the error is the XZ distance between
-    ///   that expected point and where the root actually was at t+h (found by time, not by frame
-    ///   count, so it is robust to variable frame rate). Horizon 0 is a pure shape metric — it
-    ///   never depends on target speed. With no speed model only horizon 0 is evaluated, since
-    ///   there is no pace to project forward with.
+    /// Three metrics are computed, all XZ-flattened:
+    /// - <b>Trajectory error</b>: per analysis frame, the XZ distance from the root to the nearest
+    ///   point on the spline — how far off the path the character is, regardless of pace.
     /// - <b>Heading error</b>: the angle between the root's forward direction and the spline's
     ///   tangent at the nearest point, per analysis frame.
     /// - <b>Velocity error</b>: the (smoothed) actual XZ speed, finite-differenced from consecutive
@@ -63,6 +57,21 @@ public static class PathFollowingMetricsCalculator
     /// <paramref name="splineLocalToWorld"/>, matching <see cref="SplineUtility.GetNearestPoint"/>'s
     /// contract.
     /// </summary>
+    /// <param name="spline">The path being followed, in its own local space.</param>
+    /// <param name="splineLocalToWorld">The spline container's localToWorldMatrix. Must be unscaled;
+    /// the recorded world-space positions are pulled into spline-local space through its inverse.</param>
+    /// <param name="rootPositions">World-space root (simulation bone) position per recorded frame.</param>
+    /// <param name="rootForwards">World-space root forward direction per recorded frame.</param>
+    /// <param name="times">Seconds since recording start per frame, strictly increasing.</param>
+    /// <param name="targetSpeed">Desired pace in m/s, used only for velocity error; pass
+    /// <see cref="float.NaN"/> when the control input has no speed model — velocity error is then NaN.</param>
+    /// <param name="settleTime">Seconds at the start of the recording to exclude, giving the
+    /// character time to reach the path from its spawn point.</param>
+    /// <param name="speedSmoothingWindowSeconds">Width in seconds of the moving-average window
+    /// applied to the finite-differenced speed before computing velocity error. Per-tick speed is
+    /// dominated by synthesis jitter (frame switches, inertialization, gait cycle sway), so the raw
+    /// signal would inflate |actual - target|; a window of ~0.2 s keeps gait-level speed changes
+    /// visible while suppressing that noise. 0 (or anything below one frame) disables smoothing.</param>
     public static PathFollowingMetricsResult Evaluate(
         Spline spline,
         float4x4 splineLocalToWorld,
@@ -70,17 +79,14 @@ public static class PathFollowingMetricsCalculator
         float3[] rootForwards,
         float[] times,
         float targetSpeed,
-        IReadOnlyList<float> horizonsSeconds,
         float settleTime,
         float speedSmoothingWindowSeconds)
     {
         var hasSpeed = !float.IsNaN(targetSpeed);
-        var effectiveHorizons = hasSpeed ? ToArray(horizonsSeconds) : new[] { 0f };
 
         var result = new PathFollowingMetricsResult
         {
             targetSpeed = targetSpeed,
-            horizonsSeconds = effectiveHorizons,
         };
 
         var analysisFrames = new List<int>(times.Length);
@@ -92,7 +98,7 @@ public static class PathFollowingMetricsCalculator
         if (analysisFrames.Count < 2)
         {
             result.framesEvaluated = 0;
-            result.meanTrajectoryError = FilledWithNaN(effectiveHorizons.Length);
+            result.meanTrajectoryError = float.NaN;
             result.meanHeadingErrorDeg = float.NaN;
             result.maxHeadingErrorDeg = float.NaN;
             result.meanActualSpeed = float.NaN;
@@ -101,11 +107,8 @@ public static class PathFollowingMetricsCalculator
         }
 
         var worldToLocal = math.inverse(splineLocalToWorld);
-        var length = spline.GetLength();
 
-        var errorSums = new double[effectiveHorizons.Length];
-        var errorCounts = new int[effectiveHorizons.Length];
-        var horizonPointers = new int[effectiveHorizons.Length];
+        var errorSum = 0.0;
 
         var headingSum = 0.0;
         var headingCount = 0;
@@ -120,46 +123,9 @@ public static class PathFollowingMetricsCalculator
             SplineUtility.GetNearestPoint(spline, localRoot, out float3 nearestLocal, out var nearestT,
                 SplineUtility.PickResolutionMax, 4);
 
-            for (var h = 0; h < effectiveHorizons.Length; h++)
-            {
-                var horizon = effectiveHorizons[h];
-                var targetTime = times[t] + horizon;
-
-                var j = horizonPointers[h];
-                if (j < t) j = t;
-                while (j < times.Length && times[j] < targetTime) j++;
-                horizonPointers[h] = j;
-                if (j >= times.Length) continue;
-
-                float3 expectedLocal;
-                if (horizon == 0f)
-                {
-                    expectedLocal = nearestLocal;
-                }
-                else
-                {
-                    var nearestDist = spline.ConvertIndexUnit(nearestT, PathIndexUnit.Normalized, PathIndexUnit.Distance);
-                    var targetDist = nearestDist + targetSpeed * horizon;
-                    if (spline.Closed)
-                    {
-                        targetDist %= length;
-                        if (targetDist < 0f) targetDist += length;
-                    }
-                    else
-                    {
-                        targetDist = math.clamp(targetDist, 0f, length);
-                    }
-
-                    var expectedT = spline.ConvertIndexUnit(targetDist, PathIndexUnit.Distance, PathIndexUnit.Normalized);
-                    expectedLocal = spline.EvaluatePosition(expectedT);
-                }
-
-                var expectedWorld = math.transform(splineLocalToWorld, expectedLocal);
-                var actualWorld = rootPositions[j];
-                var error = math.distance(new float2(expectedWorld.x, expectedWorld.z), new float2(actualWorld.x, actualWorld.z));
-                errorSums[h] += error;
-                errorCounts[h]++;
-            }
+            var nearestWorld = math.transform(splineLocalToWorld, nearestLocal);
+            var rootWorld = rootPositions[t];
+            errorSum += math.distance(new float2(nearestWorld.x, nearestWorld.z), new float2(rootWorld.x, rootWorld.z));
 
             var tangentLocal = spline.EvaluateTangent(nearestT);
             if (math.lengthsq(tangentLocal) >= 1e-10f)
@@ -182,12 +148,7 @@ public static class PathFollowingMetricsCalculator
             }
         }
 
-        var meanTrajectoryError = new float[effectiveHorizons.Length];
-        for (var h = 0; h < effectiveHorizons.Length; h++)
-        {
-            meanTrajectoryError[h] = errorCounts[h] > 0 ? (float)(errorSums[h] / errorCounts[h]) : float.NaN;
-        }
-
+        result.meanTrajectoryError = (float)(errorSum / analysisFrames.Count);
         result.meanHeadingErrorDeg = headingCount > 0 ? (float)(headingSum / headingCount) : float.NaN;
         result.maxHeadingErrorDeg = headingCount > 0 ? maxHeading : float.NaN;
 
@@ -235,12 +196,18 @@ public static class PathFollowingMetricsCalculator
         }
 
         result.framesEvaluated = analysisFrames.Count;
-        result.meanTrajectoryError = meanTrajectoryError;
         result.meanActualSpeed = meanActualSpeed;
         result.meanVelocityError = meanVelocityError;
         return result;
     }
 
+    /// <summary>
+    /// Centered moving average: each sample becomes the mean of itself and up to window/2 neighbours
+    /// on each side. Centered (rather than trailing) so the smoothed speed stays time-aligned with
+    /// the frames it came from instead of lagging by half a window. Near the ends the window is
+    /// truncated to what exists, so edge samples are averaged over fewer neighbours rather than
+    /// padded or dropped.
+    /// </summary>
     private static float[] SmoothCentered(List<float> raw, int window)
     {
         var smoothed = new float[raw.Count];
@@ -254,20 +221,6 @@ public static class PathFollowingMetricsCalculator
             smoothed[i] = (float)(sum / (hi - lo + 1));
         }
         return smoothed;
-    }
-
-    private static float[] ToArray(IReadOnlyList<float> horizons)
-    {
-        var array = new float[horizons.Count];
-        for (var i = 0; i < horizons.Count; i++) array[i] = horizons[i];
-        return array;
-    }
-
-    private static float[] FilledWithNaN(int count)
-    {
-        var array = new float[count];
-        for (var i = 0; i < count; i++) array[i] = float.NaN;
-        return array;
     }
 }
 }

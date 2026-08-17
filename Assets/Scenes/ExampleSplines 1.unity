@@ -3227,8 +3227,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: AnimationTools::AnimationTools.PathFollowingMetric
   spline: {fileID: 290276167}
   splineControlInputs:
-  - {fileID: 72248239}
   - {fileID: 1462185292}
+  - {fileID: 72248239}
   duration: 20
   settleTime: 5
   horizonsSeconds:
