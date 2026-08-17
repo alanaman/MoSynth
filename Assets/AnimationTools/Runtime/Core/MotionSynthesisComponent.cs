@@ -57,6 +57,14 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
     public quaternion RootRotation { get; protected set; }
 
     /// <summary>
+    /// Fired at the end of every synthesis tick, after the post-stage pose has been applied to the
+    /// skeleton transforms. The <see cref="PoseBuffer"/> is a view over the component's scratch pose:
+    /// read it synchronously, do not hold the reference past the next tick, do not write to it.
+    /// Not fired on Unity frames the frame-rate limiter skips.
+    /// </summary>
+    public event Action<PoseBuffer, float> OnPoseApplied;
+
+    /// <summary>
     /// Time.DeltaTime if frame rate is not restricted. 1/animationFrameRate if restricted.
     /// </summary>
     private float _animationDeltaTime;
@@ -190,6 +198,8 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
         }
 
         ApplyPoseToSkeletonTransforms(pose);
+
+        OnPoseApplied?.Invoke(pose, _animationDeltaTime);
     }
 
     void InitCurrentPose()

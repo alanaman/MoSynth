@@ -1705,8 +1705,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1237376170}
+  - component: {fileID: 1237376171}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: Recorder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1727,6 +1728,33 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1237376171
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1237376169}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ebf776c1e594bf849b679cb8f25140f7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: AnimationTools::AnimationTools.MotionRecorder
+  synthesizer: {fileID: 1604907107}
+  channels:
+  - rid: 5432756604233318493
+  trigger: 0
+  outputDirectory: Recordings
+  recordingName: recording
+  autoStartOnPlay: 1
+  flushEveryFrames: 300
+  references:
+    version: 2
+    RefIds:
+    - rid: 5432756604233318493
+      type: {class: FullPoseChannel, ns: AnimationTools, asm: AnimationTools}
+      data:
+        name: 
 --- !u!1001 &1251532054
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2245,6 +2273,17 @@ Transform:
   - {fileID: 758994367}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 90.246, z: 0}
+--- !u!114 &1604907107 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
+  m_PrefabInstance: {fileID: 8975007996638100303}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e2d9c7c526154d5088a5945bf9e64418, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionSynthesisComponent
 --- !u!1 &1635755358
 GameObject:
   m_ObjectHideFlags: 0
