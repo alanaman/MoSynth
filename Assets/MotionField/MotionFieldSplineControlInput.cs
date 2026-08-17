@@ -1,3 +1,4 @@
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Splines;
@@ -10,7 +11,7 @@ namespace MotionField
 /// control, so the lookahead distance is the only tuning knob: shorter hugs the spline but can
 /// oscillate, longer cuts corners.
 /// </summary>
-public class MotionFieldSplineControlInput : MotionFieldControlInput
+public class MotionFieldSplineControlInput : MotionFieldControlInput, IMotionSynthesisSplineControlInput
 {
     [Tooltip("Path to follow. Closed splines loop; on open splines the character keeps its last " +
              "heading past the end.")]
@@ -21,6 +22,9 @@ public class MotionFieldSplineControlInput : MotionFieldControlInput
     [SerializeField]
     [Min(0.1f)]
     private float lookaheadDistance = 1.5f;
+
+    public SplineContainer SplineContainer { get => splineContainer; set => splineContainer = value; }
+    public float TargetSpeed => float.NaN;
 
     private Vector3 _nearestWorld;
     private Vector3 _targetWorld;

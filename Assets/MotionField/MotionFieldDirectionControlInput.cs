@@ -1,3 +1,4 @@
+using AnimationTools;
 using UnityEngine;
 
 namespace MotionField
@@ -7,7 +8,7 @@ namespace MotionField
 /// relative to a reference transform's facing. Wire UserInput's Player.Move event to
 /// <see cref="SetMovementDirection"/>.
 /// </summary>
-public class MotionFieldDirectionControlInput : MotionFieldControlInput
+public class MotionFieldDirectionControlInput : MotionFieldControlInput, IMotionSynthesisDirectionControlInput
 {
     [Tooltip("Input is taken relative to this transform's facing. Falls back to the main camera.")]
     [SerializeField]

@@ -15,6 +15,8 @@ public abstract class MotionFieldControlInput : MonoBehaviour
     [SerializeField]
     protected MotionSynthesisComponent synthesisComponent;
 
+    public MotionSynthesisComponent Synthesizer => synthesisComponent;
+
     private MotionFieldStage _stage;
     private bool _warnedNoStage;
 

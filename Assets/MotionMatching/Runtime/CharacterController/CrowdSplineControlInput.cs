@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AnimationTools;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -7,7 +8,7 @@ using UnityEngine.Splines;
 
 namespace MotionMatching
 {
-public class CrowdSplineControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler
+public class CrowdSplineControlInput : MotionMatchingControlInput, IObstacleAwareCharacterControler, IMotionSynthesisSplineControlInput
 {
     public string TrajectoryPositionFeatureName = "FuturePosition";
     public string TrajectoryDirectionFeatureName = "FutureDirection";
@@ -418,6 +419,14 @@ public class CrowdSplineControlInput : MotionMatchingControlInput, IObstacleAwar
     {
         return PredictedPositions[index];
     }
+
+    SplineContainer IMotionSynthesisSplineControlInput.SplineContainer
+    {
+        get => SplineContainer;
+        set => SplineContainer = value;
+    }
+
+    public float TargetSpeed => Speed;
 
     private void OnDestroy()
     {

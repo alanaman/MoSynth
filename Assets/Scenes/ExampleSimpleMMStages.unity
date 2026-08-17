@@ -2792,7 +2792,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 6377292637333000945, guid: 83ea47ce36263db45991fcf29457f4ce, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents:
     - {fileID: 8742643848190192771, guid: 83ea47ce36263db45991fcf29457f4ce, type: 3}
@@ -2876,7 +2876,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1237616321459536334, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
       propertyPath: m_IsActive
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 3017315606245315577, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2920,7 +2920,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
       propertyPath: managedReferences[6955135129176244290].halfLife
-      value: 0.05
+      value: 0.1
       objectReference: {fileID: 0}
     - target: {fileID: 4080713416828662841, guid: 56c52675d8f994c41990428c72ab297d, type: 3}
       propertyPath: managedReferences[6955135129176244290].isEnabled

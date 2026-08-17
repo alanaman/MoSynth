@@ -42,6 +42,27 @@ public class MotionRecorder : MonoBehaviour
     public int FrameCount => _frameIndex;
     public RecordingLayout Layout { get; private set; }
 
+    /// <summary>The synthesizer to record. Assignable only while not recording (for runtime-constructed recorders).</summary>
+    public MotionSynthesisComponent Synthesizer
+    {
+        get => synthesizer;
+        set
+        {
+            if (IsRecording)
+            {
+                Debug.LogError($"MotionRecorder \"{name}\": cannot change synthesizer while recording.");
+                return;
+            }
+            synthesizer = value;
+        }
+    }
+
+    /// <summary>Path of the manifest .json of the current/last recording. Valid after StartRecording.</summary>
+    public string ManifestPath => _manifestPath;
+
+    /// <summary>Path of the data .bin of the current/last recording. Valid after StartRecording.</summary>
+    public string DataPath => _binPath;
+
     private StateBuffer _frame;
     private ChannelHandle[] _handles;
     private FileStream _stream;

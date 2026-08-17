@@ -1,4 +1,5 @@
 using System;
+using AnimationTools;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -6,13 +7,16 @@ using UnityEngine.Splines;
 
 namespace MotionMatching
 {
-public class SplineControlInput : MotionMatchingControlInput
+public class SplineControlInput : MotionMatchingControlInput, IMotionSynthesisSplineControlInput
 {
     [FormerlySerializedAs("TrajectoryPositionFeatureName")] public string trajectoryPositionFeatureName = "FuturePosition";
     [FormerlySerializedAs("TrajectoryDirectionFeatureName")] public string trajectoryDirectionFeatureName = "FutureDirection";
 
     [FormerlySerializedAs("SplineContainer")] public SplineContainer splineContainer;
     [FormerlySerializedAs("Speed")] public float speed = 1.0f;
+
+    public SplineContainer SplineContainer { get => splineContainer; set => splineContainer = value; }
+    public float TargetSpeed => speed;
 
     private float _;
 

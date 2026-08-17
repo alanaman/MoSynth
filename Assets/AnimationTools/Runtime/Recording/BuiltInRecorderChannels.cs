@@ -95,6 +95,65 @@ public sealed class BoneWorldPositionChannel : RecorderChannel
     public override int GetContentHash() => GetHashCode();
 }
 
+/// <summary>The world-space forward direction of one bone (or the simulation bone) at sample time.</summary>
+[Serializable]
+public sealed class BoneWorldForwardChannel : RecorderChannel
+{
+    public bool simulationBone;
+    public HumanBodyBones bone = HumanBodyBones.Hips;
+
+    [NonSerialized] private int _boneIndex;
+    [NonSerialized] private string _resolvedBoneName;
+
+    public override int FloatCount => 3;
+
+    public override void Bind(MotionSynthesisComponent synthesizer)
+    {
+        if (simulationBone)
+        {
+            _boneIndex = 0;
+            _resolvedBoneName = "SimulationBone";
+        }
+        else
+        {
+            _boneIndex = synthesizer.Skeleton.FindJointIndexOrZero(bone);
+            _resolvedBoneName = synthesizer.Skeleton.GetBone(_boneIndex).name;
+        }
+    }
+
+    public override void Sample(in RecorderSampleContext context, ChannelHandle handle, StateBuffer frame)
+    {
+        // Sampling always happens after the pose has been applied to SkeletonTransforms, so the
+        // transform's world forward is this tick's answer, not last tick's.
+        frame.SetFloat3(handle, (float3)context.Synthesizer.SkeletonTransforms[_boneIndex].forward);
+    }
+
+    public override void PopulateManifest(RecordingManifestChannel entry)
+    {
+        entry.bone = _resolvedBoneName;
+        entry.space = "World";
+        entry.components = new[] { "x", "y", "z" };
+    }
+
+    public override bool Equals(ChannelDescriptor other) =>
+        other is BoneWorldForwardChannel c && c.name == name
+        && c.simulationBone == simulationBone && c.bone == bone;
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = GetType().GetHashCode();
+            hash = hash * 31 + (name?.GetHashCode() ?? 0);
+            hash = hash * 31 + simulationBone.GetHashCode();
+            hash = hash * 31 + (int)bone;
+            return hash;
+        }
+    }
+
+    public override int GetContentHash() => GetHashCode();
+}
+
 /// <summary>
 /// The entire synthesized pose buffer, copied verbatim into the recording each sample. Useful
 /// for dumping every joint without hand-listing bone channels.

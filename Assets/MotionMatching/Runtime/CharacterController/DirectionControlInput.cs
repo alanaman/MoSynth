@@ -10,7 +10,7 @@ namespace MotionMatching
 // Adjustment between Character Controller and Motion Matching Character Entity
 /* https://theorangeduck.com/page/code-vs-data-driven-displacement */
 
-public class DirectionControlInput : MotionMatchingControlInput
+public class DirectionControlInput : MotionMatchingControlInput, IMotionSynthesisDirectionControlInput
 {
     [Header("Features")] public string trajectoryPositionFeatureName = "FuturePosition";
 

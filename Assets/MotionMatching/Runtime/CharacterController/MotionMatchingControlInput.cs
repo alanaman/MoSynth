@@ -20,9 +20,9 @@ public abstract class MotionMatchingControlInput : MonoBehaviour
 
     public UnityAction OnHighInputChange;
 
-    [FormerlySerializedAs("motionMatching")] [SerializeReference]
-    public MotionSynthesisComponent
-        motionSynthesizer; // MotionMatchingController's transform is the SimulationBone of the character
+    [SerializeReference] public MotionSynthesisComponent motionSynthesizer;
+
+    public MotionSynthesisComponent Synthesizer => motionSynthesizer;
 
     public float DatabaseDeltaTime { get; private set; }
 
