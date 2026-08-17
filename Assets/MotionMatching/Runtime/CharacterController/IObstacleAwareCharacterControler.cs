@@ -9,5 +9,5 @@ public interface IObstacleAwareCharacterControler
         NativeArray<int>,
         NativeArray<(float2, float2, float2)>,
         NativeArray<int>
-    ) GetNearbyObstacles(Transform character, float obstacleDistanceThreshold);
+        ) GetNearbyObstacles(Transform character, float obstacleDistanceThreshold);
 }

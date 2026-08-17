@@ -31,27 +31,23 @@ public class SpringControlInput : MotionMatchingControlInput, IPlayerInputCharac
     [Header("Adjustment")] // Move Simulation Bone towards the Simulation Object (motion matching towards character controller)
     public bool DoAdjustment = true;
 
-    [Range(0.0f, 2.0f)]
-    public float
+    [Range(0.0f, 2.0f)] public float
         PositionAdjustmentHalflife =
             0.1f; // Time needed to move half of the distance between MotionMatching and the CharacterController
 
     [Range(0.0f, 2.0f)] public float RotationAdjustmentHalflife = 0.1f;
 
-    [Range(0.0f, 2.0f)]
-    public float
+    [Range(0.0f, 2.0f)] public float
         PosMaximumAdjustmentRatio =
             0.1f; // Ratio between the adjustment and the character's velocity to clamp the adjustment
 
-    [Range(0.0f, 2.0f)]
-    public float
+    [Range(0.0f, 2.0f)] public float
         RotMaximumAdjustmentRatio =
             0.1f; // Ratio between the adjustment and the character's velocity to clamp the adjustment
 
     public bool DoClamping = true;
 
-    [Range(0.0f, 2.0f)]
-    public float
+    [Range(0.0f, 2.0f)] public float
         MaxDistanceMMAndCharacterController = 0.1f; // Max distance between MotionMatching and the CharacterController
 
     [Header("DEBUG")] public bool DebugCurrent = true;
