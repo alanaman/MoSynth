@@ -57,6 +57,13 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
     public quaternion RootRotation { get; protected set; }
 
     /// <summary>
+    /// True when an upstream stage replaced the pose discontinuously this tick (e.g. a motion
+    /// matching search jumped to a new frame). Set by the stage that caused the jump; cleared at
+    /// the start of every synthesis tick. Downstream blending stages read it to re-anchor.
+    /// </summary>
+    public bool PoseDiscontinuity { get; set; }
+
+    /// <summary>
     /// Fired at the end of every synthesis tick, after the post-stage pose has been applied to the
     /// skeleton transforms. The <see cref="PoseBuffer"/> is a view over the component's scratch pose:
     /// read it synchronously, do not hold the reference past the next tick, do not write to it.
@@ -184,6 +191,7 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
 
         ConstructCurrentPoseFromSkeletonTransforms();
 
+        PoseDiscontinuity = false;
         _scratchPose.CopyFrom(CurrentPose);
         var pose = _scratchPose;
         foreach (var stage in stages)

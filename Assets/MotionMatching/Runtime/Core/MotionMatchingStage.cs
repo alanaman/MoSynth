@@ -147,6 +147,7 @@ public class MotionMatchingStage : MoSynthStage
             if(math.abs(CurrentFrame - bestFrame) > minFrameSwitchDistance)
             {
                 CurrentFrame = bestFrame;
+                _owner.PoseDiscontinuity = true;
             }
             
             _searchTimeLeft = searchInterval;
@@ -157,9 +158,17 @@ public class MotionMatchingStage : MoSynthStage
         }
         
         // Advance frames with time
+        var preAdvanceFrame = CurrentFrame;
         _currentFrameTime = CurrentFrame + math.frac(_currentFrameTime);
         _currentFrameTime += deltaTime * _databaseFrameRate;
         CurrentFrame = (int)math.floor(_currentFrameTime);
+
+        // Running off the end of a clip into the next one is a pose jump, same as a search switch.
+        if (CurrentFrame != preAdvanceFrame &&
+            _poseSet.GetAnimationClipIndex(CurrentFrame) != _poseSet.GetAnimationClipIndex(preAdvanceFrame))
+        {
+            _owner.PoseDiscontinuity = true;
+        }
         
         pose.CopyFrom(_poseSet.GetPoseBuffer(CurrentFrame));
         
