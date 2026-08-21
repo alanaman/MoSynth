@@ -19,7 +19,7 @@ namespace AnimationTools
 public class AnnotatedAnimationClip : ScriptableObject
 {
     [SerializeField]
-    private BvhAnimation animation;
+    private SkeletonAnimation animation;
     public List<Tag> tags = new();
 
     [Min(0)] [Tooltip("Start frame of the animation clip. 0 indexing, inclusive.")]
@@ -37,7 +37,7 @@ public class AnnotatedAnimationClip : ScriptableObject
     public float FrameTime => animation.FrameTime;
 
     [Pure]
-    public BvhAnimation GetRawAnimationClip()
+    public SkeletonAnimation GetRawAnimationClip()
     {
         return animation;
     }

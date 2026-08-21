@@ -1738,7 +1738,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: AnimationTools::AnimationTools.MotionRecorder
   synthesizer: {fileID: 0}
-  channels: []
+  channels:
+  - rid: -2
   trigger: 0
   outputDirectory: Recordings
   recordingName: recording
@@ -1746,7 +1747,9 @@ MonoBehaviour:
   flushEveryFrames: 300
   references:
     version: 2
-    RefIds: []
+    RefIds:
+    - rid: -2
+      type: {class: , ns: , asm: }
 --- !u!4 &973665180
 Transform:
   m_ObjectHideFlags: 0
@@ -3231,10 +3234,6 @@ MonoBehaviour:
   - {fileID: 72248239}
   duration: 20
   settleTime: 5
-  horizonsSeconds:
-  - 0
-  - 0.5
-  - 1
   outputDirectory: Recordings
   recordFullPose: 0
   speedSmoothingWindow: 0.2

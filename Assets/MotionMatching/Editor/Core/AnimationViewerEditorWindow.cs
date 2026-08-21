@@ -1272,7 +1272,7 @@ namespace MotionMatching
         private void ImportBVH()
         {
             RemoveSkeleton();
-            BvhAnimation animation = _animationClip.GetRawAnimationClip();
+            SkeletonAnimation animation = _animationClip.GetRawAnimationClip();
             if (animation.Skeleton == null || animation.FrameCount == 0) return;
             UpdateTargetFramerate(Mathf.RoundToInt(1.0f / animation.FrameTime));
             // Create skeleton
@@ -1352,7 +1352,7 @@ namespace MotionMatching
 
         private void UpdatePose(bool forward = true, int tagIndex = -1, bool queryTag = false)
         {
-            BvhAnimation animation = _animationClip.GetRawAnimationClip();
+            SkeletonAnimation animation = _animationClip.GetRawAnimationClip();
             if (animation != null && animation.Skeleton != null && animation.FrameCount > 0 &&
                 LastUpdateTime + (1.0 / TargetFramerate) < EditorApplication.timeSinceStartup)
             {

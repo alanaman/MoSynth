@@ -9,9 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1474767785090834262}
-  - component: {fileID: 8742643848190192771}
-  - component: {fileID: 5085391182896396861}
-  - component: {fileID: 80725584882821801}
   m_Layer: 0
   m_Name: MSC_MF_PythonNet
   m_TagString: Untagged
@@ -36,44 +33,6 @@ Transform:
   - {fileID: 5412649322244571505}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &8742643848190192771
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6377292637333000945}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e06881ce2fab0824c9dca82a227d6c45, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SimpleKeyboardInput
-  MMController: {fileID: 80725584882821801}
---- !u!114 &5085391182896396861
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6377292637333000945}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0ffb3d28d913499b86e31e3667b7e5c1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionMatching::MotionMatching.Testing.MoveForwardInput
-  MMController: {fileID: 0}
---- !u!114 &80725584882821801
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6377292637333000945}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f413cb81b1d85394aa5accc31b629613, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: MotionMatching::MotionMatching.SimpleMMController
 --- !u!1 &7492997299600051166
 GameObject:
   m_ObjectHideFlags: 0
@@ -126,9 +85,8 @@ MonoBehaviour:
   responsivenessDirections: 0.75
   minimumVelocityClamp: 0.01
   inputBigChangeThreshold: 0.5
-  doAdjustment: 0
   positionAdjustmentHalflife: 0.1
-  rotationAdjustmentHalflife: 0.1
+  rotationAdjustmentHalfLife: 0.1
   posMaximumAdjustmentRatio: 0.1
   rotMaximumAdjustmentRatio: 0.1
   doClamping: 1
@@ -240,10 +198,6 @@ MonoBehaviour:
         startStateIndex: 700
         reloadPythonModules: 1
         policy: 0
-        steering: 2
-        fixedDirection: {x: 0, y: 0, z: 1}
-        target: {fileID: 0}
-        inputReference: {fileID: 0}
         collectDebugData: 1
     - rid: 6955135232227147966
       type: {class: PoseSetVisualizerStage, ns: MotionMatching, asm: MotionMatching}

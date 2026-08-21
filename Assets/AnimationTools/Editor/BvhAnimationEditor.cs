@@ -10,11 +10,11 @@ using UnityEditor.SceneManagement;
 
 namespace MotionMatching.Editor
 {
-    [CustomEditor(typeof(BvhAnimation))]
+    [CustomEditor(typeof(SkeletonAnimation))]
     public class BvhAnimationEditor : UnityEditor.Editor
     {
         private PreviewRenderUtility _previewRenderUtility;
-        private BvhAnimation _bvhAnimation;
+        private SkeletonAnimation _skeletonAnimation;
         private bool _isPlaying = false;
         private float _currentTime = 0f;
         private float _previousTime = 0f;
@@ -38,11 +38,11 @@ namespace MotionMatching.Editor
 
         private void OnEnable()
         {
-            _bvhAnimation = (BvhAnimation)target;
+            _skeletonAnimation = (SkeletonAnimation)target;
             EditorApplication.update += UpdateSimulation;
             _previousTime = (float)EditorApplication.timeSinceStartup;
 
-            _skeletonAsset = _bvhAnimation.Skeleton;
+            _skeletonAsset = _skeletonAnimation.Skeleton;
             if (_skeletonAsset != null)
             {
                 _skeletonData = _skeletonAsset.GetSkeletonData();
@@ -154,10 +154,10 @@ namespace MotionMatching.Editor
             float deltaTime = time - _previousTime;
             _previousTime = time;
 
-            if (_isPlaying && _bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0)
+            if (_isPlaying && _skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0)
             {
                 _currentTime += deltaTime;
-                float duration = _bvhAnimation.FrameCount * _bvhAnimation.FrameTime;
+                float duration = _skeletonAnimation.FrameCount * _skeletonAnimation.FrameTime;
                 if (_currentTime >= duration)
                 {
                     _currentTime = _currentTime % duration;
@@ -168,7 +168,7 @@ namespace MotionMatching.Editor
 
         public override bool HasPreviewGUI()
         {
-            return _bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0;
+            return _skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0;
         }
 
         public override GUIContent GetPreviewTitle()
@@ -189,9 +189,9 @@ namespace MotionMatching.Editor
                 }
             }
 
-            if (_bvhAnimation != null && _bvhAnimation.Skeleton != null && _bvhAnimation.FrameCount > 0)
+            if (_skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0)
             {
-                float duration = _bvhAnimation.FrameCount * _bvhAnimation.FrameTime;
+                float duration = _skeletonAnimation.FrameCount * _skeletonAnimation.FrameTime;
                 EditorGUI.BeginChangeCheck();
                 _currentTime = GUILayout.HorizontalSlider(_currentTime, 0f, duration, GUILayout.Width(150));
                 if (EditorGUI.EndChangeCheck())
@@ -259,15 +259,15 @@ namespace MotionMatching.Editor
 
         private void DrawSkeleton()
         {
-            if (_bvhAnimation == null || _bvhAnimation.Skeleton == null || _bvhAnimation.FrameCount == 0) return;
+            if (_skeletonAnimation == null || _skeletonAnimation.Skeleton == null || _skeletonAnimation.FrameCount == 0) return;
             if (!_fkPositions.IsCreated) return;
 
-            int frameIndex = Mathf.FloorToInt(_currentTime / _bvhAnimation.FrameTime);
-            frameIndex = Mathf.Clamp(frameIndex, 0, _bvhAnimation.FrameCount - 1);
+            int frameIndex = Mathf.FloorToInt(_currentTime / _skeletonAnimation.FrameTime);
+            frameIndex = Mathf.Clamp(frameIndex, 0, _skeletonAnimation.FrameCount - 1);
 
             var boneCount = _skeletonData.BoneCount;
 
-            var pose = _bvhAnimation.GetFrame(frameIndex);
+            var pose = _skeletonAnimation.GetFrame(frameIndex);
             PoseFK.LocalToCharacter(pose, _skeletonData, _fkPositions, _fkRotations);
 
             _lineVertices.Clear();

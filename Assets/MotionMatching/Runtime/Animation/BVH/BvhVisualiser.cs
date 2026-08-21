@@ -11,7 +11,7 @@ namespace MotionMatching
 /// </summary>
 public class BvhVisualiser : MonoBehaviour
 {
-    public BvhAnimation bvhAnimation;
+    [FormerlySerializedAs("skeletalAnimation")] [FormerlySerializedAs("bvhAnimation")] public SkeletonAnimation skeletonAnimation;
     public bool play;
     public float spheresRadius = 0.1f;
 
@@ -25,31 +25,31 @@ public class BvhVisualiser : MonoBehaviour
 
     private void Awake()
     {
-        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
+        if (skeletonAnimation == null || skeletonAnimation.Skeleton == null || skeletonAnimation.FrameCount == 0) return;
         SetupSkeleton();
         UpdateSkeletonTransforms();
     }
 
     private void SetupSkeleton()
     {
-        _skeletonBoneTransforms = EnsureSkeletonHierarchy(bvhAnimation.Skeleton);
+        _skeletonBoneTransforms = EnsureSkeletonHierarchy(skeletonAnimation.Skeleton);
         for (var i = 0; i < _skeletonBoneTransforms.Length; i++)
         {
-            _skeletonBoneTransforms[i].localPosition = bvhAnimation.Skeleton.GetBone(i).restLocalPosition;
+            _skeletonBoneTransforms[i].localPosition = skeletonAnimation.Skeleton.GetBone(i).restLocalPosition;
         }
     }
 
     private void Update()
     {
-        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
+        if (skeletonAnimation == null || skeletonAnimation.Skeleton == null || skeletonAnimation.FrameCount == 0) return;
 
         if (!play) return;
 
         _currentFrameTime = currentFrame + math.frac(_currentFrameTime);
-        _currentFrameTime += Time.deltaTime / bvhAnimation.FrameTime;
+        _currentFrameTime += Time.deltaTime / skeletonAnimation.FrameTime;
         currentFrame = (int)math.floor(_currentFrameTime);
 
-        if (currentFrame >= bvhAnimation.FrameCount)
+        if (currentFrame >= skeletonAnimation.FrameCount)
         {
             currentFrame = 0;
         }
@@ -59,7 +59,7 @@ public class BvhVisualiser : MonoBehaviour
 
     private void UpdateSkeletonTransforms()
     {
-        var frame = bvhAnimation.GetFrame(currentFrame);
+        var frame = skeletonAnimation.GetFrame(currentFrame);
         _skeletonBoneTransforms[0].localPosition = (Vector3)(float3)frame.Positions[0];
         var rotations = frame.Rotations;
         for (var i = 0; i < rotations.Length; i++)
@@ -70,7 +70,7 @@ public class BvhVisualiser : MonoBehaviour
 
     private void OnValidate()
     {
-        if (bvhAnimation == null || bvhAnimation.Skeleton == null || bvhAnimation.FrameCount == 0) return;
+        if (skeletonAnimation == null || skeletonAnimation.Skeleton == null || skeletonAnimation.FrameCount == 0) return;
         SetupSkeleton();
         UpdateSkeletonTransforms();
     }
@@ -149,7 +149,7 @@ public class BvhVisualiser : MonoBehaviour
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (_skeletonBoneTransforms == null || bvhAnimation == null) return;
+        if (_skeletonBoneTransforms == null || skeletonAnimation == null) return;
 
         Gizmos.color = Color.red;
         for (var i = 1; i < _skeletonBoneTransforms.Length; i++)

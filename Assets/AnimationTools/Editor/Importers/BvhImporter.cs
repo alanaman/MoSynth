@@ -25,7 +25,7 @@ namespace MotionMatching.Editor
             ctx.SetMainObject(bvhAsset);
         }
 
-        private static (BvhAnimation bvhAsset, SkeletonAsset skeletonAsset) Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
+        private static (SkeletonAnimation bvhAsset, SkeletonAsset skeletonAsset) Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
         {
             var channelAxisOrders = new List<AxisOrder>();
 
@@ -182,7 +182,7 @@ namespace MotionMatching.Editor
                 }
             }
 
-            var bvhAsset = ScriptableObject.CreateInstance<BvhAnimation>();
+            var bvhAsset = ScriptableObject.CreateInstance<SkeletonAnimation>();
             bvhAsset.Initialize(skeletonAsset, frameTime, framesStored, frameData);
             return (bvhAsset, skeletonAsset);
         }
