@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using AnimationTools;
-using Unity.Mathematics;
 using UnityEngine;
 
 namespace MotionField
@@ -22,10 +21,6 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Header("Animation Database")]
     [Tooltip("Clips forming the motion field. The first one supplies the skeleton.")]
     public List<AnnotatedAnimationClip> animationClips = new();
-
-    [Tooltip("Local axis of the hips pointing forward. Orients the simulation bone, which is what " +
-             "makes the character's facing direction well defined.")]
-    public float3 hipsForwardLocalVector = new(0, 0, 1);
 
     [Tooltip("Foot speed below which a toe counts as planted.")]
     public float contactVelocityThreshold = 0.15f;
@@ -216,7 +211,6 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     // --- IPoseSetSource ---------------------------------------------------------------------
 
     public List<AnnotatedAnimationClip> AnimationClips => animationClips;
-    public float3 HipsForwardLocalVector => hipsForwardLocalVector;
     public float ContactVelocityThreshold => contactVelocityThreshold;
     public string LeftContactBoneName => leftContactBone?.BoneName;
     public string RightContactBoneName => rightContactBone?.BoneName;

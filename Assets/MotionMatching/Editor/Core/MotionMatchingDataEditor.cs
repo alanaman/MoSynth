@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using Unity.Mathematics;
 using AnimationTools;
 using AnimationTools.Editor;
 
@@ -15,9 +14,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     private bool _generateButtonError;
 
     private SerializedProperty _animationClipsProperty;
-    private SerializedProperty _tPoseAnimationClipProperty;
-    private SerializedProperty _hipsForwardLocalVectorProperty;
-    private SerializedProperty _hipsUpLocalVectorProperty;
     private SerializedProperty _contactVelocityThresholdProperty;
     private SerializedProperty _leftContactBoneProperty;
     private SerializedProperty _rightContactBoneProperty;
@@ -52,9 +48,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     private void OnEnable()
     {
         _animationClipsProperty = serializedObject.FindProperty("animationClips");
-        _tPoseAnimationClipProperty = serializedObject.FindProperty("tPoseAnimationClip");
-        _hipsForwardLocalVectorProperty = serializedObject.FindProperty("hipsForwardLocalVector");
-        _hipsUpLocalVectorProperty = serializedObject.FindProperty("hipsUpLocalVector");
         _contactVelocityThresholdProperty = serializedObject.FindProperty("contactVelocityThreshold");
         _leftContactBoneProperty = serializedObject.FindProperty("leftContactBone");
         _rightContactBoneProperty = serializedObject.FindProperty("rightContactBone");
@@ -71,7 +64,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         var rigRoot = GetRigRoot(data);
 
         DrawAnimations();
-        _generateButtonError |= DrawHipsVectors(data);
 
         // SmoothSimulationBone
         //data.SmoothSimulationBone = EditorGUILayout.Toggle(new GUIContent("Smooth Simulation Bone", "Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter"),
@@ -85,76 +77,20 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         serializedObject.ApplyModifiedProperties();
     }
 
-    // BVH
     private void DrawAnimations()
     {
         EditorGUILayout.LabelField("Animations", EditorStyles.boldLabel);
         EditorGUILayout.PropertyField(_animationClipsProperty);
-
-        // BVH TPose
-        EditorGUILayout.Separator();
-        EditorGUILayout.PropertyField(_tPoseAnimationClipProperty);
     }
 
     /// <summary>
-    /// The rig a bone picker draws its dropdown from: the imported rig of the T-Pose clip, or the
-    /// first animation clip if no T-Pose is assigned. Null when neither resolves to a rig.
+    /// The rig a bone picker draws its dropdown from: the imported rig of the first animation clip.
+    /// Null when there is no clip, or the clip does not resolve to a rig.
     /// </summary>
     private static Transform GetRigRoot(MotionMatchingData data)
     {
-        var clip = data.tPoseAnimationClip != null
-            ? data.tPoseAnimationClip
-            : (data.animationClips.Count > 0 ? data.animationClips[0] : null);
+        var clip = data.animationClips.Count > 0 ? data.animationClips[0] : null;
         return clip != null && clip.Rig != null ? clip.Rig.transform : null;
-    }
-
-    // Hips Local Vectors --------
-    private bool DrawHipsVectors(MotionMatchingData data)
-    {
-        var error = false;
-
-        EditorGUILayout.Separator();
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField("Hips Local Vectors", EditorStyles.boldLabel);
-        if (GUILayout.Button("Auto-Set Hips Vectors", GUILayout.Width(150)))
-        {
-            // ShowWindow opens a new scene, which rebuilds the inspector and disposes its
-            // SerializedObject mid-draw; defer it until after this GUI pass has completed
-            EditorApplication.delayCall += () => HipsLocalVectorsHelperEditorWindow.ShowWindow(data);
-        }
-
-        EditorGUILayout.EndHorizontal();
-        EditorGUI.indentLevel++;
-
-        // DefaultHipsForward
-        EditorGUILayout.PropertyField(_hipsForwardLocalVectorProperty,
-            new GUIContent("Forward Vector", "Local vector (axis) pointing in the forward direction of the hips"));
-        var hipsForward = ReadFloat3(_hipsForwardLocalVectorProperty);
-        if (math.abs(math.length(hipsForward) - 1.0f) > 1E-6f)
-        {
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.HelpBox("Hips Forward Local Vector should be normalized", MessageType.Error);
-            if (GUILayout.Button("Fix")) WriteFloat3(_hipsForwardLocalVectorProperty, math.normalize(hipsForward));
-            EditorGUILayout.EndHorizontal();
-            error = true;
-        }
-
-        // HipsUpLocalVector
-        EditorGUILayout.PropertyField(_hipsUpLocalVectorProperty,
-            new GUIContent("Up Vector", "Local vector (axis) pointing in the up direction of the hips"));
-        var hipsUp = ReadFloat3(_hipsUpLocalVectorProperty);
-        if (math.abs(math.length(hipsUp) - 1.0f) > 1E-6f)
-        {
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.HelpBox("Hips Up Local Vector should be normalized", MessageType.Error);
-            if (GUILayout.Button("Fix")) WriteFloat3(_hipsUpLocalVectorProperty, math.normalize(hipsUp));
-            EditorGUILayout.EndHorizontal();
-            error = true;
-        }
-
-        EditorGUI.indentLevel--;
-
-        return error;
     }
 
     // ContactVelocityThreshold + Contact Bones
@@ -312,7 +248,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 MessageType.Error);
         }
 
-        GUI.enabled = !_generateButtonError && data.tPoseAnimationClip != null;
+        GUI.enabled = !_generateButtonError && data.animationClips.Count > 0;
         if (GUILayout.Button("Generate Databases", GUILayout.Height(30)))
         {
             serializedObject.ApplyModifiedProperties();
@@ -328,18 +264,6 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         {
             EditorGUILayout.HelpBox("Internal error detected. Please regenerate databases.", MessageType.Error);
         }
-    }
-
-    private static float3 ReadFloat3(SerializedProperty property) => new(
-        property.FindPropertyRelative("x").floatValue,
-        property.FindPropertyRelative("y").floatValue,
-        property.FindPropertyRelative("z").floatValue);
-
-    private static void WriteFloat3(SerializedProperty property, float3 value)
-    {
-        property.FindPropertyRelative("x").floatValue = value.x;
-        property.FindPropertyRelative("y").floatValue = value.y;
-        property.FindPropertyRelative("z").floatValue = value.z;
     }
 
     private static void ResetTrajectoryFeature(SerializedProperty element)

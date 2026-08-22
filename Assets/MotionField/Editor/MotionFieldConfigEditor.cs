@@ -132,9 +132,9 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (!_showImport) return;
 
         EditorGUILayout.HelpBox(
-            "One-time copy of the hips forward vector, contact threshold and contact bones from any " +
-            "other pose-set source asset (e.g. a MotionMatchingData). It does not create a link -- " +
-            "later edits to the source asset will not follow.",
+            "One-time copy of the contact threshold and contact bones from any other pose-set source " +
+            "asset (e.g. a MotionMatchingData). It does not create a link -- later edits to the " +
+            "source asset will not follow.",
             MessageType.Info);
 
         _importSource = EditorGUILayout.ObjectField(
@@ -152,13 +152,11 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
             if (GUILayout.Button("Copy Settings"))
             {
                 Undo.RecordObject(config, "Import MotionField settings");
-                config.hipsForwardLocalVector = source.HipsForwardLocalVector;
                 config.contactVelocityThreshold = source.ContactVelocityThreshold;
                 config.leftContactBone = new BoneTransform(source.LeftContactBoneName);
                 config.rightContactBone = new BoneTransform(source.RightContactBoneName);
                 MarkStale(config, database: true); // rewrites the clips extraction reads
-                Debug.Log($"[MotionField] Copied hips forward, contact threshold and contact bones from " +
-                          $"'{source.name}'.");
+                Debug.Log($"[MotionField] Copied contact threshold and contact bones from '{source.name}'.");
             }
         }
     }

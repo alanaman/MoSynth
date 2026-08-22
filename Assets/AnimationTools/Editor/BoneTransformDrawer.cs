@@ -89,7 +89,7 @@ public class BoneTransformDrawer : PropertyDrawer
     /// <summary>
     /// Maps a property path to a same-level sibling, stripping any trailing array index so a
     /// <c>[BoneFrom]</c> on a list element still finds a field on the element's own owner (e.g.
-    /// <c>features.Array.data[0].bone</c> -&gt; <c>features.Array.data[0].tPoseAnimationClip</c>).
+    /// <c>features.Array.data[0].bone</c> -&gt; <c>features.Array.data[0].animationClips</c>).
     /// </summary>
     private static string GetSiblingPath(string propertyPath, string siblingName)
     {

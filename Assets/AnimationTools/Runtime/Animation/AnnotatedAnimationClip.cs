@@ -16,7 +16,6 @@ namespace AnimationTools
 [CreateAssetMenu(fileName = "AnimationData", menuName = "MotionMatching/AnimationData")]
 public class AnnotatedAnimationClip : SkeletonAnimation
 {
-    public List<Tag> tags = new();
 
     [Min(0)] [Tooltip("Start frame of the animation clip. 0 indexing, inclusive.")]
     public int startFrame;
@@ -37,36 +36,6 @@ public class AnnotatedAnimationClip : SkeletonAnimation
 
     /// Frame view offset by startFrame. Never Dispose the returned buffer.
     public new PoseBuffer GetFrame(int frameIndex) => PoseSequence.GetFrame(startFrame + frameIndex);
-
-    public List<Tag> GetTags()
-    {
-        return tags;
-    }
-
-    public void AddTag(string tagName)
-    {
-        Tag newTag = new Tag
-        {
-            name = tagName
-        };
-        tags.Add(newTag);
-#if UNITY_EDITOR
-        SaveEditor();
-#endif
-    }
-
-    public void RemoveTag(int index)
-    {
-        for (int i = index + 1; i < tags.Count; ++i)
-        {
-            tags[i - 1] = tags[i];
-        }
-
-        tags.RemoveAt(tags.Count - 1);
-#if UNITY_EDITOR
-        SaveEditor();
-#endif
-    }
 
     protected override void OnValidate()
     {

@@ -14,10 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MotionField.MotionFieldConfig
   animationClips:
   - {fileID: 11400000, guid: 83f13ab2065eeee41b3cbf97abcf0914, type: 2}
-  hipsForwardLocalVector:
-    x: -0.011357397
-    y: 0.99932635
-    z: 0.0348987
   contactVelocityThreshold: 0.15
   leftContactBone:
     bone: {fileID: 0}

@@ -105,6 +105,31 @@ public sealed class Skeleton
     public int GetBoneId(int index) => index + 1;
 
     /// <summary>
+    /// Character-space rotation of one bone in the rest pose, found by walking up its parent chain.
+    /// "Character space" matches <see cref="PoseFK.CharacterRotation"/>: the frame of bone 0's parent.
+    /// </summary>
+    public quaternion RestCharacterRotation(int boneIndex)
+    {
+        var rotation = quaternion.identity;
+
+        while (boneIndex != -1)
+        {
+            rotation = math.mul(_bones[boneIndex].restLocalRotation, rotation);
+            boneIndex = _bones[boneIndex].parentIndex;
+        }
+
+        return rotation;
+    }
+
+    /// <summary>
+    /// The bone-local axis that points along <paramref name="characterAxis"/> in the rest pose.
+    /// A bone's local frame carries whatever roll the rig was authored with, so the axis that means
+    /// "forward" differs per rig and must be read from the rest pose rather than assumed.
+    /// </summary>
+    public float3 RestLocalAxis(int boneIndex, float3 characterAxis) =>
+        math.mul(math.inverse(RestCharacterRotation(boneIndex)), characterAxis);
+
+    /// <summary>
     /// Returns the unmanaged mirror of this skeleton, built once and cached for the lifetime of
     /// this instance (which is immutable). Backing arrays use <see cref="Allocator.Domain"/>:
     /// they live for the domain's lifetime and are cleared automatically on domain reload, so

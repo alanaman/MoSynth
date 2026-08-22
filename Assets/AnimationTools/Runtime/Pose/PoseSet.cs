@@ -114,15 +114,6 @@ public class PoseSet
         return new PoseFrameRange(this, start, frameCount);
     }
 
-    /// <summary>Adds <paramref name="tags"/> to the clip opened by the last <see cref="BeginClip"/>.</summary>
-    public void EndClip(List<AnnotatedAnimationClip.Tag> tags)
-    {
-        foreach (var tag in tags)
-        {
-            AddTag(_clips.Count - 1, tag);
-        }
-    }
-
     /// <summary>
     /// Appends <paramref name="frameCount"/> zero-initialized poses with no clip/tag
     /// bookkeeping and returns writable frames — the deserialization path, where clips and

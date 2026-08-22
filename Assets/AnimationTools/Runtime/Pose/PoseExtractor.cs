@@ -27,6 +27,10 @@ public static class PoseExtractor
         var rightToesBoneIndex = ResolveContactBoneIndex(animationClip.Skeleton, source.RightContactBoneName, false);
         var rightToesIndex = rightToesBoneIndex + 1; // +1 for SimulationBone
 
+        // Skeleton bone 0 is the hips. Which of its local axes points along the character's facing is
+        // a property of the rig's bone roll, so read it from the rest pose instead of assuming an axis.
+        var hipsForwardLocal = animationClip.Skeleton.RestLocalAxis(0, math.forward());
+
         // The animation skeleton's own unshifted parent hierarchy, followed verbatim by the
         // contact-velocity walk (see GetContactVelocity).
         var localParentIndex = new int[nBvhJoints];
@@ -39,7 +43,7 @@ public static class PoseExtractor
 
         for (var i = 0; i < nFrames - 1; i++)
         {
-            ExtractPose(frames[i], animationClip, i, source);
+            ExtractPose(frames[i], animationClip, i, hipsForwardLocal);
         }
 
         for (var i = 0; i < nFrames - 2; i++)
@@ -50,7 +54,7 @@ public static class PoseExtractor
         var lastPose = PoseBuffer.Allocate(poseSet.PoseLayout, Allocator.Temp);
         try
         {
-            ExtractPose(lastPose, animationClip, nFrames - 1, source);
+            ExtractPose(lastPose, animationClip, nFrames - 1, hipsForwardLocal);
             ExtractPoseVelocities(frames[frames.Count - 1], lastPose, animationClip);
         }
         finally
@@ -72,7 +76,6 @@ public static class PoseExtractor
 
         SmoothContacts(frames, poseSet.LeftFootContactHandle, poseSet.RightFootContactHandle);
 
-        poseSet.EndClip(animationClip.tags);
         return true;
     }
 
@@ -171,7 +174,7 @@ public static class PoseExtractor
     }
 
     private static void ExtractPose(PoseBuffer pose, AnnotatedAnimationClip animationClip, int frameIndex,
-        IPoseSetSource source)
+        float3 hipsForwardLocal)
     {
         var frame = animationClip.GetFrame(frameIndex);
         var rotations = frame.Rotations;
@@ -191,7 +194,7 @@ public static class PoseExtractor
         // position and direction are hips projected on the ground
         Vector3 frameRootMotion = frame.Positions[0];
         var sbPos = new Vector3(frameRootMotion.x, 0.0f, frameRootMotion.z);
-        var hipsForwardDir = (Quaternion)rotations[0] * source.HipsForwardLocalVector;
+        var hipsForwardDir = (Quaternion)rotations[0] * (Vector3)hipsForwardLocal;
         hipsForwardDir.y = 0;
         hipsForwardDir = hipsForwardDir.normalized;
         var sbRot = Quaternion.LookRotation(hipsForwardDir, Vector3.up);

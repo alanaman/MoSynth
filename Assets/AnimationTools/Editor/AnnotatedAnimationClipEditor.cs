@@ -59,37 +59,7 @@ namespace AnimationTools.Editor
                     $"Root bone: {(resolvedRootBone != null ? resolvedRootBone.name : "<unresolved>")}" +
                     $"   Bones: {(skeleton != null ? skeleton.BoneCount.ToString() : "-")}");
             }
-
-            // Tags
-            _tagsFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(_tagsFoldout, "Tags");
-            if (_tagsFoldout)
-            {
-                EditorGUI.indentLevel++;
-                if (clip.tags == null || clip.tags.Count == 0)
-                {
-                    EditorGUILayout.HelpBox("To include tags, access the 'MotionMatching/Animation Viewer' window.",
-                        MessageType.Info);
-                }
-
-                GUI.enabled = false;
-                for (int tagIndex = 0; tagIndex < (clip.tags == null ? 0 : clip.tags.Count); ++tagIndex)
-                {
-                    AnnotatedAnimationClip.Tag tag = clip.tags[tagIndex];
-                    tag.name = EditorGUILayout.TextField(tag.name);
-                    for (int rangeIndex = 0; rangeIndex < (tag.start == null ? 0 : tag.start.Length); ++rangeIndex)
-                    {
-                        EditorGUILayout.BeginHorizontal();
-                        EditorGUILayout.LabelField(tag.start[rangeIndex].ToString());
-                        EditorGUILayout.LabelField(tag.end[rangeIndex].ToString());
-                        EditorGUILayout.EndHorizontal();
-                    }
-                }
-
-                GUI.enabled = true;
-                EditorGUI.indentLevel--;
-            }
-
-            EditorGUILayout.EndFoldoutHeaderGroup();
+            
             // Save
             if (GUI.changed)
             {
