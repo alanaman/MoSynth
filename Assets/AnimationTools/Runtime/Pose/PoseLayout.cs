@@ -35,6 +35,9 @@ public struct PoseLayoutData
 /// sections (<see cref="Data"/>) so pose consumers can address positions/rotations/etc. without
 /// handles. This layout IS the pose file's self-description: a serialized pose asset is expected
 /// to store enough of it to reconstruct a <see cref="PoseLayout"/> without external context.
+/// Structurally-equal skeletons from different sources (e.g. a <see cref="PoseSet"/>'s skeleton and
+/// a deserialized one with the same bones) share one cached layout instance, which is what lets
+/// <see cref="PoseBuffer.CopyFrom"/> work between frames built over either.
 /// </summary>
 public sealed class PoseLayout : StateBufferLayout
 {
@@ -42,13 +45,13 @@ public sealed class PoseLayout : StateBufferLayout
 
     private static readonly Dictionary<int, PoseLayout> Cache = new();
 
-    public SkeletonAsset Skeleton { get; }
+    public Skeleton Skeleton { get; }
     public PoseLayoutData Data { get; }
 
     /// <summary>The shared representation of every Rotation channel in this layout.</summary>
     public RotationRepresentation RotationFormat { get; }
 
-    private PoseLayout(SkeletonAsset skeleton, IReadOnlyList<ChannelDescriptor> channels, int layoutHash,
+    private PoseLayout(Skeleton skeleton, IReadOnlyList<ChannelDescriptor> channels, int layoutHash,
         RotationRepresentation rotationFormat)
         : base(channels, layoutHash)
     {
@@ -94,7 +97,7 @@ public sealed class PoseLayout : StateBufferLayout
     /// <paramref name="skeleton"/>, if a channel identity repeats, if Rotation channels don't
     /// share one representation, or if a non-built-in channel claims a built-in section key.
     /// </summary>
-    public static PoseLayout Build(SkeletonAsset skeleton, IReadOnlyList<ChannelDescriptor> channels)
+    public static PoseLayout Build(Skeleton skeleton, IReadOnlyList<ChannelDescriptor> channels)
     {
         if (skeleton == null) throw new ArgumentException("skeleton must not be null.", nameof(skeleton));
         if (channels == null) throw new ArgumentException("channels must not be null.", nameof(channels));
@@ -107,7 +110,7 @@ public sealed class PoseLayout : StateBufferLayout
             if (channel == null) throw new ArgumentException($"Channel {i} is null.", nameof(channels));
 
             if (channel is BoneChannelDescriptor boneChannel && skeleton.IndexOfId(boneChannel.BoneId) < 0)
-                throw new ArgumentException($"Channel {i} references bone id {boneChannel.BoneId}, which is not present in skeleton \"{skeleton.name}\".", nameof(channels));
+                throw new ArgumentException($"Channel {i} references bone id {boneChannel.BoneId}, which is not present in skeleton \"{skeleton.Name}\".", nameof(channels));
 
             if (channel.SectionKey <= ChannelSections.Bool && !IsBuiltIn(channel))
                 throw new ArgumentException($"Channel {Describe(channel)} claims built-in section key {channel.SectionKey}; keys up to {ChannelSections.Bool} are reserved.", nameof(channels));
@@ -121,13 +124,14 @@ public sealed class PoseLayout : StateBufferLayout
         }
 
         var hash = ComputeHash(skeleton, channels);
-        var cacheKey = CombineKey(skeleton.GetEntityId().GetHashCode(), hash);
-        if (Cache.TryGetValue(cacheKey, out var cached)) return cached;
+        if (Cache.TryGetValue(hash, out var cached) && AnimationTools.Skeleton.StructurallyEqual(cached.Skeleton, skeleton)) return cached;
 
         var layout = new PoseLayout(skeleton, channels, hash,
             rotationFormat ?? RotationRepresentation.Quaternion);
 
-        Cache[cacheKey] = layout;
+        // A hash collision between structurally different skeletons must not evict the cached
+        // entry another skeleton is relying on; the fresh layout is simply left uncached.
+        if (cached == null) Cache[hash] = layout;
         return layout;
     }
 
@@ -137,7 +141,7 @@ public sealed class PoseLayout : StateBufferLayout
     /// ParentLocal Velocity/AngularVelocity channels, likewise bone-index aligned. All channels
     /// use <see cref="ChannelUsage.Default"/>.
     /// </summary>
-    public static PoseLayout CreateFullPose(SkeletonAsset skeleton, bool includeVelocities, bool includeAngularVelocities)
+    public static PoseLayout CreateFullPose(Skeleton skeleton, bool includeVelocities, bool includeAngularVelocities)
     {
         if (skeleton == null) throw new ArgumentException("skeleton must not be null.", nameof(skeleton));
 
@@ -146,7 +150,7 @@ public sealed class PoseLayout : StateBufferLayout
 
         for (var i = 0; i < boneCount; i++)
         {
-            var boneId = skeleton.GetBone(i).id;
+            var boneId = skeleton.GetBoneId(i);
             channels.Add(new PositionChannel(boneId));
             channels.Add(new RotationChannel(boneId));
         }
@@ -155,7 +159,7 @@ public sealed class PoseLayout : StateBufferLayout
         {
             for (var i = 0; i < boneCount; i++)
             {
-                channels.Add(new VelocityChannel(skeleton.GetBone(i).id));
+                channels.Add(new VelocityChannel(skeleton.GetBoneId(i)));
             }
         }
 
@@ -163,7 +167,7 @@ public sealed class PoseLayout : StateBufferLayout
         {
             for (var i = 0; i < boneCount; i++)
             {
-                channels.Add(new AngularVelocityChannel(skeleton.GetBone(i).id));
+                channels.Add(new AngularVelocityChannel(skeleton.GetBoneId(i)));
             }
         }
 
@@ -176,27 +180,14 @@ public sealed class PoseLayout : StateBufferLayout
             or AngularVelocityChannel or BoolChannel;
     }
 
-    private static int ComputeHash(SkeletonAsset skeleton, IReadOnlyList<ChannelDescriptor> channels)
+    private static int ComputeHash(Skeleton skeleton, IReadOnlyList<ChannelDescriptor> channels)
     {
         unchecked
         {
             var hash = 17;
-            hash = hash * 31 + skeleton.Version;
-
-            for (var i = 0; i < skeleton.BoneCount; i++)
-            {
-                hash = hash * 31 + skeleton.GetBone(i).id;
-            }
+            hash = hash * 31 + skeleton.ContentHash;
 
             return HashChannels(hash, channels);
-        }
-    }
-
-    private static int CombineKey(int skeletonInstanceId, int layoutHash)
-    {
-        unchecked
-        {
-            return skeletonInstanceId * 397 ^ layoutHash;
         }
     }
 }

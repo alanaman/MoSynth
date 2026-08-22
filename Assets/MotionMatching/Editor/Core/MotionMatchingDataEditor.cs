@@ -1,15 +1,14 @@
 using UnityEngine;
 using UnityEditor;
 using Unity.Mathematics;
-using System;
 using AnimationTools;
+using AnimationTools.Editor;
 
 namespace MotionMatching
 {
 [CustomEditor(typeof(MotionMatchingData))]
 public class MotionMatchingDataEditor : UnityEditor.Editor
 {
-    private bool SkeletonToMecanimFoldout;
     private bool TrajectoryFeaturesSelectorFoldout;
     private bool PoseFeaturesSelectorFoldout;
 
@@ -20,7 +19,8 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     private SerializedProperty _hipsForwardLocalVectorProperty;
     private SerializedProperty _hipsUpLocalVectorProperty;
     private SerializedProperty _contactVelocityThresholdProperty;
-    private SerializedProperty _animationChannelToMecanimProperty;
+    private SerializedProperty _leftContactBoneProperty;
+    private SerializedProperty _rightContactBoneProperty;
     private SerializedProperty _trajectoryFeaturesProperty;
     private SerializedProperty _poseFeaturesProperty;
 
@@ -56,7 +56,8 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         _hipsForwardLocalVectorProperty = serializedObject.FindProperty("hipsForwardLocalVector");
         _hipsUpLocalVectorProperty = serializedObject.FindProperty("hipsUpLocalVector");
         _contactVelocityThresholdProperty = serializedObject.FindProperty("contactVelocityThreshold");
-        _animationChannelToMecanimProperty = serializedObject.FindProperty("animationChannelToMecanim");
+        _leftContactBoneProperty = serializedObject.FindProperty("leftContactBone");
+        _rightContactBoneProperty = serializedObject.FindProperty("rightContactBone");
         _trajectoryFeaturesProperty = serializedObject.FindProperty("trajectoryFeatures");
         _poseFeaturesProperty = serializedObject.FindProperty("poseFeatures");
     }
@@ -67,6 +68,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
 
         var data = (MotionMatchingData)target;
         _generateButtonError = false;
+        var rigRoot = GetRigRoot(data);
 
         DrawAnimations();
         _generateButtonError |= DrawHipsVectors(data);
@@ -75,10 +77,9 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         //data.SmoothSimulationBone = EditorGUILayout.Toggle(new GUIContent("Smooth Simulation Bone", "Smooth the simulation bone (articial root added during pose extraction) using Savitzky-Golay filter"),
         //                                                   data.SmoothSimulationBone);
 
-        DrawContactThreshold();
-        DrawSkeletonToMecanim(data);
-        DrawTrajectoryFeatures();
-        DrawPoseFeatures();
+        DrawContactThreshold(rigRoot);
+        DrawTrajectoryFeatures(rigRoot);
+        DrawPoseFeatures(rigRoot);
         DrawGenerateButton(data);
 
         serializedObject.ApplyModifiedProperties();
@@ -93,6 +94,18 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         // BVH TPose
         EditorGUILayout.Separator();
         EditorGUILayout.PropertyField(_tPoseAnimationClipProperty);
+    }
+
+    /// <summary>
+    /// The rig a bone picker draws its dropdown from: the imported rig of the T-Pose clip, or the
+    /// first animation clip if no T-Pose is assigned. Null when neither resolves to a rig.
+    /// </summary>
+    private static Transform GetRigRoot(MotionMatchingData data)
+    {
+        var clip = data.tPoseAnimationClip != null
+            ? data.tPoseAnimationClip
+            : (data.animationClips.Count > 0 ? data.animationClips[0] : null);
+        return clip != null && clip.Rig != null ? clip.Rig.transform : null;
     }
 
     // Hips Local Vectors --------
@@ -144,81 +157,25 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         return error;
     }
 
-    // ContactVelocityThreshold
-    private void DrawContactThreshold()
+    // ContactVelocityThreshold + Contact Bones
+    private void DrawContactThreshold(Transform rigRoot)
     {
         EditorGUILayout.Separator();
+        EditorGUILayout.LabelField("Contacts", EditorStyles.boldLabel);
         EditorGUILayout.PropertyField(_contactVelocityThresholdProperty,
             new GUIContent("Contact Velocity Threshold",
                 "Minimum velocity of the foot to be considered in movement and not in contact with the ground"));
-    }
 
-    // SkeletonToMecanim
-    private void DrawSkeletonToMecanim(MotionMatchingData data)
-    {
-        EditorGUILayout.Separator();
-        if (data.tPoseAnimationClip == null)
-        {
-            EditorGUILayout.HelpBox("Animation with T-Pose not set", MessageType.Warning);
-        }
-
-        GUI.enabled = data.tPoseAnimationClip != null;
-        if (GUILayout.Button("Read Skeleton from BVH"))
-        {
-            // TODO: Check if SkeletonToMecanim should be reset
-            var skeleton = data.tPoseAnimationClip.Skeleton;
-            _animationChannelToMecanimProperty.arraySize = skeleton.BoneCount;
-            for (var i = 0; i < skeleton.BoneCount; i++)
-            {
-                var jointName = skeleton.GetBone(i).name;
-                HumanBodyBones bone;
-                try
-                {
-                    bone = (HumanBodyBones)Enum.Parse(typeof(HumanBodyBones), jointName);
-                }
-                catch (Exception)
-                {
-                    bone = HumanBodyBones.LastBone;
-                }
-
-                var element = _animationChannelToMecanimProperty.GetArrayElementAtIndex(i);
-                element.FindPropertyRelative("name").stringValue = jointName;
-                element.FindPropertyRelative("mecanimBone").intValue = (int)bone;
-            }
-        }
-
-        GUI.enabled = true;
-
-        // Display SkeletonToMecanim
-        SkeletonToMecanimFoldout =
-            EditorGUILayout.BeginFoldoutHeaderGroup(SkeletonToMecanimFoldout, "Skeleton to Mecanim");
-        if (SkeletonToMecanimFoldout)
-        {
-            EditorGUI.indentLevel++;
-            for (var i = 0; i < _animationChannelToMecanimProperty.arraySize; i++)
-            {
-                var element = _animationChannelToMecanimProperty.GetArrayElementAtIndex(i);
-                var nameProp = element.FindPropertyRelative("name");
-                var mecanimProp = element.FindPropertyRelative("mecanimBone");
-                EditorGUILayout.BeginHorizontal();
-                GUI.contentColor = (HumanBodyBones)mecanimProp.intValue == HumanBodyBones.LastBone
-                    ? new Color(1.0f, 0.6f, 0.6f)
-                    : Color.white;
-                var newHumanBodyBone =
-                    (HumanBodyBones)EditorGUILayout.EnumPopup(nameProp.stringValue, (HumanBodyBones)mecanimProp.intValue);
-                GUI.contentColor = Color.white;
-                mecanimProp.intValue = (int)newHumanBodyBone;
-                EditorGUILayout.EndHorizontal();
-            }
-
-            EditorGUI.indentLevel--;
-        }
-
-        EditorGUILayout.EndFoldoutHeaderGroup();
+        BoneTransformDrawer.DrawLayout(
+            new GUIContent("Left Contact Bone", "Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe)."),
+            _leftContactBoneProperty, rigRoot);
+        BoneTransformDrawer.DrawLayout(
+            new GUIContent("Right Contact Bone", "Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe)."),
+            _rightContactBoneProperty, rigRoot);
     }
 
     // Trajectory Features ------------------------------------------------------------------------------------
-    private void DrawTrajectoryFeatures()
+    private void DrawTrajectoryFeatures(Transform rigRoot)
     {
         TrajectoryFeaturesSelectorFoldout =
             EditorGUILayout.BeginFoldoutHeaderGroup(TrajectoryFeaturesSelectorFoldout, "Trajectory Features");
@@ -267,7 +224,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 }
 
                 _generateButtonError = _generateButtonError || TrajectoryFramesLayout(trajectoryFeature);
-                _generateButtonError = _generateButtonError || TrajectoryTypeOptionsLayout(trajectoryFeature);
+                _generateButtonError = _generateButtonError || TrajectoryTypeOptionsLayout(trajectoryFeature, rigRoot);
 
                 EditorGUILayout.EndVertical();
             }
@@ -291,7 +248,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     }
 
     // Pose Features ------------------------------------------------------------------------------------
-    private void DrawPoseFeatures()
+    private void DrawPoseFeatures(Transform rigRoot)
     {
         PoseFeaturesSelectorFoldout =
             EditorGUILayout.BeginFoldoutHeaderGroup(PoseFeaturesSelectorFoldout, "Pose Features");
@@ -321,7 +278,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
                 featureTypeProp.intValue = (int)(PoseFeatureChannel.Type)EditorGUILayout.EnumPopup("Type",
                     (PoseFeatureChannel.Type)featureTypeProp.intValue);
                 var boneProp = poseFeature.FindPropertyRelative("bone");
-                boneProp.intValue = (int)(HumanBodyBones)EditorGUILayout.EnumPopup((HumanBodyBones)boneProp.intValue);
+                BoneTransformDrawer.DrawLayout(new GUIContent("Bone"), boneProp, rigRoot);
 
                 EditorGUILayout.EndVertical();
             }
@@ -390,7 +347,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         element.FindPropertyRelative("name").stringValue = "";
         element.FindPropertyRelative("featureType").intValue = 0;
         element.FindPropertyRelative("simulationBone").boolValue = false;
-        element.FindPropertyRelative("bone").intValue = 0;
+        ClearBone(element.FindPropertyRelative("bone"));
         element.FindPropertyRelative("zeroX").boolValue = false;
         element.FindPropertyRelative("zeroY").boolValue = false;
         element.FindPropertyRelative("zeroZ").boolValue = false;
@@ -402,7 +359,13 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
     {
         element.FindPropertyRelative("name").stringValue = "";
         element.FindPropertyRelative("featureType").intValue = 0;
-        element.FindPropertyRelative("bone").intValue = 0;
+        ClearBone(element.FindPropertyRelative("bone"));
+    }
+
+    private static void ClearBone(SerializedProperty boneTransformProperty)
+    {
+        boneTransformProperty.FindPropertyRelative("bone").objectReferenceValue = null;
+        boneTransformProperty.FindPropertyRelative("boneName").stringValue = "";
     }
 
     private bool TrajectoryFramesLayout(SerializedProperty trajectoryFeature)
@@ -434,7 +397,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
         return generateButtonError;
     }
 
-    private bool TrajectoryTypeOptionsLayout(SerializedProperty trajectoryFeature)
+    private bool TrajectoryTypeOptionsLayout(SerializedProperty trajectoryFeature, Transform rigRoot)
     {
         var generateButtonError = false;
         var featureType = (TrajectoryFeatureChannel.Type)trajectoryFeature.FindPropertyRelative("featureType").intValue;
@@ -451,8 +414,7 @@ public class MotionMatchingDataEditor : UnityEditor.Editor
             simulationBoneProp.boolValue = EditorGUILayout.Toggle("Simulation Bone", simulationBoneProp.boolValue);
             if (!simulationBoneProp.boolValue)
             {
-                boneProp.intValue =
-                    (int)(HumanBodyBones)EditorGUILayout.EnumPopup("Bone", (HumanBodyBones)boneProp.intValue);
+                BoneTransformDrawer.DrawLayout(new GUIContent("Bone"), boneProp, rigRoot);
                 GUI.enabled = !zeroYProp.boolValue || !zeroZProp.boolValue;
                 zeroXProp.boolValue = EditorGUILayout.Toggle("Zero X", zeroXProp.boolValue);
                 GUI.enabled = !zeroXProp.boolValue || !zeroZProp.boolValue;

@@ -3,15 +3,14 @@ using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
 using AnimationTools;
-using MotionMatching;
 using System.Collections.Generic;
 using UnityEditor.AnimatedValues;
 using UnityEditor.SceneManagement;
 
-namespace MotionMatching.Editor
+namespace AnimationTools.Editor
 {
     [CustomEditor(typeof(SkeletonAnimation))]
-    public class BvhAnimationEditor : UnityEditor.Editor
+    public class SkeletonAnimationEditor : UnityEditor.Editor
     {
         private PreviewRenderUtility _previewRenderUtility;
         private SkeletonAnimation _skeletonAnimation;
@@ -31,24 +30,18 @@ namespace MotionMatching.Editor
         private Material _gridMaterial;
         private Mesh _gridMesh;
 
-        private SkeletonAsset _skeletonAsset;
+        private Skeleton _skeleton;
         private SkeletonData _skeletonData;
         private NativeArray<float3> _fkPositions;
         private NativeArray<quaternion> _fkRotations;
 
-        private void OnEnable()
+        protected virtual void OnEnable()
         {
             _skeletonAnimation = (SkeletonAnimation)target;
             EditorApplication.update += UpdateSimulation;
             _previousTime = (float)EditorApplication.timeSinceStartup;
 
-            _skeletonAsset = _skeletonAnimation.Skeleton;
-            if (_skeletonAsset != null)
-            {
-                _skeletonData = _skeletonAsset.GetSkeletonData();
-                _fkPositions = new NativeArray<float3>(_skeletonAsset.BoneCount, Allocator.Persistent);
-                _fkRotations = new NativeArray<quaternion>(_skeletonAsset.BoneCount, Allocator.Persistent);
-            }
+            RefreshSkeletonCache();
 
             Shader shader = Shader.Find("Hidden/Internal-Colored");
             if (shader != null)
@@ -73,6 +66,29 @@ namespace MotionMatching.Editor
                 _gridMaterial.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
             }
             CreateGridMesh();
+        }
+
+        /// <summary>
+        /// Reallocates the FK scratch buffers when the asset's resolved <see cref="Skeleton"/>
+        /// changes (including to/from null, e.g. an unconfigured rig/clip or one edited in the
+        /// Inspector). Cheap no-op otherwise.
+        /// </summary>
+        private void RefreshSkeletonCache()
+        {
+            var skeleton = _skeletonAnimation != null ? _skeletonAnimation.Skeleton : null;
+            if (skeleton == _skeleton) return;
+
+            if (_fkPositions.IsCreated) _fkPositions.Dispose();
+            if (_fkRotations.IsCreated) _fkRotations.Dispose();
+
+            _skeleton = skeleton;
+            _skeletonData = default;
+
+            if (_skeleton == null) return;
+
+            _skeletonData = _skeleton.GetSkeletonData();
+            _fkPositions = new NativeArray<float3>(_skeleton.BoneCount, Allocator.Persistent);
+            _fkRotations = new NativeArray<quaternion>(_skeleton.BoneCount, Allocator.Persistent);
         }
 
         private void CreateGridMesh()
@@ -148,13 +164,17 @@ namespace MotionMatching.Editor
             }
         }
 
+        private bool CanPreview =>
+            _skeletonAnimation != null && _skeletonAnimation.Skeleton != null &&
+            _skeletonAnimation.PoseSequence != null && _skeletonAnimation.FrameCount > 0;
+
         private void UpdateSimulation()
         {
             float time = (float)EditorApplication.timeSinceStartup;
             float deltaTime = time - _previousTime;
             _previousTime = time;
 
-            if (_isPlaying && _skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0)
+            if (_isPlaying && CanPreview)
             {
                 _currentTime += deltaTime;
                 float duration = _skeletonAnimation.FrameCount * _skeletonAnimation.FrameTime;
@@ -168,12 +188,12 @@ namespace MotionMatching.Editor
 
         public override bool HasPreviewGUI()
         {
-            return _skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0;
+            return CanPreview;
         }
 
         public override GUIContent GetPreviewTitle()
         {
-            return new GUIContent("BvhAnimation Preview");
+            return new GUIContent("Skeleton Animation Preview");
         }
 
         public override void OnPreviewSettings()
@@ -189,7 +209,7 @@ namespace MotionMatching.Editor
                 }
             }
 
-            if (_skeletonAnimation != null && _skeletonAnimation.Skeleton != null && _skeletonAnimation.FrameCount > 0)
+            if (CanPreview)
             {
                 float duration = _skeletonAnimation.FrameCount * _skeletonAnimation.FrameTime;
                 EditorGUI.BeginChangeCheck();
@@ -259,7 +279,11 @@ namespace MotionMatching.Editor
 
         private void DrawSkeleton()
         {
-            if (_skeletonAnimation == null || _skeletonAnimation.Skeleton == null || _skeletonAnimation.FrameCount == 0) return;
+            // The rig/clip fields can be edited live in the Inspector, so re-check the cache
+            // every draw instead of only on OnEnable.
+            RefreshSkeletonCache();
+
+            if (!CanPreview) return;
             if (!_fkPositions.IsCreated) return;
 
             int frameIndex = Mathf.FloorToInt(_currentTime / _skeletonAnimation.FrameTime);
@@ -267,6 +291,7 @@ namespace MotionMatching.Editor
 
             var boneCount = _skeletonData.BoneCount;
 
+            // First preview access triggers the one-time clip bake.
             var pose = _skeletonAnimation.GetFrame(frameIndex);
             PoseFK.LocalToCharacter(pose, _skeletonData, _fkPositions, _fkRotations);
 

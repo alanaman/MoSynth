@@ -4,6 +4,7 @@
     "references": [
         "MotionField",
         "AnimationTools",
+        "AnimationTools.Editor",
         "Unity.Mathematics"
     ],
     "includePlatforms": [

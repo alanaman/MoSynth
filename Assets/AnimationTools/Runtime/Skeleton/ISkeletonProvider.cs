@@ -1,12 +1,11 @@
 namespace AnimationTools
 {
 /// <summary>
-/// Implemented by components that own the skeleton binding for their serialized object. The
-/// <see cref="BoneReference"/> drawer falls back to this when no <see cref="BoneFromAttribute"/>
-/// sibling resolves.
+/// Implemented by components that own the skeleton binding for their serialized object. Exposes
+/// the edit-time-resolvable rig used by bone-picker drawers to populate a bone-name dropdown.
 /// </summary>
 public interface ISkeletonProvider
 {
-    SkeletonAsset PoseSkeleton { get; }
+    SkeletonRoot CharacterRig { get; }
 }
 }

@@ -18,7 +18,7 @@ public abstract class MoSynthStage
     /// Will be null if this is the first stage.
     /// </param>
     /// <returns>The modified skeleton.</returns>
-    public virtual SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton)
+    public virtual Skeleton GetSkeleton(Skeleton inSkeleton)
     {
         return inSkeleton;
     }

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using AnimationTools;
-using UnityEngine;
 
 namespace AnimationTools
 {
@@ -10,9 +9,11 @@ namespace AnimationTools
 /// velocities/angular velocities with bone 0 carrying root motion in root-local space,
 /// and two foot-contact Bool channels. <see cref="PoseSet"/> and
 /// MotionSynthesisComponent both build through here over the same
-/// <see cref="SkeletonAsset"/>, so <see cref="PoseLayout.Build"/>'s cache hands them the
+/// <see cref="AnimationTools.Skeleton"/>, so <see cref="PoseLayout.Build"/>'s cache hands them the
 /// same instance and frames can be copied between them (<see cref="PoseBuffer.CopyFrom"/>
-/// requires equal layout hashes).
+/// requires equal layout hashes). The contact host bone for each side must stay a pure function
+/// of the skeleton's bone names -- never of the skeleton's source -- so two independently built
+/// skeletons that are structurally equal always pick the same host bones and hash the same.
 /// </summary>
     public static class PoseLayoutBuilder
 {
@@ -32,21 +33,21 @@ namespace AnimationTools
     /// The full-pose channel set without the contact bools, for consumers that append their
     /// own extra channels before calling <see cref="PoseLayout.Build"/> themselves.
     /// </summary>
-    public static List<ChannelDescriptor> BuildFullPoseChannels(SkeletonAsset asset)
+    public static List<ChannelDescriptor> BuildFullPoseChannels(Skeleton skeleton)
     {
-        var boneCount = asset.BoneCount;
+        var boneCount = skeleton.BoneCount;
         var channels = new List<ChannelDescriptor>(boneCount * 4 + 2);
 
         for (var i = 0; i < boneCount; i++)
         {
-            var boneId = asset.GetBone(i).id;
+            var boneId = skeleton.GetBoneId(i);
             channels.Add(new PositionChannel(boneId));
             channels.Add(new RotationChannel(boneId));
         }
 
         for (var i = 0; i < boneCount; i++)
         {
-            var boneId = asset.GetBone(i).id;
+            var boneId = skeleton.GetBoneId(i);
             var isRoot = i == 0;
             channels.Add(new VelocityChannel(boneId,
                 isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
@@ -55,7 +56,7 @@ namespace AnimationTools
 
         for (var i = 0; i < boneCount; i++)
         {
-            var boneId = asset.GetBone(i).id;
+            var boneId = skeleton.GetBoneId(i);
             var isRoot = i == 0;
             channels.Add(new AngularVelocityChannel(boneId,
                 isRoot ? ChannelSpace.RootLocal : ChannelSpace.ParentLocal,
@@ -69,36 +70,31 @@ namespace AnimationTools
     /// The authoritative motion-matching pose layout: full-pose channels plus the two
     /// foot-contact Bool channels, with their handles bound.
     /// </summary>
-    public static PoseLayout Build(SkeletonAsset asset, out ContactHandles contacts)
+    public static PoseLayout Build(Skeleton skeleton, out ContactHandles contacts)
     {
-        var channels = BuildFullPoseChannels(asset);
+        var channels = BuildFullPoseChannels(skeleton);
 
-        var leftContactBone = PickContactBoneIndex(asset, HumanBodyBones.LeftToes, HumanBodyBones.LeftFoot, 0);
-        var rightContactBone = PickContactBoneIndex(asset, HumanBodyBones.RightToes, HumanBodyBones.RightFoot,
-            asset.BoneCount - 1);
+        var leftContactBone = BoneNameConventions.TryFindContactBone(skeleton, true, out var leftIndex)
+            ? leftIndex
+            : 0;
+        var rightContactBone = BoneNameConventions.TryFindContactBone(skeleton, false, out var rightIndex)
+            ? rightIndex
+            : skeleton.BoneCount - 1;
         // The layout rejects duplicate channel identities, so a skeleton missing one side must
         // still end up with two distinct host bones.
         if (rightContactBone == leftContactBone)
         {
-            rightContactBone = leftContactBone == 0 ? asset.BoneCount - 1 : 0;
+            rightContactBone = leftContactBone == 0 ? skeleton.BoneCount - 1 : 0;
         }
 
-        channels.Add(new BoolChannel(asset.GetBone(leftContactBone).id, ChannelUsage.Contact));
-        channels.Add(new BoolChannel(asset.GetBone(rightContactBone).id, ChannelUsage.Contact));
+        channels.Add(new BoolChannel(skeleton.GetBoneId(leftContactBone), ChannelUsage.Contact));
+        channels.Add(new BoolChannel(skeleton.GetBoneId(rightContactBone), ChannelUsage.Contact));
 
-        var layout = PoseLayout.Build(asset, channels);
+        var layout = PoseLayout.Build(skeleton, channels);
         contacts = new ContactHandles(
-            layout.BindChannel(new BoolChannel(asset.GetBone(leftContactBone).id, ChannelUsage.Contact)),
-            layout.BindChannel(new BoolChannel(asset.GetBone(rightContactBone).id, ChannelUsage.Contact)));
+            layout.BindChannel(new BoolChannel(skeleton.GetBoneId(leftContactBone), ChannelUsage.Contact)),
+            layout.BindChannel(new BoolChannel(skeleton.GetBoneId(rightContactBone), ChannelUsage.Contact)));
         return layout;
-    }
-
-    private static int PickContactBoneIndex(SkeletonAsset asset, HumanBodyBones toes, HumanBodyBones foot,
-        int fallbackIndex)
-    {
-        if (asset.TryFindByHumanBone(toes, out var index)) return index;
-        if (asset.TryFindByHumanBone(foot, out index)) return index;
-        return fallbackIndex;
     }
 }
 }

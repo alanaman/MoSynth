@@ -13,7 +13,7 @@ public class PoseSerializerRoundTripTests
     [Test]
     public void SerializeThenDeserialize_RoundTripsPosesClipsAndTags()
     {
-        var skeleton = MmTestData.BuildSkeletonAsset();
+        var skeleton = MmTestData.BuildSkeleton();
         var poseSet = new PoseSet();
         poseSet.SetSkeleton(skeleton);
 
@@ -64,7 +64,7 @@ public class PoseSerializerRoundTripTests
             Assert.AreEqual(poseSet.NumberPoses, loaded.NumberPoses);
             Assert.AreEqual(poseSet.NumberClips, loaded.NumberClips);
             Assert.AreEqual(poseSet.FrameTime, loaded.FrameTime);
-            Assert.AreEqual(skeleton.BoneCount, loaded.SkeletonAsset.BoneCount);
+            Assert.AreEqual(skeleton.BoneCount, loaded.Skeleton.BoneCount);
 
             for (var i = 0; i < poseSet.NumberClips; i++)
             {

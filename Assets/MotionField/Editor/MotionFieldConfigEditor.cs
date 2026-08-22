@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AnimationTools;
+using AnimationTools.Editor;
 using Python.Runtime;
 using UnityEditor;
 using UnityEngine;
@@ -25,18 +25,22 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
 
     // Skeleton of the generated database, cached because OnInspectorGUI repaints constantly and
     // this comes off disk. Dropped on enable and whenever the database is regenerated.
-    private SkeletonAsset _skeleton;
+    private Skeleton _skeleton;
     private int[] _jointDepths;
     private bool _skeletonRead;
+
+    private SerializedProperty _leftContactBoneProperty;
+    private SerializedProperty _rightContactBoneProperty;
 
     private void OnEnable()
     {
         InvalidateSkeleton();
+        _leftContactBoneProperty = serializedObject.FindProperty("leftContactBone");
+        _rightContactBoneProperty = serializedObject.FindProperty("rightContactBone");
     }
 
     private void InvalidateSkeleton()
     {
-        if (_skeleton != null) UnityEngine.Object.DestroyImmediate(_skeleton);
         _skeleton = null;
         _jointDepths = null;
         _skeletonRead = false;
@@ -45,13 +49,21 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
     public override void OnInspectorGUI()
     {
         var config = (MotionFieldConfig)target;
+        var rigRoot = GetRigRoot(config);
+
+        serializedObject.Update();
 
         // Scoped to the fields on purpose. GUI.changed is also set by a button press, so clearing
         // the flags from the blanket check at the bottom of this method would wipe hasTrained the
         // instant Train Motion Field set it.
         EditorGUI.BeginChangeCheck();
-        DrawDefaultInspector();
-        if (EditorGUI.EndChangeCheck())
+        DrawPropertiesExcluding(serializedObject, "m_Script", "leftContactBone", "rightContactBone");
+        DrawContactBones(rigRoot);
+        var fieldsChanged = EditorGUI.EndChangeCheck();
+
+        serializedObject.ApplyModifiedProperties();
+
+        if (fieldsChanged)
         {
             // Which field moved is not knowable here, so every edit invalidates both artefacts.
             // Over-flagging costs a rebuild; under-flagging costs a character that quietly moves
@@ -94,13 +106,33 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         EditorUtility.SetDirty(config);
     }
 
+    /// <summary>Rig a bone picker draws its dropdown from: the first animation clip's imported rig.</summary>
+    private static Transform GetRigRoot(MotionFieldConfig config)
+    {
+        if (config.animationClips == null || config.animationClips.Count == 0) return null;
+
+        var clip = config.animationClips[0];
+        return clip != null && clip.Rig != null ? clip.Rig.transform : null;
+    }
+
+    private void DrawContactBones(Transform rigRoot)
+    {
+        EditorGUILayout.LabelField("Contact Bones", EditorStyles.boldLabel);
+        BoneTransformDrawer.DrawLayout(
+            new GUIContent("Left Contact Bone", "Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe)."),
+            _leftContactBoneProperty, rigRoot);
+        BoneTransformDrawer.DrawLayout(
+            new GUIContent("Right Contact Bone", "Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe)."),
+            _rightContactBoneProperty, rigRoot);
+    }
+
     private void DrawImportSection(MotionFieldConfig config)
     {
         _showImport = EditorGUILayout.Foldout(_showImport, "Import Settings From an IPoseSetSource asset", true);
         if (!_showImport) return;
 
         EditorGUILayout.HelpBox(
-            "One-time copy of the hips forward vector, contact threshold and Mecanim map from any " +
+            "One-time copy of the hips forward vector, contact threshold and contact bones from any " +
             "other pose-set source asset (e.g. a MotionMatchingData). It does not create a link -- " +
             "later edits to the source asset will not follow.",
             MessageType.Info);
@@ -122,9 +154,10 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 Undo.RecordObject(config, "Import MotionField settings");
                 config.hipsForwardLocalVector = source.HipsForwardLocalVector;
                 config.contactVelocityThreshold = source.ContactVelocityThreshold;
-                config.animationChannelToMecanim = new List<JointToMecanim>(source.AnimationChannelToMecanim);
+                config.leftContactBone = new BoneTransform(source.LeftContactBoneName);
+                config.rightContactBone = new BoneTransform(source.RightContactBoneName);
                 MarkStale(config, database: true); // rewrites the clips extraction reads
-                Debug.Log($"[MotionField] Copied {config.animationChannelToMecanim.Count} bone mapping(s) from " +
+                Debug.Log($"[MotionField] Copied hips forward, contact threshold and contact bones from " +
                           $"'{source.name}'.");
             }
         }
@@ -139,12 +172,6 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (!hasClips)
         {
             EditorGUILayout.HelpBox("Assign at least one animation clip.", MessageType.Warning);
-        }
-        else if (config.animationChannelToMecanim == null || config.animationChannelToMecanim.Count == 0)
-        {
-            EditorGUILayout.HelpBox(
-                "No Mecanim bone mapping. Pose extraction locates the toes through it for foot " +
-                "contact detection and will fail without it.", MessageType.Warning);
         }
 
         if (File.Exists(config.GetPoseDatabasePath()))
@@ -247,7 +274,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
                 var label = new GUIContent(bone.name, isRoot
                     ? "The root is pinned to the origin when the metric is built, so its rows are " +
                       "always zero and its weight has no effect."
-                    : $"{bone.humanBone} (joint {i})");
+                    : $"joint {i}");
                 EditorGUILayout.LabelField(label,
                     weight.IsNeutral ? EditorStyles.label : EditorStyles.boldLabel);
 
@@ -329,7 +356,7 @@ public class MotionFieldConfigEditor : UnityEditor.Editor
         if (_skeletonRead) return _skeleton != null;
         _skeletonRead = true;
 
-        if (!config.TryGetDatabaseSkeleton(out SkeletonAsset skeleton) || skeleton.BoneCount == 0)
+        if (!config.TryGetDatabaseSkeleton(out Skeleton skeleton) || skeleton.BoneCount == 0)
         {
             return false;
         }

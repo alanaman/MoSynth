@@ -25,7 +25,7 @@ public sealed class PoseFeatureChannel : ChannelDescriptor, IMatchingFeature
 
     [FormerlySerializedAs("Name")] public string name;
     [FormerlySerializedAs("FeatureType")] public Type featureType;
-    [FormerlySerializedAs("Bone")] public HumanBodyBones bone;
+    [FormerlySerializedAs("Bone")] public BoneTransform bone = new();
 
     public string Name => name;
 
@@ -36,7 +36,7 @@ public sealed class PoseFeatureChannel : ChannelDescriptor, IMatchingFeature
     public void Extract(PoseSet poseSet, MotionMatchingData mmData, int poseIndex, int boneIndex, ChannelHandle handle,
         StateBuffer frame)
     {
-        var skeleton = poseSet.SkeletonAsset.GetSkeletonData();
+        var skeleton = poseSet.Skeleton.GetSkeletonData();
         var characterPose = poseSet.GetPoseBuffer(poseIndex);
 
         var value = float3.zero;
@@ -78,7 +78,7 @@ public sealed class PoseFeatureChannel : ChannelDescriptor, IMatchingFeature
     {
         return other is PoseFeatureChannel channel
                && channel.featureType == featureType
-               && channel.bone == bone;
+               && channel.bone?.BoneName == bone?.BoneName;
     }
 
     public override int GetHashCode()
@@ -87,7 +87,7 @@ public sealed class PoseFeatureChannel : ChannelDescriptor, IMatchingFeature
         {
             var hash = typeof(PoseFeatureChannel).GetHashCode();
             hash = hash * 31 + (int)featureType;
-            hash = hash * 31 + (int)bone;
+            hash = hash * 31 + (bone?.BoneName != null ? bone.BoneName.GetHashCode() : 0);
             return hash;
         }
     }

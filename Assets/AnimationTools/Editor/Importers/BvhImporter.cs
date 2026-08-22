@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -10,22 +9,92 @@ using UnityEngine;
 namespace MotionMatching.Editor
 {
     /// <summary>
-    /// Imports a BVH file and stores the animation data in Unity format (BVHAnimation).
+    /// Imports a BVH file as a rig hierarchy (GameObject) and an AnimationClip sampled against it.
     /// </summary>
-    [ScriptedImporter(2, "bvh")]
+    [ScriptedImporter(6, "bvh")]
     public class BvhImporter : ScriptedImporter
     {
         public float unitScale = 0.01f;
         public bool onlyFirstFrame;
         public override void OnImportAsset(AssetImportContext ctx)
         {
-            var (bvhAsset, skeletonAsset) = Import(ctx, unitScale, onlyFirstFrame);
-            ctx.AddObjectToAsset("main obj", bvhAsset); // keep the "main obj" id — existing references depend on it
-            ctx.AddObjectToAsset("skeleton", skeletonAsset);
-            ctx.SetMainObject(bvhAsset);
+            var fileName = Path.GetFileNameWithoutExtension(ctx.assetPath);
+            var (skeleton, rootPositions, boneRotations, frameTime) = Import(ctx, unitScale, onlyFirstFrame);
+
+            // A .bvh imports like a small FBX: the rig is the main object and the AnimationClip a
+            // sub-asset. The bone hierarchy sits under a container because Unity renames the main
+            // object to the file name, which would clobber the root bone's name and break
+            // name-based binding. Descendant bone GameObjects get Unity's deterministic
+            // path-derived local ids off the container, which is the stability mechanism -- bone
+            // renames break references, but names are the rig's identity anyway.
+            var container = new GameObject(fileName);
+            SkeletonRigBuilder.CreateHierarchy(skeleton, container.transform);
+            ctx.AddObjectToAsset("rig", container);
+            ctx.SetMainObject(container);
+
+            var clip = BuildAnimationClip(fileName, skeleton, rootPositions, boneRotations, frameTime);
+            ctx.AddObjectToAsset("clip", clip);
         }
 
-        private static (SkeletonAnimation bvhAsset, SkeletonAsset skeletonAsset) Import(AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
+        private static AnimationClip BuildAnimationClip(string clipName, Skeleton skeleton, Vector3[] rootPositions, Quaternion[][] boneRotations, float frameTime)
+        {
+            var clip = new AnimationClip { name = clipName, frameRate = 1f / frameTime };
+
+            var boneCount = skeleton.BoneCount;
+            var paths = new string[boneCount];
+            for (var i = 0; i < boneCount; i++)
+            {
+                var bone = skeleton.GetBone(i);
+                paths[i] = i == 0 ? bone.name : paths[bone.parentIndex] + "/" + bone.name;
+            }
+
+            var frameCount = rootPositions.Length;
+
+            var rootPosXKeys = new Keyframe[frameCount];
+            var rootPosYKeys = new Keyframe[frameCount];
+            var rootPosZKeys = new Keyframe[frameCount];
+            for (var f = 0; f < frameCount; f++)
+            {
+                var time = f * frameTime;
+                var position = rootPositions[f];
+                rootPosXKeys[f] = new Keyframe(time, position.x);
+                rootPosYKeys[f] = new Keyframe(time, position.y);
+                rootPosZKeys[f] = new Keyframe(time, position.z);
+            }
+            clip.SetCurve(paths[0], typeof(Transform), "localPosition.x", new AnimationCurve(rootPosXKeys));
+            clip.SetCurve(paths[0], typeof(Transform), "localPosition.y", new AnimationCurve(rootPosYKeys));
+            clip.SetCurve(paths[0], typeof(Transform), "localPosition.z", new AnimationCurve(rootPosZKeys));
+
+            for (var b = 0; b < boneCount; b++)
+            {
+                var rotations = boneRotations[b];
+                var rotXKeys = new Keyframe[frameCount];
+                var rotYKeys = new Keyframe[frameCount];
+                var rotZKeys = new Keyframe[frameCount];
+                var rotWKeys = new Keyframe[frameCount];
+                for (var f = 0; f < frameCount; f++)
+                {
+                    var time = f * frameTime;
+                    var rotation = rotations[f];
+                    rotXKeys[f] = new Keyframe(time, rotation.x);
+                    rotYKeys[f] = new Keyframe(time, rotation.y);
+                    rotZKeys[f] = new Keyframe(time, rotation.z);
+                    rotWKeys[f] = new Keyframe(time, rotation.w);
+                }
+                clip.SetCurve(paths[b], typeof(Transform), "localRotation.x", new AnimationCurve(rotXKeys));
+                clip.SetCurve(paths[b], typeof(Transform), "localRotation.y", new AnimationCurve(rotYKeys));
+                clip.SetCurve(paths[b], typeof(Transform), "localRotation.z", new AnimationCurve(rotZKeys));
+                clip.SetCurve(paths[b], typeof(Transform), "localRotation.w", new AnimationCurve(rotWKeys));
+            }
+
+            // May flip quaternion key signs to remove double-cover discontinuities between keys;
+            // the result samples to rotation-equivalent values, and consumers are hemisphere-corrected.
+            clip.EnsureQuaternionContinuity();
+            return clip;
+        }
+
+        private static (Skeleton skeleton, Vector3[] rootPositions, Quaternion[][] boneRotations, float frameTime) Import(
+            AssetImportContext ctx, float scale = 0.01f, bool onlyFirstFrame = false)
         {
             var channelAxisOrders = new List<AxisOrder>();
 
@@ -42,16 +111,14 @@ namespace MotionMatching.Editor
             ReadLeftBracket(words, ref w);
             ReadOffset(words, ref w); // consumed but discarded: root position always comes from motion channel 0, never HIERARCHY
             ReadChannels(channelAxisOrders, words, ref w, true);
-            var bones = new List<Bone>
+            var bones = new List<SkeletonBoneData>
             {
-                new Bone
+                new()
                 {
-                    id = 1,
                     name = rootName,
                     parentIndex = -1,
                     restLocalPosition = float3.zero,
-                    restLocalRotation = quaternion.identity,
-                    humanBone = HumanBodyBones.LastBone
+                    restLocalRotation = quaternion.identity
                 }
             };
             // JOINTS
@@ -72,14 +139,12 @@ namespace MotionMatching.Editor
                 brackets += 1;
                 var offset = ReadOffset(words, ref w) * scale;
                 ReadChannels(channelAxisOrders, words, ref w);
-                bones.Add(new Bone
+                bones.Add(new SkeletonBoneData
                 {
-                    id = boneIndex + 1,
                     name = jointName,
                     parentIndex = boneParentIndex,
                     restLocalPosition = (float3)offset,
-                    restLocalRotation = quaternion.identity,
-                    humanBone = HumanBodyBones.LastBone
+                    restLocalRotation = quaternion.identity
                 });
                 if (words[w] == "End")
                 {
@@ -126,36 +191,17 @@ namespace MotionMatching.Editor
             if (words[w++] != "Time:") Debug.LogError("[BVHImporter] Time: not found");
             var frameTime = float.Parse(words[w++], CultureInfo.InvariantCulture);
 
-            var skeletonAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
-            skeletonAsset.name = Path.GetFileNameWithoutExtension(ctx.assetPath) + "_Skeleton";
-            // Ids restart at 1 on every reimport: OnImportAsset cannot reliably read the previous
-            // sub-asset to merge, and no BoneReference targets BVH skeletons. Ids are deterministic
-            // (index + 1) for an unchanged file regardless.
-            skeletonAsset.SetBones(bones, bones.Count + 1);
-
-            var layout = PoseLayout.CreateFullPose(skeletonAsset, false, false);
-            var d = layout.Data;
+            var skeleton = new Skeleton(bones, Path.GetFileNameWithoutExtension(ctx.assetPath) + "_Skeleton");
 
             var numberChannels = channelAxisOrders.Count;
             var framesStored = onlyFirstFrame ? Mathf.Min(1, numberFrames) : numberFrames;
-            var frameData = new float[framesStored * layout.FloatCount];
 
-            // One-frame template with every bone's rest position; slot 0 (root) is overwritten
-            // per frame below, identity rotations elsewhere are fine since every rotation slot
-            // is written per frame too.
-            var template = new float[layout.FloatCount];
-            for (var b = 0; b < bones.Count; b++)
-            {
-                var restPosition = bones[b].restLocalPosition;
-                template[d.PositionStart + b * 3 + 0] = restPosition.x;
-                template[d.PositionStart + b * 3 + 1] = restPosition.y;
-                template[d.PositionStart + b * 3 + 2] = restPosition.z;
-            }
+            var rootPositions = new Vector3[framesStored];
+            var boneRotations = new Quaternion[bones.Count][];
+            for (var b = 0; b < bones.Count; b++) boneRotations[b] = new Quaternion[framesStored];
 
             for (var f = 0; f < framesStored; f++)
             {
-                var frameBase = f * layout.FloatCount;
-                Array.Copy(template, 0, frameData, frameBase, layout.FloatCount);
                 for (var j = 0; j < numberChannels; ++j)
                 {
                     var v1 = float.Parse(words[w++], CultureInfo.InvariantCulture);
@@ -164,27 +210,16 @@ namespace MotionMatching.Editor
                     var axisOrder = channelAxisOrders[j];
                     if (j == 0)
                     {
-                        var rootMotion = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
-                        var positionBase = frameBase + d.PositionStart;
-                        frameData[positionBase + 0] = rootMotion.x;
-                        frameData[positionBase + 1] = rootMotion.y;
-                        frameData[positionBase + 2] = rootMotion.z;
+                        rootPositions[f] = BvhToUnityTranslation(v1, v2, v3, axisOrder) * scale;
                     }
                     else
                     {
-                        var q = BvhToUnityRotation(v1, v2, v3, axisOrder);
-                        var rotationBase = frameBase + d.RotationStart + (j - 1) * 4;
-                        frameData[rotationBase + 0] = q.x;
-                        frameData[rotationBase + 1] = q.y;
-                        frameData[rotationBase + 2] = q.z;
-                        frameData[rotationBase + 3] = q.w;
+                        boneRotations[j - 1][f] = BvhToUnityRotation(v1, v2, v3, axisOrder);
                     }
                 }
             }
 
-            var bvhAsset = ScriptableObject.CreateInstance<SkeletonAnimation>();
-            bvhAsset.Initialize(skeletonAsset, frameTime, framesStored, frameData);
-            return (bvhAsset, skeletonAsset);
+            return (skeleton, rootPositions, boneRotations, frameTime);
         }
 
         private static void ReadLeftBracket(string[] words, ref int w)
@@ -230,7 +265,7 @@ namespace MotionMatching.Editor
                     Debug.LogError("[BVHImporter] The root joint must have exactly 6 channels");
                 }
 
-                // Remember in which order the three position axes appear (XYZ / XZY �)
+                // Remember in which order the three position axes appear (XYZ / XZY …)
                 channels.Add(ReadChannelPosition(words, ref w));
             }
             else
@@ -244,9 +279,9 @@ namespace MotionMatching.Editor
                 }
                 else if (numChannels != 3)
                 {
-                    Debug.LogError($"[BVHImporter] Unexpected channel count ({numChannels}) at joint � expected 3 or 6");
+                    Debug.LogError($"[BVHImporter] Unexpected channel count ({numChannels}) at joint — expected 3 or 6");
                 }
-                // If there are only 3 channels � nothing to skip, cursor is already after the count.
+                // If there are only 3 channels — nothing to skip, cursor is already after the count.
             }
             // Rotation channels are always 3, so we can safely read them.
             channels.Add(ReadChannelRotation(words, ref w));

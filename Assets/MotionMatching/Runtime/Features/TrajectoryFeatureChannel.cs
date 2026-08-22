@@ -36,7 +36,7 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
         simulationBone; // Use the simulation bone (articial root added during pose extraction) instead of a bone
 
     [FormerlySerializedAs("Bone")]
-    public HumanBodyBones bone; // Bone used to compute the trajectory in the feature set
+    public BoneTransform bone = new(); // Bone used to compute the trajectory in the feature set
 
     [FormerlySerializedAs("ZeroX")] public bool zeroX; // Zero the X, Y and/or Z component of the trajectory feature
     [FormerlySerializedAs("ZeroY")] public bool zeroY; // Zero the X, Y and/or Z component of the trajectory feature
@@ -60,7 +60,7 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
     public void Extract(PoseSet poseSet, MotionMatchingData mmData, int poseIndex, int boneIndex, ChannelHandle handle,
         StateBuffer frame)
     {
-        var skeleton = poseSet.SkeletonAsset.GetSkeletonData();
+        var skeleton = poseSet.Skeleton.GetSkeletonData();
         var characterPose = poseSet.GetPoseBuffer(poseIndex);
 
         for (var p = 0; p < predictionFrames.Length; ++p)
@@ -158,7 +158,7 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
         return other is TrajectoryFeatureChannel channel
                && channel.featureType == featureType
                && channel.simulationBone == simulationBone
-               && channel.bone == bone
+               && channel.bone?.BoneName == bone?.BoneName
                && channel.zeroX == zeroX
                && channel.zeroY == zeroY
                && channel.zeroZ == zeroZ
@@ -172,7 +172,7 @@ public sealed class TrajectoryFeatureChannel : ChannelDescriptor, IMatchingFeatu
             var hash = typeof(TrajectoryFeatureChannel).GetHashCode();
             hash = hash * 31 + (int)featureType;
             hash = hash * 31 + (simulationBone ? 1 : 0);
-            hash = hash * 31 + (int)bone;
+            hash = hash * 31 + (bone?.BoneName != null ? bone.BoneName.GetHashCode() : 0);
             hash = hash * 31 + (zeroX ? 1 : 0);
             hash = hash * 31 + (zeroY ? 1 : 0);
             hash = hash * 31 + (zeroZ ? 1 : 0);

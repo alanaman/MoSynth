@@ -13,57 +13,18 @@ MonoBehaviour:
   m_Name: MotionFieldConfig
   m_EditorClassIdentifier: Assembly-CSharp::MotionField.MotionFieldConfig
   animationClips:
-  - {fileID: 11400000, guid: f7376439e021c604b99a38f1543ed9c7, type: 2}
+  - {fileID: 11400000, guid: 83f13ab2065eeee41b3cbf97abcf0914, type: 2}
   hipsForwardLocalVector:
     x: -0.011357397
     y: 0.99932635
     z: 0.0348987
   contactVelocityThreshold: 0.15
-  animationChannelToMecanim:
-  - name: Hips
-    mecanimBone: 0
-  - name: LeftUpLeg
-    mecanimBone: 1
-  - name: LeftLeg
-    mecanimBone: 3
-  - name: LeftFoot
-    mecanimBone: 5
-  - name: LeftToe
-    mecanimBone: 19
-  - name: RightUpLeg
-    mecanimBone: 2
-  - name: RightLeg
-    mecanimBone: 4
-  - name: RightFoot
-    mecanimBone: 6
-  - name: RightToe
-    mecanimBone: 20
-  - name: Spine
-    mecanimBone: 7
-  - name: Spine1
-    mecanimBone: 8
-  - name: Spine2
-    mecanimBone: 54
-  - name: Neck
-    mecanimBone: 9
-  - name: Head
-    mecanimBone: 10
-  - name: LeftShoulder
-    mecanimBone: 11
-  - name: LeftArm
-    mecanimBone: 13
-  - name: LeftForeArm
-    mecanimBone: 15
-  - name: LeftHand
-    mecanimBone: 17
-  - name: RightShoulder
-    mecanimBone: 12
-  - name: RightArm
-    mecanimBone: 14
-  - name: RightForeArm
-    mecanimBone: 16
-  - name: RightHand
-    mecanimBone: 18
+  leftContactBone:
+    bone: {fileID: 0}
+    boneName: 
+  rightContactBone:
+    bone: {fileID: 0}
+    boneName: 
   pythonDllPath: C:\Users\amana\AppData\Local\Python\pythoncore-3.13-64\python313.dll
   pythonVenvPath: D:\iitbpg\MoSynth\AnimationTech\.anim_env
   kNeighbors: 15

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
@@ -21,23 +20,20 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
     // Reused every LateUpdate as the mutable pose the stage chain runs on.
     private PoseBuffer _scratchPose;
 
-    private SkeletonAsset _skeleton;
-    public SkeletonAsset Skeleton => _skeleton;
+    private Skeleton _skeleton;
+    public Skeleton Skeleton => _skeleton;
 
-    [SerializeField] [Tooltip("Optional skeleton asset binding for AnimationTools-based stages.")]
-    private SkeletonAsset poseSkeleton;
+    [SerializeField]
+    [Tooltip("The rig this component drives; bones are bound to the pipeline skeleton by name.")]
+    private SkeletonRoot characterRig = new();
 
-    public SkeletonAsset PoseSkeleton => poseSkeleton;
-    public SkeletonMap PoseSkeletonMap { get; private set; }
+    public SkeletonRoot CharacterRig => characterRig;
 
     /// <summary>
     /// The transforms of the character controlled by this <see cref="MotionSynthesisComponent"/>.
     /// These are the transforms that will be used to render the character.
     /// </summary>
     [NonSerialized] public Transform[] SkeletonTransforms;
-
-    // TODO: remove?
-    private Animator _animator;
 
     [Tooltip(
         "The frame rate of the animation synthesis. This is used to calculate the time step of the motion synthesis." +
@@ -80,8 +76,6 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
 
     private void Awake()
     {
-        _animator = GetComponent<Animator>();
-
         _skeleton = null;
 
         if (IsFrameRateRestricted)
@@ -103,68 +97,34 @@ public class MotionSynthesisComponent : MonoBehaviour, ISkeletonProvider
             return;
         }
 
-        InitSkeletonTransformsArray();
-        InitCurrentPose();
-        ApplyTransformOffsetsFromSkeleton();
-
-        if (poseSkeleton != null && _skeleton != null)
+        if (characterRig == null) characterRig = new SkeletonRoot();
+        if (!characterRig.IsSet)
         {
-            PoseSkeletonMap = SkeletonMap.Build(_skeleton, poseSkeleton);
-            if (PoseSkeletonMap == null)
-            {
-                Debug.LogError(
-                    $"MotionSynthesisComponent \"{name}\": could not map the MotionMatching skeleton onto poseSkeleton \"{poseSkeleton.name}\" (some joint has no matching bone by name or HumanBodyBones type).");
-            }
+            Debug.LogWarning($"MotionSynthesisComponent \"{name}\": characterRig is unset; searching under this component's own transform.");
+            characterRig.SetRoot(transform);
         }
+
+        SkeletonTransforms = characterRig.BindByName(_skeleton, indexZeroOverride: transform);
+
+        var missingBoneCount = 0;
+        for (var i = 1; i < SkeletonTransforms.Length; i++)
+        {
+            if (SkeletonTransforms[i] == null) missingBoneCount++;
+        }
+
+        if (missingBoneCount > 0)
+        {
+            Debug.LogError($"MotionSynthesisComponent \"{name}\": {missingBoneCount} bone(s) could not be bound to characterRig (see errors above). Disabling the component.");
+            enabled = false;
+            return;
+        }
+
+        InitCurrentPose();
 
         foreach (var stage in stages)
         {
             stage.Init(this);
         }
-    }
-
-
-    private void InitSkeletonTransformsArray()
-    {
-        SkeletonTransforms = new Transform[_skeleton.BoneCount];
-        SkeletonTransforms[0] = transform; // SimulationBone
-        for (var i = 1; i < _skeleton.BoneCount; i++)
-        {
-            SkeletonTransforms[i] = _animator.GetBoneTransform(_skeleton.GetBone(i).humanBone);
-        }
-    }
-
-    private void ApplyTransformOffsetsFromSkeleton()
-    {
-        for (var i = 1; i < _skeleton.BoneCount; i++)
-        {
-            var humanBone = _skeleton.GetBone(i).humanBone;
-            var skeletonTransform = _animator.GetBoneTransform(humanBone);
-            var skeletonBone = GetSkeletonBone(_animator.avatar.humanDescription, humanBone);
-            skeletonTransform.localPosition = skeletonBone.position;
-        }
-    }
-
-    /// <summary>
-    /// Finds the <see cref="SkeletonBone"/> in <paramref name="humanDescription"/>, corresponding to the <see cref="HumanBodyBones"/> <paramref name="boneEnum"/>.
-    /// </summary>
-    /// <returns>The <see cref="SkeletonBone"/> corresponding to <paramref name="boneEnum"/></returns>
-    public SkeletonBone GetSkeletonBone(HumanDescription humanDescription, HumanBodyBones boneEnum)
-    {
-        // Ensure we aren't passing an invalid enum value
-        if (boneEnum < 0 || boneEnum >= HumanBodyBones.LastBone)
-        {
-            throw new ArgumentException("Invalid HumanBodyBones enum value.");
-        }
-
-        // Get the standard Mecanim human bone name (e.g., "LeftUpperArm")
-        var targetHumanName = HumanTrait.BoneName[(int)boneEnum];
-
-        // Find the mapped transform name in the rig
-        var targetRigBoneName = humanDescription.human.First(b => b.humanName == targetHumanName).boneName;
-
-
-        return humanDescription.skeleton.First(skeletonBone => skeletonBone.name == targetRigBoneName);
     }
 
     private float _timeTillNextAnimationUpdate = 0f;

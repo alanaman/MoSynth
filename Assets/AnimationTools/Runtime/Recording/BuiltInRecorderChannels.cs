@@ -41,7 +41,7 @@ public sealed class TimeChannel : RecorderChannel
 public sealed class BoneWorldPositionChannel : RecorderChannel
 {
     public bool simulationBone;
-    public HumanBodyBones bone = HumanBodyBones.Hips;
+    public BoneTransform bone = new("Hips");
 
     [NonSerialized] private int _boneIndex;
     [NonSerialized] private string _resolvedBoneName;
@@ -57,7 +57,14 @@ public sealed class BoneWorldPositionChannel : RecorderChannel
         }
         else
         {
-            _boneIndex = synthesizer.Skeleton.FindJointIndexOrZero(bone);
+            var index = bone?.ResolveIndex(synthesizer.Skeleton) ?? -1;
+            if (index < 0)
+            {
+                Debug.LogWarning($"{nameof(BoneWorldPositionChannel)} \"{name}\": bone \"{bone?.BoneName}\" not found; defaulting to bone 0.");
+                index = 0;
+            }
+
+            _boneIndex = index;
             _resolvedBoneName = synthesizer.Skeleton.GetBone(_boneIndex).name;
         }
     }
@@ -78,7 +85,7 @@ public sealed class BoneWorldPositionChannel : RecorderChannel
 
     public override bool Equals(ChannelDescriptor other) =>
         other is BoneWorldPositionChannel c && c.name == name
-        && c.simulationBone == simulationBone && c.bone == bone;
+        && c.simulationBone == simulationBone && c.bone?.BoneName == bone?.BoneName;
 
     public override int GetHashCode()
     {
@@ -87,7 +94,7 @@ public sealed class BoneWorldPositionChannel : RecorderChannel
             var hash = GetType().GetHashCode();
             hash = hash * 31 + (name?.GetHashCode() ?? 0);
             hash = hash * 31 + simulationBone.GetHashCode();
-            hash = hash * 31 + (int)bone;
+            hash = hash * 31 + (bone?.BoneName?.GetHashCode() ?? 0);
             return hash;
         }
     }
@@ -100,7 +107,7 @@ public sealed class BoneWorldPositionChannel : RecorderChannel
 public sealed class BoneWorldForwardChannel : RecorderChannel
 {
     public bool simulationBone;
-    public HumanBodyBones bone = HumanBodyBones.Hips;
+    public BoneTransform bone = new("Hips");
 
     [NonSerialized] private int _boneIndex;
     [NonSerialized] private string _resolvedBoneName;
@@ -116,7 +123,14 @@ public sealed class BoneWorldForwardChannel : RecorderChannel
         }
         else
         {
-            _boneIndex = synthesizer.Skeleton.FindJointIndexOrZero(bone);
+            var index = bone?.ResolveIndex(synthesizer.Skeleton) ?? -1;
+            if (index < 0)
+            {
+                Debug.LogWarning($"{nameof(BoneWorldForwardChannel)} \"{name}\": bone \"{bone?.BoneName}\" not found; defaulting to bone 0.");
+                index = 0;
+            }
+
+            _boneIndex = index;
             _resolvedBoneName = synthesizer.Skeleton.GetBone(_boneIndex).name;
         }
     }
@@ -137,7 +151,7 @@ public sealed class BoneWorldForwardChannel : RecorderChannel
 
     public override bool Equals(ChannelDescriptor other) =>
         other is BoneWorldForwardChannel c && c.name == name
-        && c.simulationBone == simulationBone && c.bone == bone;
+        && c.simulationBone == simulationBone && c.bone?.BoneName == bone?.BoneName;
 
     public override int GetHashCode()
     {
@@ -146,7 +160,7 @@ public sealed class BoneWorldForwardChannel : RecorderChannel
             var hash = GetType().GetHashCode();
             hash = hash * 31 + (name?.GetHashCode() ?? 0);
             hash = hash * 31 + simulationBone.GetHashCode();
-            hash = hash * 31 + (int)bone;
+            hash = hash * 31 + (bone?.BoneName?.GetHashCode() ?? 0);
             return hash;
         }
     }

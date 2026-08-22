@@ -49,7 +49,7 @@ public class FeatureSet
     {
         var poseSet = mmData.GetOrImportPoseSet();
         NumberFeatureVectors = poseSet.NumberPoses;
-        _featureLayout = MmFeatureLayoutBuilder.Build(mmData, poseSet.SkeletonAsset);
+        _featureLayout = MmFeatureLayoutBuilder.Build(mmData, poseSet.Skeleton);
     }
 
     /// <summary>Float offset of one prediction of one trajectory feature within a feature vector.</summary>

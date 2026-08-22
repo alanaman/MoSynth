@@ -9,7 +9,7 @@ namespace MotionMatching
 {
 /// <summary>
 /// Defines all data used for Motion Matching in one avatar
-/// Contains animation clips, mapping between the skeleton and Mecanim, and other data
+/// Contains animation clips, feature definitions, and other data
 /// </summary>
 [CreateAssetMenu(fileName = "MotionMatchingData", menuName = "MotionMatching/MotionMatchingData")]
 public class MotionMatchingData : ScriptableObject, IPoseSetSource
@@ -34,7 +34,13 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         contactVelocityThreshold =
             0.15f; // Minimum velocity of the foot to be considered in movement and not in contact with the ground
 
-    public List<JointToMecanim> animationChannelToMecanim = new();
+    [SerializeField]
+    [Tooltip("Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe).")]
+    private BoneTransform leftContactBone = new();
+
+    [SerializeField]
+    [Tooltip("Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe).")]
+    private BoneTransform rightContactBone = new();
 
     public List<TrajectoryFeatureChannel> trajectoryFeatures = new();
 
@@ -61,7 +67,8 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     public List<AnnotatedAnimationClip> AnimationClips => animationClips;
     public float3 HipsForwardLocalVector => hipsForwardLocalVector;
     public float ContactVelocityThreshold => contactVelocityThreshold;
-    public IReadOnlyList<JointToMecanim> AnimationChannelToMecanim => animationChannelToMecanim;
+    public string LeftContactBoneName => leftContactBone?.BoneName;
+    public string RightContactBoneName => rightContactBone?.BoneName;
 
     /// <summary>
     /// Frames of lookahead the longest trajectory feature needs. Poses closer than this to the end
@@ -82,18 +89,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
 
             return maximum;
         }
-    }
-
-    private void ImportAnimations()
-    {
-        PROFILE.BEGIN_SAMPLE_PROFILING("BVH Import");
-        foreach (var animData in animationClips)
-        {
-            // Add Mecanim mapping information
-            animData.UpdateMecanimInformation(this);
-        }
-
-        PROFILE.END_AND_PRINT_SAMPLE_PROFILING("BVH Import");
     }
 
     public PoseSet GetOrImportPoseSet()
@@ -126,7 +121,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
 
     public void ImportPoseSet()
     {
-        ImportAnimations();
         _poseSet = new PoseSet();
         _poseSet.SetSkeletonFromBvh(animationClips[0].Skeleton);
         for (int i = 0; i < animationClips.Count; i++)
@@ -200,18 +194,14 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
         {
             quaternion worldRot = PoseFK.CharacterRotation(pose, skeletonData, i - 1);
             // Change to Local
-            if (!TryGetMecanimBone(skeleton.GetBone(i - 1).name, out HumanBodyBones bone))
-            {
-                Debug.LogWarning("[FeatureDebug] Failed to find Mecanim bone for joint " +
-                                 skeleton.GetBone(i - 1).name);
-            }
+            var boneName = skeleton.GetBone(i - 1).name;
 
             float3 worldForward = hipsWorldForwardProjected;
-            if (HumanBodyBonesExtensions.IsLeftArmBone(bone))
+            if (BoneNameConventions.IsLeftArmBone(boneName))
             {
                 worldForward = -hipsWorldRightProjected;
             }
-            else if (HumanBodyBonesExtensions.IsRightArmBone(bone))
+            else if (BoneNameConventions.IsRightArmBone(boneName))
             {
                 worldForward = hipsWorldRightProjected;
             }
@@ -228,34 +218,6 @@ public class MotionMatchingData : ScriptableObject, IPoseSetSource
     {
         Debug.Assert(!JointsLocalForwardError, "JointsLocalForward is not initialized");
         return jointsLocalForward[jointIndex];
-    }
-
-    public bool TryGetMecanimBone(string jointName, out HumanBodyBones bone)
-    {
-        for (int i = 0; i < animationChannelToMecanim.Count; i++)
-        {
-            if (animationChannelToMecanim[i].name != jointName) continue;
-            bone = animationChannelToMecanim[i].mecanimBone;
-            return true;
-        }
-
-        bone = HumanBodyBones.LastBone;
-        return false;
-    }
-
-    public bool TryGetJointName(HumanBodyBones bone, out string jointName)
-    {
-        for (int i = 0; i < animationChannelToMecanim.Count; i++)
-        {
-            if (animationChannelToMecanim[i].mecanimBone == bone)
-            {
-                jointName = animationChannelToMecanim[i].name;
-                return true;
-            }
-        }
-
-        jointName = "";
-        return false;
     }
 
     public string GetAssetPath()

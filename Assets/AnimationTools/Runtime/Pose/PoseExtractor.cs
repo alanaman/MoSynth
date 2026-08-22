@@ -22,19 +22,9 @@ public static class PoseExtractor
         var nFrames = animationClip.FrameCount;
         var nBvhJoints = animationClip.Skeleton.BoneCount;
 
-        if (!animationClip.Skeleton.TryFindByHumanBone(HumanBodyBones.LeftToes, out var leftToesBoneIndex))
-        {
-            Debug.LogError("LeftToes not found in BVHAnimation");
-            leftToesBoneIndex = 0; // legacy TryFind left a default joint (index 0) on failure
-        }
-
+        var leftToesBoneIndex = ResolveContactBoneIndex(animationClip.Skeleton, source.LeftContactBoneName, true);
         var leftToesIndex = leftToesBoneIndex + 1; // +1 for SimulationBone
-        if (!animationClip.Skeleton.TryFindByHumanBone(HumanBodyBones.RightToes, out var rightToesBoneIndex))
-        {
-            Debug.LogError("RightToes not found in BVHAnimation");
-            rightToesBoneIndex = 0; // legacy TryFind left a default joint (index 0) on failure
-        }
-
+        var rightToesBoneIndex = ResolveContactBoneIndex(animationClip.Skeleton, source.RightContactBoneName, false);
         var rightToesIndex = rightToesBoneIndex + 1; // +1 for SimulationBone
 
         // The animation skeleton's own unshifted parent hierarchy, followed verbatim by the
@@ -84,6 +74,25 @@ public static class PoseExtractor
 
         poseSet.EndClip(animationClip.tags);
         return true;
+    }
+
+    /// <summary>
+    /// Resolves the contact-detection bone for one side: an explicit <paramref name="boneName"/>
+    /// wins if configured, falling back to <see cref="BoneNameConventions.TryFindContactBone"/>
+    /// (and finally index 0) when unset or unresolvable.
+    /// </summary>
+    private static int ResolveContactBoneIndex(Skeleton skeleton, string boneName, bool left)
+    {
+        if (!string.IsNullOrEmpty(boneName))
+        {
+            if (skeleton.TryFindByName(boneName, out var index)) return index;
+            Debug.LogError($"Configured contact bone \"{boneName}\" not found in BVHAnimation; falling back to the name heuristic.");
+        }
+
+        if (BoneNameConventions.TryFindContactBone(skeleton, left, out var heuristicIndex)) return heuristicIndex;
+
+        Debug.LogError($"{(left ? "Left" : "Right")}Toes not found in BVHAnimation");
+        return 0; // legacy TryFind left a default joint (index 0) on failure
     }
 
     private static void SmoothContacts(PoseSet.PoseFrameRange frames, ChannelHandle leftHandle, ChannelHandle rightHandle)

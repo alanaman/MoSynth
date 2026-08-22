@@ -29,8 +29,8 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 7316934117427060094}
   - {fileID: 5412649322244571505}
+  - {fileID: 991128425225179283}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &7492997299600051166
@@ -42,7 +42,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 5412649322244571505}
-  - component: {fileID: 1591772691315389555}
+  - component: {fileID: 2230587507150952856}
   m_Layer: 0
   m_Name: CharacterController
   m_TagString: Untagged
@@ -65,7 +65,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1474767785090834262}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1591772691315389555
+--- !u!114 &2230587507150952856
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -74,27 +74,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 7492997299600051166}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3d559543e917c6d44b4429eb838f6898, type: 3}
+  m_Script: {fileID: 11500000, guid: 8e582089b4f51e5479285db9b68042c6, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: MotionMatching::MotionMatching.SpringControlInput
-  motionSynthesizer: {fileID: 3010092521992473596}
-  trajectoryPositionFeatureName: FuturePosition
-  trajectoryDirectionFeatureName: FutureDirection
-  maxSpeed: 1
-  responsivenessPositions: 0.75
-  responsivenessDirections: 0.75
-  minimumVelocityClamp: 0.01
-  inputBigChangeThreshold: 0.5
-  positionAdjustmentHalflife: 0.1
-  rotationAdjustmentHalfLife: 0.1
-  posMaximumAdjustmentRatio: 0.1
-  rotMaximumAdjustmentRatio: 0.1
-  doClamping: 1
-  maxDistanceMmAndCharacterController: 0.1
-  debugCurrent: 1
-  debugPrediction: 1
-  debugClamping: 1
---- !u!1001 &7061716428555057813
+  m_EditorClassIdentifier: MotionField::MotionField.MotionFieldDirectionControlInput
+  synthesisComponent: {fileID: 1334754308173397597}
+  inputReference: {fileID: 0}
+--- !u!1001 &741839878109247352
 PrefabInstance:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -102,90 +87,82 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1474767785090834262}
     m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalPosition.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalPosition.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalRotation.w
       value: 1
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalRotation.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalRotation.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalRotation.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - target: {fileID: 919132149155446097, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       propertyPath: m_Name
-      value: Lafan_model_skeleton
+      value: walk1_subject1_retargeted
       objectReference: {fileID: 0}
-    - target: {fileID: 5866666021909216657, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
-      propertyPath: m_Controller
-      value: 
-      objectReference: {fileID: 9100000, guid: 1faf7fdcb656b3d458f0b9392ab8c218, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
     m_AddedComponents:
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 3010092521992473596}
-  m_SourcePrefab: {fileID: 100100000, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
---- !u!4 &7316934117427060094 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
-  m_PrefabInstance: {fileID: 7061716428555057813}
-  m_PrefabAsset: {fileID: 0}
---- !u!1 &7980704530815600580 stripped
+      addedObject: {fileID: 1334754308173397597}
+  m_SourcePrefab: {fileID: 100100000, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
+--- !u!1 &471438294998485545 stripped
 GameObject:
-  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 73fb47e260490e24f9765a5da70b7221, type: 3}
-  m_PrefabInstance: {fileID: 7061716428555057813}
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
+  m_PrefabInstance: {fileID: 741839878109247352}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &3010092521992473596
+--- !u!114 &1334754308173397597
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7980704530815600580}
+  m_GameObject: {fileID: 471438294998485545}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e2d9c7c526154d5088a5945bf9e64418, type: 3}
   m_Name: 
   m_EditorClassIdentifier: MotionMatching::MotionMatching.MotionSynthesisComponent
-  poseSkeleton: {fileID: 0}
+  characterRig:
+    root: {fileID: 0}
+    overrides: []
   synthesisFrameRate: 30
   stages:
   - rid: 6955135232227147966
   - rid: 5432756614727467120
-  - rid: 6955135243233787904
   rootPositionsMask: 1
   references:
     version: 2
@@ -194,7 +171,7 @@ MonoBehaviour:
       type: {class: MotionFieldStage, ns: MotionField, asm: MotionField}
       data:
         isEnabled: 1
-        config: {fileID: 0}
+        config: {fileID: 11400000, guid: 40c7052ed252c2847b0447d4a513ffc0, type: 2}
         startStateIndex: 700
         reloadPythonModules: 1
         policy: 0
@@ -205,8 +182,8 @@ MonoBehaviour:
         isEnabled: 0
         mmData: {fileID: 11400000, guid: 74ea31e3cadcaa345b7e1171ab5116a9, type: 2}
         startFrame: 0
-    - rid: 6955135243233787904
-      type: {class: RetargetingStage, ns: MotionMatching, asm: MotionMatching}
-      data:
-        isEnabled: 1
-        mmData: {fileID: 11400000, guid: 74ea31e3cadcaa345b7e1171ab5116a9, type: 2}
+--- !u!4 &991128425225179283 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: ab4475fe2e1fe874fbbac6e1fd6c7c5d, type: 3}
+  m_PrefabInstance: {fileID: 741839878109247352}
+  m_PrefabAsset: {fileID: 0}

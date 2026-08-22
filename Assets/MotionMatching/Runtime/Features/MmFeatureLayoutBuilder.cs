@@ -1,4 +1,5 @@
 using AnimationTools;
+using UnityEngine;
 
 namespace MotionMatching
 {
@@ -19,7 +20,7 @@ public static class FeatureSections
 /// </summary>
 public static class MmFeatureLayoutBuilder
 {
-    public static MmFeatureLayout Build(MotionMatchingData mmData, SkeletonAsset skeleton)
+    public static MmFeatureLayout Build(MotionMatchingData mmData, Skeleton skeleton)
     {
         var trajectoryChannels = mmData.trajectoryFeatures.ToArray();
         var poseChannels = mmData.poseFeatures.ToArray();
@@ -29,16 +30,25 @@ public static class MmFeatureLayoutBuilder
         for (var i = 0; i < trajectoryChannels.Length; i++)
         {
             var feature = trajectoryChannels[i];
-            boneIndices[i] = feature.simulationBone ? 0 : skeleton.FindJointIndexOrZero(feature.bone);
+            boneIndices[i] = feature.simulationBone ? 0 : FindJointIndexOrZero(skeleton, feature.bone, feature.name);
         }
 
         for (var i = 0; i < poseChannels.Length; i++)
         {
             var feature = poseChannels[i];
-            boneIndices[trajectoryChannels.Length + i] = skeleton.FindJointIndexOrZero(feature.bone);
+            boneIndices[trajectoryChannels.Length + i] = FindJointIndexOrZero(skeleton, feature.bone, feature.name);
         }
 
         return new MmFeatureLayout(trajectoryChannels, poseChannels, boneIndices);
+    }
+
+    private static int FindJointIndexOrZero(Skeleton skeleton, BoneTransform bone, string featureName)
+    {
+        var index = bone?.ResolveIndex(skeleton) ?? -1;
+        if (index >= 0) return index;
+
+        Debug.LogWarning($"MmFeatureLayoutBuilder: feature \"{featureName}\" has no resolvable bone; falling back to bone index 0.");
+        return 0;
     }
 }
 }

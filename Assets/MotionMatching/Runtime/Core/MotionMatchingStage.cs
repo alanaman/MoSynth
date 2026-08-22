@@ -86,7 +86,7 @@ public class MotionMatchingStage : MoSynthStage
         controlInput.OnHighInputChange += () => { _searchTimeLeft = 0; };
         
         Assert.IsTrue(
-            motionSynthesisComponent.SkeletonTransforms.Length == _poseSet.SkeletonAsset.BoneCount,
+            motionSynthesisComponent.SkeletonTransforms.Length == _poseSet.Skeleton.BoneCount,
             "Number of Skeleton transforms does not match skeleton bones " +
             "in MotionMatchingData.");
         
@@ -117,10 +117,10 @@ public class MotionMatchingStage : MoSynthStage
         mmSearch.Initialize(featureSet, _tagMask, _featureWeights);
     }
 
-    public override SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton)
+    public override Skeleton GetSkeleton(Skeleton inSkeleton)
     {
         _poseSet = mmData.GetOrImportPoseSet();
-        return _poseSet.SkeletonAsset;
+        return _poseSet.Skeleton;
     }
     
     public override bool Apply(PoseBuffer pose, float deltaTime)

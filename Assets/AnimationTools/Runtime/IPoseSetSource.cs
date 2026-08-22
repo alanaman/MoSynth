@@ -1,6 +1,4 @@
-using System.Collections.Generic;
 using Unity.Mathematics;
-using UnityEngine;
 
 namespace AnimationTools
 {
@@ -9,7 +7,7 @@ namespace AnimationTools
 ///
 /// <see cref="PoseSet"/>, <see cref="PoseExtractor"/> and <see cref="PoseSerializer"/> used to take
 /// a <see cref="MotionMatchingData"/> directly, which meant anything wanting a pose database also
-/// had to be a full Motion Matching asset -- trajectory features, pose features, T-Pose, mecanim
+/// had to be a full Motion Matching asset -- trajectory features, pose features, T-Pose, skeleton
 /// map and all. Only a handful of those members actually reach the pose path, and this interface is
 /// exactly that handful, so a consumer such as MotionField's config can supply a database without
 /// dragging in the feature-set machinery it never uses.
@@ -28,14 +26,17 @@ public interface IPoseSetSource
     /// <summary>Foot speed below which a toe counts as planted.</summary>
     float ContactVelocityThreshold { get; }
 
-    /// <summary>Maps animation channel names onto Mecanim bones. Pose extraction needs the toes.</summary>
-    IReadOnlyList<JointToMecanim> AnimationChannelToMecanim { get; }
+    /// <summary>
+    /// Bone whose velocity drives left foot-contact detection during extraction; null/empty
+    /// picks by name heuristic.
+    /// </summary>
+    string LeftContactBoneName { get; }
 
     /// <summary>
-    /// Maps an animation channel name onto a Mecanim bone. Pose extraction needs this to locate the
-    /// toes for contact detection.
+    /// Bone whose velocity drives right foot-contact detection during extraction; null/empty
+    /// picks by name heuristic.
     /// </summary>
-    bool TryGetMecanimBone(string jointName, out HumanBodyBones bone);
+    string RightContactBoneName { get; }
 
     /// <summary>Directory the serialized database lives in. Created if missing (editor only).</summary>
     string GetAssetPath();

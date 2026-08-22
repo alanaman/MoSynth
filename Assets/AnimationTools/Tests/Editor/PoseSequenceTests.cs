@@ -11,7 +11,7 @@ public class PoseSequenceTests
 {
     private const int FrameCount = 3;
 
-    private SkeletonAsset skeleton;
+    private Skeleton skeleton;
     private PoseLayout layout;
 
     [SetUp]
@@ -19,13 +19,6 @@ public class PoseSequenceTests
     {
         skeleton = TestSkeletons.CreateChain3();
         layout = PoseLayout.CreateFullPose(skeleton, false, false);
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        if (skeleton != null) UnityEngine.Object.DestroyImmediate(skeleton);
-        skeleton = null;
     }
 
     [Test]
@@ -101,8 +94,9 @@ public class PoseSequenceTests
             for (var i = 0; i < skeleton.BoneCount; i++)
             {
                 var bone = skeleton.GetBone(i);
-                frame0.SetFloat3(layout.BindChannel(new PositionChannel(bone.id)), bone.restLocalPosition);
-                frame0.SetQuaternion(layout.BindChannel(new RotationChannel(bone.id)), quaternion.identity);
+                var boneId = skeleton.GetBoneId(i);
+                frame0.SetFloat3(layout.BindChannel(new PositionChannel(boneId)), bone.restLocalPosition);
+                frame0.SetQuaternion(layout.BindChannel(new RotationChannel(boneId)), quaternion.identity);
             }
 
             var skeletonData = skeleton.GetSkeletonData();

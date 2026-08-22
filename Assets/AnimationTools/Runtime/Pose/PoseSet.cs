@@ -10,7 +10,7 @@ namespace AnimationTools
 /// <summary>
 /// Stores the full pose representation of all poses for Motion Matching.
 /// Poses are stored as flat <see cref="PoseBuffer"/> frames in a single
-/// <see cref="PoseSequence"/> over a <see cref="AnimationTools.SkeletonAsset"/> whose bone
+/// <see cref="PoseSequence"/> over a <see cref="AnimationTools.Skeleton"/> whose bone
 /// index 0 is the SimulationBone. Read frames with <see cref="GetPoseBuffer"/>; write new
 /// ones through <see cref="BeginClip"/>/<see cref="EndClip"/> or <see cref="AppendRawFrames"/>.
 /// </summary>
@@ -23,7 +23,7 @@ public class PoseSet
     public int NumberTags => _tags.Count;
 
     /// <summary>The pose skeleton: SimulationBone at index 0, bone ids = index + 1.</summary>
-    public SkeletonAsset SkeletonAsset => _skeletonAsset;
+    public Skeleton Skeleton => _skeleton;
 
     /// <summary>Layout of the buffers returned by <see cref="GetPoseBuffer"/>.</summary>
     public PoseLayout PoseLayout => _layout;
@@ -37,7 +37,7 @@ public class PoseSet
     private readonly List<AnimationTag> _tags = new();
     private readonly Dictionary<string, int> _tagNameToIndex = new();
 
-    private SkeletonAsset _skeletonAsset;
+    private Skeleton _skeleton;
     private PoseLayout _layout;
     // Capacity view over Domain-backed storage; only the first _poseCount frames hold poses.
     private PoseSequence _poseStorage;
@@ -48,36 +48,9 @@ public class PoseSet
     /// <summary>
     /// Set skeleton from BVH. Adds simulation bone as root joint
     /// </summary>
-    public void SetSkeletonFromBvh(SkeletonAsset bvhSkeleton)
+    public void SetSkeletonFromBvh(Skeleton bvhSkeleton)
     {
-        var bones = new List<Bone>(bvhSkeleton.BoneCount + 1)
-        {
-            new()
-            {
-                id = 1,
-                name = "SimulationBone",
-                parentIndex = -1,
-                restLocalPosition = float3.zero,
-                restLocalRotation = quaternion.identity,
-                humanBone = HumanBodyBones.LastBone
-            }
-        };
-        // Add bones, shifting indices by 1 so SimulationBone is 0; the BVH root hangs off it.
-        for (var i = 0; i < bvhSkeleton.BoneCount; ++i)
-        {
-            var bone = bvhSkeleton.GetBone(i);
-            bones.Add(new Bone
-            {
-                id = i + 2,
-                name = bone.name,
-                parentIndex = i == 0 ? 0 : bone.parentIndex + 1,
-                restLocalPosition = bone.restLocalPosition,
-                restLocalRotation = quaternion.identity,
-                humanBone = bone.humanBone
-            });
-        }
-
-        SetSkeleton(CreateRuntimeSkeletonAsset(bones));
+        SetSkeleton(bvhSkeleton.WithRootPrepended("SimulationBone"));
     }
 
     /// <summary>
@@ -85,31 +58,16 @@ public class PoseSet
     /// the layout over it. Pose storage starts empty: every real caller sets the
     /// skeleton exactly once, before adding any pose.
     /// </summary>
-    public void SetSkeleton(SkeletonAsset skeletonAsset)
+    public void SetSkeleton(Skeleton skeleton)
     {
         Debug.Assert(_poseCount == 0, "Setting the skeleton discards previously stored poses");
-        _skeletonAsset = skeletonAsset;
+        _skeleton = skeleton;
         RebuildLayout();
-    }
-
-    /// <summary>
-    /// Creates an in-memory <see cref="AnimationTools.SkeletonAsset"/> for runtime use.
-    /// HideAndDontSave + Domain-backed pose storage share one lifetime model: both live until
-    /// domain unload. <see cref="Dispose"/> deliberately leaves the asset alone because pose
-    /// sets are shared (see MotionMatchingData.GetOrImportPoseSet).
-    /// </summary>
-    public static SkeletonAsset CreateRuntimeSkeletonAsset(List<Bone> bones, string name = "PoseSetSkeleton")
-    {
-        var asset = ScriptableObject.CreateInstance<SkeletonAsset>();
-        asset.name = name;
-        asset.hideFlags = HideFlags.HideAndDontSave;
-        asset.SetBones(bones, bones.Count + 1);
-        return asset;
     }
 
     private void RebuildLayout()
     {
-        _layout = PoseLayoutBuilder.Build(_skeletonAsset, out var contacts);
+        _layout = PoseLayoutBuilder.Build(_skeleton, out var contacts);
         _leftFootContactHandle = contacts.Left;
         _rightFootContactHandle = contacts.Right;
 
@@ -145,7 +103,7 @@ public class PoseSet
     public PoseFrameRange BeginClip(int frameCount, float frameTime)
     {
         // Check if the skeleton and frameTime are compatible
-        Debug.Assert(_skeletonAsset != null, "Skeleton should be set first. Use SetSkeleton(...)");
+        Debug.Assert(_skeleton != null, "Skeleton should be set first. Use SetSkeleton(...)");
         if (FrameTime == -1.0f) FrameTime = frameTime;
         Debug.Assert(math.abs(FrameTime - frameTime) < 0.001f, "Frame time should be the same for all clips");
 
@@ -172,7 +130,7 @@ public class PoseSet
     /// </summary>
     public PoseFrameRange AppendRawFrames(int frameCount)
     {
-        Debug.Assert(_skeletonAsset != null, "Skeleton should be set first. Use SetSkeleton(...)");
+        Debug.Assert(_skeleton != null, "Skeleton should be set first. Use SetSkeleton(...)");
         EnsureCapacity(_poseCount + frameCount);
         var range = new PoseFrameRange(this, _poseCount, frameCount);
         _poseCount += frameCount;
@@ -316,7 +274,7 @@ public class PoseSet
 
     /// <summary>
     /// Returns the position of each joint in world space after applying FK using the pose.
-    /// worldJoints has size SkeletonAsset.BoneCount
+    /// worldJoints has size Skeleton.BoneCount
     /// </summary>
     public NativeArray<float3> GetWorldPositions(PoseBuffer pose, quaternion inverseRotAnimationSpace,
         float3 posAnimationSpace, quaternion rotWorld, float3 posWorld)
@@ -339,8 +297,8 @@ public class PoseSet
     {
         var positions = pose.Positions;
         var rotations = pose.Rotations;
-        var boneCount = _skeletonAsset.BoneCount;
-        var skeletonData = _skeletonAsset.GetSkeletonData();
+        var boneCount = _skeleton.BoneCount;
+        var skeletonData = _skeleton.GetSkeletonData();
         Span<Matrix4x4> localToWorldRes = stackalloc Matrix4x4[boneCount];
         localToWorldRes[0] = simulationBoneTransform;
         for (int i = 1; i < boneCount; i++)
@@ -390,8 +348,8 @@ public class PoseSet
 
     public void Dispose()
     {
-        // Pose storage and the mirror SkeletonAsset are Domain-lifetime by design: pose sets
-        // are shared (MotionMatchingData caches one), so Dispose only releases the tags.
+        // Pose storage is Domain-lifetime by design: pose sets are shared (MotionMatchingData
+        // caches one), so Dispose only releases the tags.
         if (_tags != null)
         {
             foreach (AnimationTag tag in _tags)

@@ -34,19 +34,12 @@ public class PoseLayoutTests
         public override int GetContentHash() => _id;
     }
 
-    private SkeletonAsset skeleton;
+    private Skeleton skeleton;
 
     [SetUp]
     public void SetUp()
     {
         skeleton = TestSkeletons.CreateChain3();
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        if (skeleton != null) UnityEngine.Object.DestroyImmediate(skeleton);
-        skeleton = null;
     }
 
     // Positions: root, head (2). Rotations: root, spine, head, Quaternion (3). Scale: spine (1).
@@ -236,7 +229,7 @@ public class PoseLayoutTests
 
         for (var i = 0; i < skeleton.BoneCount; i++)
         {
-            var expectedBoneId = skeleton.GetBone(i).id;
+            var expectedBoneId = skeleton.GetBoneId(i);
             Assert.AreEqual(expectedBoneId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Position, i)).BoneId);
             Assert.AreEqual(expectedBoneId, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Rotation, i)).BoneId);
         }
@@ -250,7 +243,7 @@ public class PoseLayoutTests
         Assert.AreEqual(skeleton.BoneCount, layout.Data.VelocityCount);
         Assert.AreEqual(0, layout.Data.AngularVelocityCount);
         for (var i = 0; i < skeleton.BoneCount; i++)
-            Assert.AreEqual(skeleton.GetBone(i).id, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Velocity, i)).BoneId);
+            Assert.AreEqual(skeleton.GetBoneId(i), ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.Velocity, i)).BoneId);
     }
 
     [Test]
@@ -261,7 +254,7 @@ public class PoseLayoutTests
         Assert.AreEqual(0, layout.Data.VelocityCount);
         Assert.AreEqual(skeleton.BoneCount, layout.Data.AngularVelocityCount);
         for (var i = 0; i < skeleton.BoneCount; i++)
-            Assert.AreEqual(skeleton.GetBone(i).id, ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.AngularVelocity, i)).BoneId);
+            Assert.AreEqual(skeleton.GetBoneId(i), ((BoneChannelDescriptor)layout.GetChannel(ChannelSections.AngularVelocity, i)).BoneId);
     }
 
     [Test]

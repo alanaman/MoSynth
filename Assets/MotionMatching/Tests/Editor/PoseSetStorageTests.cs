@@ -1,9 +1,12 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
 using AnimationTools;
 using NUnit.Framework;
 using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace MotionMatching.Tests
 {
@@ -11,9 +14,9 @@ public class PoseSetStorageTests
 {
     private const float FrameTime = 1f / 30f;
 
-    private static PoseSet BuildPoseSet(out SkeletonAsset skeleton)
+    private static PoseSet BuildPoseSet(out Skeleton skeleton)
     {
-        skeleton = MmTestData.BuildSkeletonAsset();
+        skeleton = MmTestData.BuildSkeleton();
         var poseSet = new PoseSet();
         poseSet.SetSkeleton(skeleton);
         return poseSet;
@@ -177,39 +180,30 @@ public class PoseSetStorageTests
     public void SetSkeletonFromBvh_PrependsSimulationBone()
     {
         // BVH-style skeleton: the mm test skeleton minus its SimulationBone, indices unshifted.
-        var bvhBones = new List<Bone>
+        var bvhBones = new List<SkeletonBoneData>
         {
-            new() { id = 1, name = "Hips", parentIndex = -1, restLocalPosition = new float3(0f, 1f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Hips },
-            new() { id = 2, name = "Spine", parentIndex = 0, restLocalPosition = new float3(0f, 0.2f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.Spine },
-            new() { id = 3, name = "LeftFoot", parentIndex = 0, restLocalPosition = new float3(0.2f, -0.9f, 0f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftFoot },
-            new() { id = 4, name = "LeftToe", parentIndex = 2, restLocalPosition = new float3(0f, -0.1f, 0.15f), restLocalRotation = quaternion.identity, humanBone = HumanBodyBones.LeftToes }
+            new() { name = "Hips", parentIndex = -1, restLocalPosition = new float3(0f, 1f, 0f), restLocalRotation = quaternion.identity },
+            new() { name = "Spine", parentIndex = 0, restLocalPosition = new float3(0f, 0.2f, 0f), restLocalRotation = quaternion.identity },
+            new() { name = "LeftFoot", parentIndex = 0, restLocalPosition = new float3(0.2f, -0.9f, 0f), restLocalRotation = quaternion.identity },
+            new() { name = "LeftToe", parentIndex = 2, restLocalPosition = new float3(0f, -0.1f, 0.15f), restLocalRotation = quaternion.identity }
         };
-        var bvhAsset = ScriptableObject.CreateInstance<SkeletonAsset>();
-        try
-        {
-            bvhAsset.SetBones(bvhBones, bvhBones.Count + 1);
+        var bvhSkeleton = new Skeleton(bvhBones, "BvhSkeleton");
 
-            var poseSet = new PoseSet();
-            poseSet.SetSkeletonFromBvh(bvhAsset);
-            var asset = poseSet.SkeletonAsset;
-            var expected = MmTestData.BuildSkeletonAsset();
+        var poseSet = new PoseSet();
+        poseSet.SetSkeletonFromBvh(bvhSkeleton);
+        var skeleton = poseSet.Skeleton;
+        var expected = MmTestData.BuildSkeleton();
 
-            Assert.IsNotNull(asset);
-            Assert.AreEqual(expected.BoneCount, asset.BoneCount);
-            for (var i = 0; i < asset.BoneCount; i++)
-            {
-                var bone = asset.GetBone(i);
-                var expectedBone = expected.GetBone(i);
-                Assert.AreEqual(expectedBone.name, bone.name);
-                Assert.AreEqual(i == 0 ? -1 : expectedBone.parentIndex, bone.parentIndex);
-                Assert.AreEqual((Vector3)expectedBone.restLocalPosition, (Vector3)bone.restLocalPosition);
-                Assert.AreEqual(expectedBone.humanBone, bone.humanBone);
-                Assert.AreEqual(quaternion.identity.value, bone.restLocalRotation.value);
-            }
-        }
-        finally
+        Assert.IsNotNull(skeleton);
+        Assert.AreEqual(expected.BoneCount, skeleton.BoneCount);
+        for (var i = 0; i < skeleton.BoneCount; i++)
         {
-            Object.DestroyImmediate(bvhAsset);
+            var bone = skeleton.GetBone(i);
+            var expectedBone = expected.GetBone(i);
+            Assert.AreEqual(expectedBone.name, bone.name);
+            Assert.AreEqual(expectedBone.parentIndex, bone.parentIndex);
+            Assert.AreEqual((Vector3)expectedBone.restLocalPosition, (Vector3)bone.restLocalPosition);
+            Assert.AreEqual(quaternion.identity.value, bone.restLocalRotation.value);
         }
     }
 
@@ -239,7 +233,7 @@ public class PoseSetStorageTests
     [Test]
     public void Layout_SharedBetweenBuilderCalls()
     {
-        var skeleton = MmTestData.BuildSkeletonAsset();
+        var skeleton = MmTestData.BuildSkeleton();
 
         var first = PoseLayoutBuilder.Build(skeleton, out _);
         var second = PoseLayoutBuilder.Build(skeleton, out _);
@@ -248,6 +242,76 @@ public class PoseSetStorageTests
         var poseSet = new PoseSet();
         poseSet.SetSkeleton(skeleton);
         Assert.AreSame(first, poseSet.PoseLayout);
+    }
+
+    [Test]
+    public void Serialize_ThenTryDeserializeSkeleton_RoundTripsRestRotations()
+    {
+        var bones = new List<SkeletonBoneData>
+        {
+            new() { name = "root", parentIndex = -1, restLocalPosition = float3.zero, restLocalRotation = quaternion.identity },
+            new()
+            {
+                name = "spine", parentIndex = 0, restLocalPosition = new float3(0f, 1f, 0f),
+                restLocalRotation = quaternion.AxisAngle(math.normalize(new float3(0.3f, 1f, -0.2f)), 1.1f)
+            }
+        };
+        var skeleton = new Skeleton(bones, "RotationRoundTrip");
+
+        var poseSet = new PoseSet();
+        poseSet.SetSkeleton(skeleton);
+
+        var tempDir = Path.Combine(Application.temporaryCachePath,
+            "PoseSetStorageTests_" + Path.GetRandomFileName());
+        const string fileName = "RestRotationRoundTrip";
+
+        try
+        {
+            new PoseSerializer().Serialize(poseSet, tempDir, fileName);
+
+            Assert.IsTrue(PoseSerializer.TryDeserializeSkeleton(tempDir, fileName, out var loaded));
+            Assert.AreEqual(skeleton.BoneCount, loaded.BoneCount);
+
+            for (var i = 0; i < skeleton.BoneCount; i++)
+            {
+                var expectedRotation = skeleton.GetBone(i).restLocalRotation.value;
+                var actualRotation = loaded.GetBone(i).restLocalRotation.value;
+                // q and -q represent the same rotation; align hemispheres before comparing.
+                if (math.dot(expectedRotation, actualRotation) < 0f) actualRotation = -actualRotation;
+
+                Assert.AreEqual(expectedRotation.x, actualRotation.x, 1e-6f);
+                Assert.AreEqual(expectedRotation.y, actualRotation.y, 1e-6f);
+                Assert.AreEqual(expectedRotation.z, actualRotation.z, 1e-6f);
+                Assert.AreEqual(expectedRotation.w, actualRotation.w, 1e-6f);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            poseSet.Dispose();
+        }
+    }
+
+    [Test]
+    public void TryDeserializeSkeleton_WrongMagic_ReturnsFalseAndLogsError()
+    {
+        var tempDir = Path.Combine(Application.temporaryCachePath,
+            "PoseSetStorageTests_" + Path.GetRandomFileName());
+        const string fileName = "NotASkeleton";
+
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            File.WriteAllBytes(Path.Combine(tempDir, fileName + ".mmskeleton"), new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 });
+
+            LogAssert.Expect(LogType.Error, new Regex("old or unknown format"));
+            Assert.IsFalse(PoseSerializer.TryDeserializeSkeleton(tempDir, fileName, out var skeleton));
+            Assert.IsNull(skeleton);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
     }
 }
 }

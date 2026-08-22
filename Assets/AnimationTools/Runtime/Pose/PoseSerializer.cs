@@ -28,7 +28,10 @@ public class PoseSerializer
         {
             using (var writer = new BinaryWriter(stream, Encoding.UTF8))
             {
-                var skeleton = poseSet.SkeletonAsset;
+                var skeleton = poseSet.Skeleton;
+                // Magic + format version
+                writer.Write(new byte[] { (byte)'M', (byte)'M', (byte)'S', (byte)'K' });
+                writer.Write(2u);
                 // Write Number Joints
                 writer.Write((uint)skeleton.BoneCount);
                 // Write Joints
@@ -36,10 +39,9 @@ public class PoseSerializer
                 {
                     var bone = skeleton.GetBone(i);
                     writer.Write(bone.name);
-                    writer.Write((uint)i);
                     writer.Write((uint)bone.parentIndex); // root's -1 round-trips as 0xFFFFFFFF
                     WriteFloat3(writer, bone.restLocalPosition);
-                    writer.Write((uint)bone.humanBone);
+                    WriteQuaternion(writer, bone.restLocalRotation);
                 }
             }
         }
@@ -62,7 +64,7 @@ public class PoseSerializer
 
                 // Serialize Number Poses & Number Joints & Number Tags
                 writer.Write((uint)poseSet.NumberPoses);
-                writer.Write((uint)poseSet.SkeletonAsset.BoneCount);
+                writer.Write((uint)poseSet.Skeleton.BoneCount);
                 writer.Write((uint)poseSet.NumberTags);
                 // Serialize Poses
                 for (int i = 0; i < poseSet.NumberPoses; ++i)
@@ -94,17 +96,17 @@ public class PoseSerializer
     }
 
     /// <summary>
-    /// Reads only the .mmskeleton file into an in-memory <see cref="SkeletonAsset"/>, without
-    /// touching the far larger .mmpose alongside it. Returns false if the file is not there or
-    /// holds no joints. The bone list mirrors the file's joint order (index i, id i + 1); joint
-    /// rest rotations are identity since the format stores offsets only.
+    /// Reads only the .mmskeleton file into an in-memory <see cref="AnimationTools.Skeleton"/>,
+    /// without touching the far larger .mmpose alongside it. Returns false if the file is not
+    /// there, holds no joints, or is not a recognized MMSK v2 file. The bone list mirrors the
+    /// file's joint order (index i, id i + 1) including rest offsets and rotations.
     /// </summary>
     /// <remarks>
     /// Split out of <see cref="Deserialize"/> for callers that want the joint hierarchy on its own
     /// -- an inspector listing bone names, for instance, which would otherwise pay for megabytes of
     /// pose data on every repaint.
     /// </remarks>
-    public static bool TryDeserializeSkeleton(string path, string fileName, out SkeletonAsset skeleton)
+    public static bool TryDeserializeSkeleton(string path, string fileName, out Skeleton skeleton)
     {
         skeleton = null;
 
@@ -117,30 +119,42 @@ public class PoseSerializer
         {
             using (var reader = new BinaryReader(ms, Encoding.UTF8))
             {
+                var magic = reader.ReadBytes(4);
+                if (magic.Length != 4 || magic[0] != (byte)'M' || magic[1] != (byte)'M' ||
+                    magic[2] != (byte)'S' || magic[3] != (byte)'K')
+                {
+                    Debug.LogError($"\"{fileName}.mmskeleton\" is an old or unknown format (expected MMSK v2) — regenerate the databases from the MotionMatchingData editor.");
+                    return false;
+                }
+
+                uint version = reader.ReadUInt32();
+                if (version != 2)
+                {
+                    Debug.LogError($"\"{fileName}.mmskeleton\" is an old or unknown format (expected MMSK v2) — regenerate the databases from the MotionMatchingData editor.");
+                    return false;
+                }
+
                 uint nJoints = reader.ReadUInt32();
                 if (nJoints == 0)
                     return false;
 
-                var bones = new List<Bone>((int)nJoints);
+                var bones = new List<SkeletonBoneData>((int)nJoints);
                 for (int i = 0; i < nJoints; i++)
                 {
                     string jointName = reader.ReadString();
-                    reader.ReadUInt32(); // joint index; always equals the list position
                     uint jointParentIndex = reader.ReadUInt32(); // root's 0xFFFFFFFF -> -1
                     float3 jointLocalOffset = ReadFloat3(reader);
-                    HumanBodyBones jointType = (HumanBodyBones)reader.ReadUInt32();
-                    bones.Add(new Bone
+                    quaternion jointLocalRotation = ReadQuaternion(reader);
+                    bones.Add(new SkeletonBoneData
                     {
-                        id = i + 1,
                         name = jointName,
                         parentIndex = (int)jointParentIndex,
                         restLocalPosition = jointLocalOffset,
-                        restLocalRotation = quaternion.identity,
-                        humanBone = jointType
+                        restLocalRotation = jointLocalRotation
                     });
                 }
 
-                skeleton = PoseSet.CreateRuntimeSkeletonAsset(bones, fileName + "_Skeleton");
+                skeleton = new Skeleton(bones, fileName + "_Skeleton");
             }
         }
 
@@ -159,7 +173,7 @@ public class PoseSerializer
         // --------------------
         // Read Skeleton File
         // --------------------
-        if (!TryDeserializeSkeleton(path, fileName, out SkeletonAsset skeleton))
+        if (!TryDeserializeSkeleton(path, fileName, out Skeleton skeleton))
             return false;
 
         poseSet.SetSkeleton(skeleton);

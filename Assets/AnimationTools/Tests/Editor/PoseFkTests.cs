@@ -10,7 +10,7 @@ public class PoseFkTests
 {
     private const float Tolerance = 1e-4f;
 
-    private SkeletonAsset skeleton;
+    private Skeleton skeleton;
     private PoseLayout layout;
     private SkeletonData skeletonData;
     private PoseBuffer buffer;
@@ -28,8 +28,9 @@ public class PoseFkTests
         for (var i = 0; i < skeleton.BoneCount; i++)
         {
             var bone = skeleton.GetBone(i);
-            buffer.SetFloat3(layout.BindChannel(new PositionChannel(bone.id)), bone.restLocalPosition);
-            buffer.SetQuaternion(layout.BindChannel(new RotationChannel(bone.id)), quaternion.identity);
+            var boneId = skeleton.GetBoneId(i);
+            buffer.SetFloat3(layout.BindChannel(new PositionChannel(boneId)), bone.restLocalPosition);
+            buffer.SetQuaternion(layout.BindChannel(new RotationChannel(boneId)), quaternion.identity);
         }
     }
 
@@ -37,11 +38,9 @@ public class PoseFkTests
     public void TearDown()
     {
         buffer.Dispose();
-        if (skeleton != null) UnityEngine.Object.DestroyImmediate(skeleton);
-        skeleton = null;
     }
 
-    private int BoneId(int index) => skeleton.GetBone(index).id;
+    private int BoneId(int index) => skeleton.GetBoneId(index);
 
     private static void AssertApprox(float3 expected, float3 actual)
     {

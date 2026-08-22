@@ -34,28 +34,34 @@ def _read_csharp_string(f) -> str:
 
 def read_skeleton(filepath: str) -> Skeleton:
     """
-    Reads the .mmskeleton file.
+    Reads the .mmskeleton file (MMSK v2 format).
     Note: Adjust the instantiation to match your actual Python Skeleton class definition.
     """
     # Initialize your Skeleton object here
     skeleton_data = []
 
     with open(filepath, 'rb') as f:
+        magic = f.read(4)
+        version = struct.unpack('<I', f.read(4))[0]
+        if magic != b'MMSK' or version != 2:
+            raise ValueError(
+                "old or unknown .mmskeleton format (expected MMSK v2) — "
+                "regenerate the motion matching databases from the Unity editor"
+            )
+
         n_joints = struct.unpack('<I', f.read(4))[0]
 
         for _ in range(n_joints):
             name = _read_csharp_string(f)
-            joint_index = struct.unpack('<I', f.read(4))[0]
             parent_index = struct.unpack('<i', f.read(4))[0]
             local_offset = struct.unpack('<3f', f.read(12))  # x, y, z
-            joint_type = struct.unpack('<I', f.read(4))[0]
+            rest_rotation = struct.unpack('<4f', f.read(16))  # x, y, z, w
 
             skeleton_data.append({
                 'name': name,
-                'index': joint_index,
                 'parent_index': parent_index,
                 'local_offset': local_offset,
-                'type': joint_type
+                'rest_rotation': rest_rotation
             })
     joints = [Joint(datum['name'], datum['local_offset']) for datum in skeleton_data]
     for joint_idx, joint in enumerate(joints):

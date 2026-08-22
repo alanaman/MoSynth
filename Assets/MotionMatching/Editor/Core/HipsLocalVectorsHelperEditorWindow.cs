@@ -63,20 +63,12 @@ public class HipsLocalVectorsHelperEditorWindow : EditorWindow
         var rawRotations = rawFrame0.Rotations;
 
         // Create skeleton
-        Skeleton = new Transform[skeletonAsset.BoneCount];
+        Skeleton = SkeletonRigBuilder.CreateHierarchyWithMap(skeletonAsset);
         for (var j = 0; j < Skeleton.Length; j++)
         {
-            // Joints
             var bone = skeletonAsset.GetBone(j);
-            var t = (new GameObject()).transform;
-            t.name = bone.name;
-            if (j > 0)
-            {
-                t.SetParent(Skeleton[bone.parentIndex], false);
-            }
-
-            t.SetLocalPositionAndRotation(bone.restLocalPosition, rawRotations[j]);
-            Skeleton[j] = t;
+            var t = Skeleton[j];
+            t.localRotation = rawRotations[j];
             // Visual
             var visual = (new GameObject()).transform;
             visual.name = "Visual";

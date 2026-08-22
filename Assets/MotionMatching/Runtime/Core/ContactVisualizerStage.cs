@@ -8,94 +8,75 @@ using UnityEngine;
 namespace MotionMatching
 {
 /// <summary>
-/// Read-only pass-through stage that estimates foot-style contact from a remapped
-/// <see cref="PoseBuffer"/> and draws it as a gizmo-free debug marker. Exists to prove the
-/// AnimationTools pose-remap path end to end; it never mutates the pose.
+/// Read-only pass-through stage that estimates foot-style contact for a set of bones on the
+/// pipeline skeleton and draws it as a gizmo-free debug marker. Never mutates the pose.
 /// </summary>
 [Serializable]
 public class ContactVisualizerStage : MoSynthStage
 {
-    [SerializeField] private SkeletonAsset skeleton;
-    [BoneFrom(nameof(skeleton))] [SerializeField] private List<BoneReference> contactBones = new();
+    [SerializeField] private List<BoneTransform> contactBones = new();
     [SerializeField] private float contactVelocityThreshold = 0.15f;
     [SerializeField] private float markerSize = 0.08f;
 
     private MotionSynthesisComponent _component;
-    private SkeletonAsset _effectiveSkeleton;
-    private SkeletonMap _map;
+    private Skeleton _skeleton;
     private PoseBuffer _buffer;
     private SkeletonData _skeletonData;
     private bool _inert;
 
     private ChannelHandle[] _contactHandles;
-    private int[] _contactAssetBoneIndices;
-    private int[] _contactMmJointIndices;
+    private int[] _contactBoneIndices;
 
-    public override SkeletonAsset GetSkeleton(SkeletonAsset inSkeleton) => inSkeleton;
+    public override Skeleton GetSkeleton(Skeleton inSkeleton) => inSkeleton;
 
     public override void Init(MotionSynthesisComponent motionSynthesisComponent)
     {
         _component = motionSynthesisComponent;
+        _skeleton = motionSynthesisComponent.Skeleton;
 
-        var effectiveSkeleton = skeleton != null ? skeleton : motionSynthesisComponent.PoseSkeleton;
-        if (effectiveSkeleton == null)
+        if (_skeleton == null)
         {
-            Debug.LogWarning($"[ContactVisualizerStage] \"{motionSynthesisComponent.name}\": no skeleton asset assigned (neither the stage's own nor the component's PoseSkeleton). Disabling.");
+            Debug.LogWarning($"[ContactVisualizerStage] \"{motionSynthesisComponent.name}\": no pipeline skeleton available. Disabling.");
             _inert = true;
             return;
         }
 
-        var map = effectiveSkeleton == motionSynthesisComponent.PoseSkeleton && motionSynthesisComponent.PoseSkeletonMap != null
-            ? motionSynthesisComponent.PoseSkeletonMap
-            : SkeletonMap.Build(motionSynthesisComponent.Skeleton, effectiveSkeleton);
-
-        if (map == null)
-        {
-            Debug.LogWarning($"[ContactVisualizerStage] \"{motionSynthesisComponent.name}\": could not map the MotionMatching skeleton onto \"{effectiveSkeleton.name}\". Disabling.");
-            _inert = true;
-            return;
-        }
+        _skeletonData = _skeleton.GetSkeletonData();
 
         var extraChannels = new List<ChannelDescriptor>();
         foreach (var boneRef in contactBones)
         {
-            if (!boneRef.IsSet) continue;
-            extraChannels.Add(new BoolChannel(boneRef.BoneId, ChannelUsage.Contact));
+            if (boneRef == null || !boneRef.IsSet) continue;
+            var boneIndex = boneRef.ResolveIndex(_skeleton);
+            if (boneIndex < 0) continue;
+            extraChannels.Add(new BoolChannel(_skeleton.GetBoneId(boneIndex), ChannelUsage.Contact));
         }
 
-        _effectiveSkeleton = effectiveSkeleton;
-        _map = map;
-
-        var channels = PoseLayoutBuilder.BuildFullPoseChannels(effectiveSkeleton);
+        var channels = PoseLayoutBuilder.BuildFullPoseChannels(_skeleton);
         channels.AddRange(extraChannels);
-        var layout = PoseLayout.Build(effectiveSkeleton, channels);
+        var layout = PoseLayout.Build(_skeleton, channels);
         _buffer = PoseBuffer.Allocate(layout, Allocator.Persistent);
-        _skeletonData = effectiveSkeleton.GetSkeletonData();
 
         var handles = new List<ChannelHandle>();
-        var assetIndices = new List<int>();
-        var mmJointIndices = new List<int>();
+        var boneIndices = new List<int>();
 
         foreach (var boneRef in contactBones)
         {
-            if (!boneRef.IsSet) continue;
+            if (boneRef == null || !boneRef.IsSet) continue;
 
-            var assetIndex = boneRef.ResolveIndex(effectiveSkeleton);
-            var mmJointIndex = assetIndex >= 0 ? map.AssetToMm[assetIndex] : -1;
-            if (assetIndex < 0 || mmJointIndex < 0)
+            var boneIndex = boneRef.ResolveIndex(_skeleton);
+            if (boneIndex < 0)
             {
-                Debug.LogWarning($"[ContactVisualizerStage] \"{motionSynthesisComponent.name}\": contact bone \"{boneRef.CachedName}\" has no corresponding MotionMatching joint; skipping.");
+                Debug.LogWarning($"[ContactVisualizerStage] \"{motionSynthesisComponent.name}\": contact bone \"{boneRef.BoneName}\" not found in the pipeline skeleton; skipping.");
                 continue;
             }
 
-            handles.Add(layout.BindChannel(new BoolChannel(boneRef.BoneId, ChannelUsage.Contact)));
-            assetIndices.Add(assetIndex);
-            mmJointIndices.Add(mmJointIndex);
+            handles.Add(layout.BindChannel(new BoolChannel(_skeleton.GetBoneId(boneIndex), ChannelUsage.Contact)));
+            boneIndices.Add(boneIndex);
         }
 
         _contactHandles = handles.ToArray();
-        _contactAssetBoneIndices = assetIndices.ToArray();
-        _contactMmJointIndices = mmJointIndices.ToArray();
+        _contactBoneIndices = boneIndices.ToArray();
     }
 
     public override bool Apply(PoseBuffer pose, float deltaTime)
@@ -110,32 +91,22 @@ public class ContactVisualizerStage : MoSynthStage
         var dstRotations = _buffer.Rotations;
         var dstVelocities = _buffer.Velocities;
         var dstAngularVelocities = _buffer.AngularVelocities;
-        var boneCount = _effectiveSkeleton.BoneCount;
+        var boneCount = _skeleton.BoneCount;
         for (var i = 0; i < boneCount; i++)
         {
-            var mmIndex = _map.AssetToMm[i];
-            if (mmIndex < 0)
-            {
-                var bone = _effectiveSkeleton.GetBone(i);
-                dstPositions[i] = bone.restLocalPosition;
-                dstRotations[i] = bone.restLocalRotation;
-                dstVelocities[i] = float3.zero;
-                dstAngularVelocities[i] = float3.zero;
-                continue;
-            }
-            dstPositions[i] = srcPositions[mmIndex];
-            dstRotations[i] = srcRotations[mmIndex];
-            dstVelocities[i] = srcVelocities[mmIndex];
-            dstAngularVelocities[i] = srcAngularVelocities[mmIndex];
+            dstPositions[i] = srcPositions[i];
+            dstRotations[i] = srcRotations[i];
+            dstVelocities[i] = srcVelocities[i];
+            dstAngularVelocities[i] = srcAngularVelocities[i];
         }
 
         for (var k = 0; k < _contactHandles.Length; k++)
         {
-            var velocity = PoseFK.CharacterVelocity(_buffer, _skeletonData, _contactAssetBoneIndices[k]);
+            var velocity = PoseFK.CharacterVelocity(_buffer, _skeletonData, _contactBoneIndices[k]);
             var contact = math.length(velocity) < contactVelocityThreshold;
             _buffer.SetBool(_contactHandles[k], contact);
 
-            var worldPosition = _component.SkeletonTransforms[_contactMmJointIndices[k]].position;
+            var worldPosition = _component.SkeletonTransforms[_contactBoneIndices[k]].position;
             DrawContactMarker(worldPosition, contact);
         }
 

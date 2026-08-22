@@ -9,7 +9,7 @@ namespace AnimationTools.Tests
 {
 public class PoseBufferTests
 {
-    private SkeletonAsset skeleton;
+    private Skeleton skeleton;
     private PoseLayout layout;
     private PoseBuffer buffer;
 
@@ -42,8 +42,6 @@ public class PoseBufferTests
     public void TearDown()
     {
         buffer.Dispose();
-        if (skeleton != null) UnityEngine.Object.DestroyImmediate(skeleton);
-        skeleton = null;
     }
 
     [Test]

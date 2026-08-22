@@ -30,8 +30,11 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     [Tooltip("Foot speed below which a toe counts as planted.")]
     public float contactVelocityThreshold = 0.15f;
 
-    [Tooltip("Maps animation channel names onto Mecanim bones. Pose extraction needs the toes.")]
-    public List<JointToMecanim> animationChannelToMecanim = new();
+    [Tooltip("Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe).")]
+    public BoneTransform leftContactBone = new();
+
+    [Tooltip("Bone whose velocity drives foot-contact detection; leave unset to pick by name (LeftToe/RightToe).")]
+    public BoneTransform rightContactBone = new();
 
     [Header("Python Runtime")]
     [Tooltip("Full path to the CPython shared library, e.g. .../python313.dll. Leave empty to use " +
@@ -215,23 +218,11 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     public List<AnnotatedAnimationClip> AnimationClips => animationClips;
     public float3 HipsForwardLocalVector => hipsForwardLocalVector;
     public float ContactVelocityThreshold => contactVelocityThreshold;
-    public IReadOnlyList<JointToMecanim> AnimationChannelToMecanim => animationChannelToMecanim;
+    public string LeftContactBoneName => leftContactBone?.BoneName;
+    public string RightContactBoneName => rightContactBone?.BoneName;
 
     /// <summary>No trajectory features, so every pose is usable.</summary>
     public int MaximumFramesPrediction => 0;
-
-    public bool TryGetMecanimBone(string jointName, out HumanBodyBones bone)
-    {
-        for (int i = 0; i < animationChannelToMecanim.Count; i++)
-        {
-            if (animationChannelToMecanim[i].name != jointName) continue;
-            bone = animationChannelToMecanim[i].mecanimBone;
-            return true;
-        }
-
-        bone = HumanBodyBones.LastBone;
-        return false;
-    }
 
     /// <summary>
     /// Where the database and the trained value function live. A folder of its own rather than
@@ -325,13 +316,6 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     {
         Debug.Assert(animationClips.Count > 0, $"[MotionField] '{name}' has no animation clips.");
 
-        // Bakes the Mecanim bone type onto each skeleton joint. Pose extraction locates the toes
-        // through it, so it has to run before Extract.
-        foreach (var clip in animationClips)
-        {
-            clip.UpdateMecanimInformation(this);
-        }
-
         _poseSet = new PoseSet();
         _poseSet.SetSkeletonFromBvh(animationClips[0].Skeleton);
 
@@ -361,7 +345,7 @@ public class MotionFieldConfig : ScriptableObject, IPoseSetSource
     /// weight editor reads it here rather than from the source animation clips: the clips carry a
     /// BVH hierarchy with no simulation bone, so its joint list would not line up.
     /// </remarks>
-    public bool TryGetDatabaseSkeleton(out SkeletonAsset skeleton) =>
+    public bool TryGetDatabaseSkeleton(out Skeleton skeleton) =>
         PoseSerializer.TryDeserializeSkeleton(GetAssetPath(), name, out skeleton);
 }
 }

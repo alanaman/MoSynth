@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics.Contracts;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 #if UNITY_EDITOR
 using UnityEditor;
-using UnityEditor.SceneManagement;
 #endif
 
 namespace AnimationTools
@@ -16,10 +14,8 @@ namespace AnimationTools
 /// To be used by Motion Synthesis Systems.
 /// </summary>
 [CreateAssetMenu(fileName = "AnimationData", menuName = "MotionMatching/AnimationData")]
-public class AnnotatedAnimationClip : ScriptableObject
+public class AnnotatedAnimationClip : SkeletonAnimation
 {
-    [SerializeField]
-    private SkeletonAnimation animation;
     public List<Tag> tags = new();
 
     [Min(0)] [Tooltip("Start frame of the animation clip. 0 indexing, inclusive.")]
@@ -28,22 +24,19 @@ public class AnnotatedAnimationClip : ScriptableObject
     [Min(0)] [Tooltip("End frame of the animation clip. 0 indexing, exclusive.")]
     public int endFrame;
 
-    public SkeletonAsset Skeleton => animation.Skeleton;
-
     /// Number of frames in the [startFrame, endFrame) slice, clamped defensively — a serialized
     /// endFrame can exceed the animation's frame count until OnValidate re-runs.
-    public int FrameCount => animation == null ? 0 : Math.Max(0, Math.Min(endFrame, animation.FrameCount) - startFrame);
+    public new int FrameCount => !HasClip ? 0 : Math.Max(0, Math.Min(endFrame, base.FrameCount) - startFrame);
 
-    public float FrameTime => animation.FrameTime;
-
+    /// <summary>Base-typed view of this asset — the raw, unsliced frame API.</summary>
     [Pure]
     public SkeletonAnimation GetRawAnimationClip()
     {
-        return animation;
+        return this;
     }
 
     /// Frame view offset by startFrame. Never Dispose the returned buffer.
-    public PoseBuffer GetFrame(int frameIndex) => animation.PoseSequence.GetFrame(startFrame + frameIndex);
+    public new PoseBuffer GetFrame(int frameIndex) => PoseSequence.GetFrame(startFrame + frameIndex);
 
     public List<Tag> GetTags()
     {
@@ -75,28 +68,25 @@ public class AnnotatedAnimationClip : ScriptableObject
 #endif
     }
 
-    public void UpdateMecanimInformation(IPoseSetSource source)
+    protected override void OnValidate()
     {
-        animation.UpdateMecanimInformation(source);
-    }
+        base.OnValidate();
 
-    private void OnValidate()
-    {
-        if (animation == null)
+        if (!HasClip)
             return;
 
-        if (startFrame >= animation.FrameCount)
-            startFrame = animation.FrameCount;
+        if (startFrame >= base.FrameCount)
+            startFrame = base.FrameCount;
 
-        if (endFrame >= animation.FrameCount)
-            endFrame = animation.FrameCount;
+        if (endFrame >= base.FrameCount)
+            endFrame = base.FrameCount;
     }
 
     /// <summary>
     /// Character-space (accumulated parent-chain) rotation of a bone at a sliced frame index.
     /// </summary>
     public quaternion GetWorldRotation(int boneIndex, int frameIndex)
-        => PoseFK.CharacterRotation(GetFrame(frameIndex), animation.Skeleton.GetSkeletonData(), boneIndex);
+        => PoseFK.CharacterRotation(GetFrame(frameIndex), Skeleton.GetSkeletonData(), boneIndex);
 
     [Serializable]
     public struct Tag
@@ -113,76 +103,4 @@ public class AnnotatedAnimationClip : ScriptableObject
     }
 #endif
 }
-
-#if UNITY_EDITOR
-[CustomEditor(typeof(AnnotatedAnimationClip))]
-public class AnimationDataEditor : UnityEditor.Editor
-{
-    private bool _tagsFoldout;
-
-    private SerializedProperty _animationProp;
-    private SerializedProperty _startFrameProp;
-    private SerializedProperty _endFrameProp;
-
-    private void OnEnable()
-    {
-        // Link the serialized properties
-        _animationProp = serializedObject.FindProperty("animation");
-        _startFrameProp = serializedObject.FindProperty("startFrame");
-        _endFrameProp = serializedObject.FindProperty("endFrame");
-    }
-
-    public override void OnInspectorGUI()
-    {
-        AnnotatedAnimationClip clip = (AnnotatedAnimationClip)target;
-
-        serializedObject.Update();
-
-        // BVH & Frames (Using PropertyField automatically triggers OnValidate when changed)
-        EditorGUILayout.PropertyField(_animationProp);
-        EditorGUILayout.PropertyField(_startFrameProp);
-        EditorGUILayout.PropertyField(_endFrameProp);
-
-        // Apply changes to the serialized object (This is what actually calls OnValidate)
-        serializedObject.ApplyModifiedProperties();
-
-        // Tags
-        _tagsFoldout = EditorGUILayout.BeginFoldoutHeaderGroup(_tagsFoldout, "Tags");
-        if (_tagsFoldout)
-        {
-            EditorGUI.indentLevel++;
-            if (clip.tags == null || clip.tags.Count == 0)
-            {
-                EditorGUILayout.HelpBox("To include tags, access the 'MotionMatching/Animation Viewer' window.",
-                    MessageType.Info);
-            }
-
-            GUI.enabled = false;
-            for (int tagIndex = 0; tagIndex < (clip.tags == null ? 0 : clip.tags.Count); ++tagIndex)
-            {
-                AnnotatedAnimationClip.Tag tag = clip.tags[tagIndex];
-                tag.name = EditorGUILayout.TextField(tag.name);
-                for (int rangeIndex = 0; rangeIndex < (tag.start == null ? 0 : tag.start.Length); ++rangeIndex)
-                {
-                    EditorGUILayout.BeginHorizontal();
-                    EditorGUILayout.LabelField(tag.start[rangeIndex].ToString());
-                    EditorGUILayout.LabelField(tag.end[rangeIndex].ToString());
-                    EditorGUILayout.EndHorizontal();
-                }
-            }
-
-            GUI.enabled = true;
-            EditorGUI.indentLevel--;
-        }
-
-        EditorGUILayout.EndFoldoutHeaderGroup();
-        // Save
-        if (GUI.changed)
-        {
-            EditorUtility.SetDirty(target);
-            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-        }
-    }
-}
-#endif
 }

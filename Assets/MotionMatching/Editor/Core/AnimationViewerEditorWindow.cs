@@ -1277,19 +1277,11 @@ namespace MotionMatching
             UpdateTargetFramerate(Mathf.RoundToInt(1.0f / animation.FrameTime));
             // Create skeleton
             var skeletonAsset = animation.Skeleton;
-            Skeleton = new Transform[skeletonAsset.BoneCount];
+            Skeleton = SkeletonRigBuilder.CreateHierarchyWithMap(skeletonAsset);
             for (int j = 0; j < Skeleton.Length; j++)
             {
-                // Joints
                 var bone = skeletonAsset.GetBone(j);
-                Transform t = (new GameObject()).transform;
-                t.name = bone.name;
-                if (j > 0)
-                {
-                    t.SetParent(Skeleton[bone.parentIndex], false);
-                }
-                t.localPosition = bone.restLocalPosition;
-                Skeleton[j] = t;
+                Transform t = Skeleton[j];
                 // Visual
                 Transform visual = (new GameObject()).transform;
                 visual.name = "Visual";

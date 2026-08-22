@@ -33,18 +33,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         _featureSet = motionMatchingData.GetOrImportFeatureSet();
 
         // Skeleton
-        _skeletonTransforms = new Transform[_poseSet.SkeletonAsset.BoneCount];
-        _skeletonTransforms[0] = transform; // Simulation Bone
-        for (int j = 1; j < _poseSet.SkeletonAsset.BoneCount; j++)
-        {
-            // Joints
-            var bone = _poseSet.SkeletonAsset.GetBone(j);
-            Transform t = (new GameObject()).transform;
-            t.name = bone.name;
-            t.SetParent(_skeletonTransforms[bone.parentIndex], false);
-            t.localPosition = bone.restLocalPosition;
-            _skeletonTransforms[j] = t;
-        }
+        _skeletonTransforms = SkeletonRigBuilder.CreateHierarchyWithMap(_poseSet.Skeleton, transform);
 
         // FPS
         if (lockFPS)
@@ -127,7 +116,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
             if (trajectoryFeature.featureType == TrajectoryFeatureChannel.Type.Direction &&
                 !trajectoryFeature.simulationBone)
             {
-                var jointIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(trajectoryFeature.bone);
+                var jointIndex = ResolveBoneOrZero(trajectoryFeature.bone, _poseSet.Skeleton, trajectoryFeature.name);
                 float3 dir = _skeletonTransforms[jointIndex].TransformDirection(motionMatchingData.GetLocalForward(jointIndex));
                 float3 jointPos = _skeletonTransforms[jointIndex].position;
                 GizmosExtensions.DrawArrow(jointPos, jointPos + dir * 0.5f, 0.1f, thickness: 3);
@@ -137,8 +126,16 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         // Contacts
         if (debugContacts)
         {
-            int leftToesIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(HumanBodyBones.LeftToes);
-            int rightToesIndex = _poseSet.SkeletonAsset.FindJointIndexOrZero(HumanBodyBones.RightToes);
+            if (!BoneNameConventions.TryFindContactBone(_poseSet.Skeleton, left: true, out var leftToesIndex))
+            {
+                Debug.LogWarning("[MotionMatchingDataVisualiser] Could not find a left contact bone; falling back to bone index 0.");
+                leftToesIndex = 0;
+            }
+            if (!BoneNameConventions.TryFindContactBone(_poseSet.Skeleton, left: false, out var rightToesIndex))
+            {
+                Debug.LogWarning("[MotionMatchingDataVisualiser] Could not find a right contact bone; falling back to bone index 0.");
+                rightToesIndex = 0;
+            }
             Gizmos.color = Color.green;
             if (pose.GetBool(_poseSet.LeftFootContactHandle))
             {
@@ -154,12 +151,12 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         if (_featureSet == null) return;
 
         DrawFeatureGizmos(_featureSet, motionMatchingData, spheresRadius, currentFrame, characterOrigin, characterForward,
-            _skeletonTransforms, _poseSet.SkeletonAsset, Color.blue, debugPose: debugPose, debugTrajectory: debugTrajectory);
+            _skeletonTransforms, _poseSet.Skeleton, Color.blue, debugPose: debugPose, debugTrajectory: debugTrajectory);
     }
 
     private static List<float3> _positionFeatures = new();
     public static void DrawFeatureGizmos(FeatureSet set, MotionMatchingData mmData, float spheresRadius, int currentFrame,
-        float3 characterOrigin, float3 characterForward, Transform[] joints, SkeletonAsset skeleton,
+        float3 characterOrigin, float3 characterForward, Transform[] joints, Skeleton skeleton,
         Color trajectoryColor, bool debugPose = true, bool debugTrajectory = true)
     {
         if (!set.IsValidFeature(currentFrame)) return;
@@ -216,7 +213,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                         value = math.mul(characterRot, value);
                         if (math.length(value) > 0.001f)
                         {
-                            var jointIndex = skeleton.FindJointIndexOrZero(poseFeature.bone);
+                            var jointIndex = ResolveBoneOrZero(poseFeature.bone, skeleton, poseFeature.name);
                             float3 jointPos = joints[jointIndex].position;
                             GizmosExtensions.DrawArrow(jointPos, jointPos + value * 0.2f, 0.25f * math.length(value) * 0.2f, thickness: 4, useDepth: false);
                         }
@@ -226,9 +223,18 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
         }
     }
 
+    private static int ResolveBoneOrZero(BoneTransform bone, Skeleton skeleton, string featureName)
+    {
+        var index = bone?.ResolveIndex(skeleton) ?? -1;
+        if (index >= 0) return index;
+
+        Debug.LogWarning($"[MotionMatchingDataVisualiser] Feature \"{featureName}\" has no resolvable bone; falling back to bone index 0.");
+        return 0;
+    }
+
     private static void DrawTrajectoryPoint(TrajectoryFeatureChannel trajectoryFeature, FeatureSet set, int currentFrame, int trajectoryFeatureIndex,
         int predictionIndex, Color trajectoryColor, float3 characterOrigin, float3 characterForward,
-        quaternion characterRot, float spheresRadius, Transform[] joints, SkeletonAsset skeleton)
+        quaternion characterRot, float spheresRadius, Transform[] joints, Skeleton skeleton)
     {
         int t = trajectoryFeatureIndex;
         int p = predictionIndex;
@@ -252,7 +258,7 @@ public class MotionMatchingDataVisualiser : MonoBehaviour
                     }
                     else
                     {
-                        var jointIndex = skeleton.FindJointIndexOrZero(trajectoryFeature.bone);
+                        var jointIndex = ResolveBoneOrZero(trajectoryFeature.bone, skeleton, trajectoryFeature.name);
                         jointPos = joints[jointIndex].position;
                     }
                     value = math.mul(characterRot, value);

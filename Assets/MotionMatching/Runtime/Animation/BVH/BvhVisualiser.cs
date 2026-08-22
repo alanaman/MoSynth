@@ -16,8 +16,6 @@ public class BvhVisualiser : MonoBehaviour
     public float spheresRadius = 0.1f;
 
     private Transform[] _skeletonBoneTransforms;
-    private Transform _skeletonRoot;
-
 
     private float _currentFrameTime;
 
@@ -79,7 +77,7 @@ public class BvhVisualiser : MonoBehaviour
     /// Ensures the GameObject hierarchy matches the provided Skeleton structure.
     /// Existing bones are preserved; missing bones are created at their proper local offsets.
     /// </summary>
-    private Transform[] EnsureSkeletonHierarchy(SkeletonAsset skeleton)
+    private Transform[] EnsureSkeletonHierarchy(Skeleton skeleton)
     {
         if (skeleton == null || skeleton.BoneCount == 0)
         {

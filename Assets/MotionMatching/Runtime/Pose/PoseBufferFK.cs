@@ -7,7 +7,7 @@ namespace MotionMatching
 /// <summary>
 /// Forward kinematics over a full-pose <see cref="PoseBuffer"/> (element index == bone index)
 /// and a <see cref="SkeletonData"/> parent hierarchy (see
-/// <see cref="SkeletonAsset.GetSkeletonData"/>). Index 0 is the root (SimulationBone);
+/// <see cref="Skeleton.GetSkeletonData"/>). Index 0 is the root (SimulationBone);
 /// "world" here is the immediate parent transform of the root.
 /// </summary>
 /// <remarks>
